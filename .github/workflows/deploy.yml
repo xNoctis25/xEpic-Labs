@@ -1,0 +1,58 @@
+name: Deploy M.o.M Engine to ChicagoBot (Zero-Trust)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'engine/MoM/**'
+      - '.github/workflows/**' # This line ensures updating this script triggers a run!
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      # Fixed SCP step: "source: ." copies the entire repo structure flawlessly
+      - name: Copy files to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "."
+          target: "~/xEpic-Labs"
+
+      - name: Execute Node/PM2 Setup
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # 1. Automatically install Node.js 20 if it is missing
+            if ! command -v npm &> /dev/null; then
+              echo "Node.js not found. Installing now..."
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            
+            # 2. Navigate into the engine folder and install dependencies
+            cd ~/xEpic-Labs/engine/MoM
+            npm install
+            
+            # 3. Ensure PM2 is installed globally
+            if ! command -v pm2 &> /dev/null; then
+              sudo npm install -g pm2
+            fi
+            
+            # 4. Restart or Start M.o.M seamlessly
+            pm2 restart mom-engine || pm2 start npm --name "mom-engine" -- run start
+            pm2 save
