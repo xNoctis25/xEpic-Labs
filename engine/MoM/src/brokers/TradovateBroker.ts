@@ -88,10 +88,127 @@ export class TradovateBroker {
             } catch (err) {}
         });
     }
+    // --- Tradovate REST API Base URL ---
+    // Switch to 'https://live.tradovateapi.com/v1' for production
+    private readonly REST_BASE = 'https://demo.tradovateapi.com/v1';
 
-    public executeMarketOrder(symbol: string, qty: number, side: 'BUY' | 'SELL'): string {
-        const orderId = `TV_${Date.now()}`;
-        console.log(`⚡ [TradovateBroker] - Simulated ${side} MARKET Order for ${qty}x ${symbol} executed.`);
-        return orderId;
+    // Cached account ID (resolved once on first use)
+    private accountId: number | null = null;
+    private accountSpec: string = '';
+
+    /**
+     * Resolves the primary Tradovate account ID (cached after first call).
+     */
+    private async getAccountId(): Promise<{ id: number; spec: string }> {
+        if (this.accountId !== null) {
+            return { id: this.accountId, spec: this.accountSpec };
+        }
+
+        const res = await axios.get(`${this.REST_BASE}/account/list`, {
+            headers: { Authorization: `Bearer ${this.accessToken}` },
+        });
+
+        const accounts = res.data;
+        if (!accounts || accounts.length === 0) {
+            throw new Error('No Tradovate accounts found.');
+        }
+
+        this.accountId = accounts[0].id;
+        this.accountSpec = accounts[0].name || '';
+        console.log(`🔑 [TradovateBroker] - Account resolved: ${this.accountSpec} (ID: ${this.accountId})`);
+        return { id: this.accountId!, spec: this.accountSpec };
+    }
+
+    /**
+     * Places a live Tradovate OSO Bracket Order via REST.
+     *
+     * The bracket consists of:
+     *   - Parent: Market order entry (immediate fill)
+     *   - Bracket 1 (SL): Stop order at stopPrice
+     *   - Bracket 2 (TP): Limit order at targetPrice
+     *
+     * Both brackets fire opposite actions to close the position.
+     *
+     * @param symbol   - Tradovate contract symbol (e.g., 'MESM6')
+     * @param action   - 'Buy' or 'Sell' (Tradovate format, capitalized)
+     * @param qty      - Number of contracts
+     * @param tpPrice  - Take Profit price
+     * @param slPrice  - Stop Loss price
+     */
+    public async placeBracketOrder(
+        symbol: string,
+        action: 'Buy' | 'Sell',
+        qty: number,
+        tpPrice: number,
+        slPrice: number,
+    ): Promise<string> {
+        const { id: accountId, spec: accountSpec } = await this.getAccountId();
+        const exitAction = action === 'Buy' ? 'Sell' : 'Buy';
+
+        const payload = {
+            accountSpec,
+            accountId,
+            action,
+            symbol,
+            orderQty: qty,
+            orderType: 'Market',    // Immediate entry
+            isAutomated: true,      // Algorithmic flag required by Tradovate
+            bracket1: {
+                action: exitAction,
+                orderType: 'Stop',
+                stopPrice: slPrice,
+            },
+            bracket2: {
+                action: exitAction,
+                orderType: 'Limit',
+                price: tpPrice,
+            },
+        };
+
+        try {
+            console.log(`⚡ [TradovateBroker] - Sending OSO Bracket: ${action} ${qty}x ${symbol} | TP: ${tpPrice} | SL: ${slPrice}`);
+
+            const response = await axios.post(`${this.REST_BASE}/order/placeOSO`, payload, {
+                headers: {
+                    Authorization: `Bearer ${this.accessToken}`,
+                    'Content-Type': 'application/json',
+                },
+                timeout: 5000, // 5-second timeout for order placement
+            });
+
+            const orderId = response.data?.orderId || response.data?.id || `OSO_${Date.now()}`;
+            console.log(`✅ [TradovateBroker] - Bracket PLACED. Order ID: ${orderId}`);
+            return String(orderId);
+
+        } catch (error: any) {
+            const errMsg = error.response?.data?.errorText || error.response?.data || error.message;
+            console.error(`🔴 [TradovateBroker] - Bracket order FAILED:`, errMsg);
+            throw new Error(`Bracket order failed: ${errMsg}`);
+        }
+    }
+
+    /**
+     * Fetches the real cash balance from the Tradovate REST API.
+     * Used by the SessionLedger for initial sync and background reconciliation.
+     */
+    public async getCashBalance(): Promise<number> {
+        try {
+            const { id: accountId } = await this.getAccountId();
+
+            const balanceRes = await axios.get(
+                `${this.REST_BASE}/cashBalance/getCashBalanceSnapshot`, {
+                    params: { accountId },
+                    headers: { Authorization: `Bearer ${this.accessToken}` },
+                }
+            );
+
+            const balance = balanceRes.data?.totalCashValue ?? balanceRes.data?.cashBalance ?? 0;
+            return balance;
+
+        } catch (error: any) {
+            console.error('🔴 [TradovateBroker] - Failed to fetch cash balance:', error.message);
+            return 0;
+        }
     }
 }
+
