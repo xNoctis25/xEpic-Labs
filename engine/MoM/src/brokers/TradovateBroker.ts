@@ -1,31 +1,122 @@
 import WebSocket from 'ws';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { config as dotEnvConfig } from 'dotenv';
 import { Tick } from '../market/CandleAggregator';
 
 dotEnvConfig();
+
+/** Token refresh interval: 1 hour (ms). Tradovate tokens expire after a few hours. */
+const TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export class TradovateBroker {
     private ws: WebSocket | null = null;
     private isConnected: boolean = false;
     private accessToken: string = '';
 
-    public async connect(): Promise<boolean> {
+    // --- Token lifecycle ---
+    /** Epoch timestamp (ms) of the last successful token acquisition */
+    private tokenAcquiredAt: number = 0;
+    /** Mutex: if a refresh is already in flight, all callers await the same promise */
+    private refreshPromise: Promise<void> | null = null;
+
+    // --- Tradovate REST API Base URL ---
+    // Switch to 'https://live.tradovateapi.com/v1' for production
+    private readonly REST_BASE = 'https://demo.tradovateapi.com/v1';
+    private readonly AUTH_URL = 'https://demo.tradovateapi.com/v1/auth/accesstokenrequest';
+
+    /** Shared Axios instance – headers are updated on every token refresh */
+    private axiosInstance: AxiosInstance;
+
+    // Cached account ID (resolved once on first use)
+    private accountId: number | null = null;
+    private accountSpec: string = '';
+
+    constructor() {
+        this.axiosInstance = axios.create({
+            baseURL: this.REST_BASE,
+            timeout: 10000,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
+
+    // ─── Token Management ──────────────────────────────────────────────
+
+    /**
+     * Requests a fresh OAuth access token from Tradovate and updates the
+     * shared Axios instance headers.
+     */
+    private async requestToken(): Promise<void> {
         console.log("🔐 [TradovateBroker] - Requesting OAuth Access Token...");
-        
-        try {
-            // 1. Get the OAuth Token via REST
-            const response = await axios.post('https://demo.tradovateapi.com/v1/auth/accesstokenrequest', {
-                name: process.env.TRADOVATE_USERNAME,
-                password: process.env.TRADOVATE_PASSWORD,
-                appId: process.env.TRADOVATE_APP_ID,
-                appVersion: process.env.TRADOVATE_APP_VERSION,
-                cid: process.env.TRADOVATE_CLIENT_ID,
-                sec: process.env.TRADOVATE_CLIENT_SECRET
+
+        const response = await axios.post(this.AUTH_URL, {
+            name: process.env.TRADOVATE_USERNAME,
+            password: process.env.TRADOVATE_PASSWORD,
+            appId: process.env.TRADOVATE_APP_ID,
+            appVersion: process.env.TRADOVATE_APP_VERSION,
+            cid: process.env.TRADOVATE_CLIENT_ID,
+            sec: process.env.TRADOVATE_CLIENT_SECRET,
+        });
+
+        this.accessToken = response.data.accessToken;
+        this.tokenAcquiredAt = Date.now();
+        this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${this.accessToken}`;
+
+        console.log("✅ [TradovateBroker] - OAuth Token Acquired / Refreshed.");
+    }
+
+    /**
+     * Proactively refreshes the token if it is older than TOKEN_TTL_MS (1 hour).
+     * Uses a mutex so concurrent callers share the same in-flight refresh.
+     */
+    private async refreshTokenIfNeeded(): Promise<void> {
+        const age = Date.now() - this.tokenAcquiredAt;
+        if (age < TOKEN_TTL_MS) return; // Token is still fresh
+
+        // If another caller is already refreshing, piggyback on that promise
+        if (this.refreshPromise) {
+            await this.refreshPromise;
+            return;
+        }
+
+        console.log(`🔄 [TradovateBroker] - Token age ${Math.round(age / 60000)}m exceeds TTL. Refreshing...`);
+
+        this.refreshPromise = this.requestToken()
+            .catch((err) => {
+                console.error("🔴 [TradovateBroker] - Token refresh FAILED:", err.response?.data || err.message);
+                throw err;
+            })
+            .finally(() => {
+                this.refreshPromise = null;
             });
 
-            this.accessToken = response.data.accessToken;
-            console.log("✅ [TradovateBroker] - OAuth Token Acquired. Initializing WebSocket...");
+        await this.refreshPromise;
+    }
+
+    /**
+     * Reactive 401 handler: if an API call returns 401 Unauthorized,
+     * refresh the token once and retry the original request.
+     */
+    private async withTokenRetry<T>(apiFn: () => Promise<T>): Promise<T> {
+        try {
+            return await apiFn();
+        } catch (error: any) {
+            if (error.response?.status === 401) {
+                console.warn("⚠️ [TradovateBroker] - 401 received. Forcing token refresh and retrying...");
+                // Invalidate so refreshTokenIfNeeded() will act
+                this.tokenAcquiredAt = 0;
+                await this.refreshTokenIfNeeded();
+                return await apiFn(); // Retry once
+            }
+            throw error;
+        }
+    }
+
+    // ─── Connection ────────────────────────────────────────────────────
+
+    public async connect(): Promise<boolean> {
+        try {
+            // 1. Get the OAuth Token via REST
+            await this.requestToken();
 
             // 2. Connect to the WebSocket
             return new Promise((resolve) => {
@@ -59,6 +150,8 @@ export class TradovateBroker {
         }
     }
 
+    // ─── Market Data (WebSocket) ───────────────────────────────────────
+
     public subscribeMarketData(symbol: string, onTick: (tick: Tick) => void): void {
         if (!this.isConnected || !this.ws) return;
 
@@ -88,13 +181,8 @@ export class TradovateBroker {
             } catch (err) {}
         });
     }
-    // --- Tradovate REST API Base URL ---
-    // Switch to 'https://live.tradovateapi.com/v1' for production
-    private readonly REST_BASE = 'https://demo.tradovateapi.com/v1';
 
-    // Cached account ID (resolved once on first use)
-    private accountId: number | null = null;
-    private accountSpec: string = '';
+    // ─── REST API Methods ──────────────────────────────────────────────
 
     /**
      * Resolves the primary Tradovate account ID (cached after first call).
@@ -104,9 +192,11 @@ export class TradovateBroker {
             return { id: this.accountId, spec: this.accountSpec };
         }
 
-        const res = await axios.get(`${this.REST_BASE}/account/list`, {
-            headers: { Authorization: `Bearer ${this.accessToken}` },
-        });
+        await this.refreshTokenIfNeeded();
+
+        const res = await this.withTokenRetry(() =>
+            this.axiosInstance.get('/account/list')
+        );
 
         const accounts = res.data;
         if (!accounts || accounts.length === 0) {
@@ -142,6 +232,8 @@ export class TradovateBroker {
         tpPrice: number,
         slPrice: number,
     ): Promise<string> {
+        await this.refreshTokenIfNeeded();
+
         const { id: accountId, spec: accountSpec } = await this.getAccountId();
         const exitAction = action === 'Buy' ? 'Sell' : 'Buy';
 
@@ -168,13 +260,11 @@ export class TradovateBroker {
         try {
             console.log(`⚡ [TradovateBroker] - Sending OSO Bracket: ${action} ${qty}x ${symbol} | TP: ${tpPrice} | SL: ${slPrice}`);
 
-            const response = await axios.post(`${this.REST_BASE}/order/placeOSO`, payload, {
-                headers: {
-                    Authorization: `Bearer ${this.accessToken}`,
-                    'Content-Type': 'application/json',
-                },
-                timeout: 5000, // 5-second timeout for order placement
-            });
+            const response = await this.withTokenRetry(() =>
+                this.axiosInstance.post('/order/placeOSO', payload, {
+                    timeout: 5000, // 5-second timeout for order placement
+                })
+            );
 
             const orderId = response.data?.orderId || response.data?.id || `OSO_${Date.now()}`;
             console.log(`✅ [TradovateBroker] - Bracket PLACED. Order ID: ${orderId}`);
@@ -193,13 +283,14 @@ export class TradovateBroker {
      */
     public async getCashBalance(): Promise<number> {
         try {
+            await this.refreshTokenIfNeeded();
+
             const { id: accountId } = await this.getAccountId();
 
-            const balanceRes = await axios.get(
-                `${this.REST_BASE}/cashBalance/getCashBalanceSnapshot`, {
+            const balanceRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/cashBalance/getCashBalanceSnapshot', {
                     params: { accountId },
-                    headers: { Authorization: `Bearer ${this.accessToken}` },
-                }
+                })
             );
 
             const balance = balanceRes.data?.totalCashValue ?? balanceRes.data?.cashBalance ?? 0;
@@ -211,4 +302,3 @@ export class TradovateBroker {
         }
     }
 }
-
