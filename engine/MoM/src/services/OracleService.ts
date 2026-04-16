@@ -21,7 +21,7 @@ export class OracleService {
         if (!key) {
             console.error('🔴 [Oracle] - ORACLE_API_KEY not found in .env. News filter will be disabled.');
         }
-        this.apiKey = key || '';
+        this.apiKey = (key || '').trim();
     }
 
     // ==========================================
