@@ -44,13 +44,10 @@ export class OracleService {
         try {
             console.log(`🔮 [Oracle] - Fetching economic calendar for ${dateStr}...`);
 
-            const response = await axios.get('https://financialmodelingprep.com/api/v3/economic_calendar', {
-                params: {
-                    from: dateStr,
-                    to: dateStr,
-                    apikey: this.apiKey,
-                },
-                timeout: 10000, // 10-second timeout
+            const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${dateStr}&to=${dateStr}&apikey=${this.apiKey}`;
+            const response = await axios.get(url, {
+                headers: {},          // Ensure no default Authorization header leaks through
+                timeout: 10000,       // 10-second timeout
             });
 
             const events: any[] = response.data || [];
