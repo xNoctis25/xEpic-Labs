@@ -149,11 +149,12 @@ ws.on('message', (rawData: WebSocket.RawData) => {
         for (const event of payload) {
             // ── DOM Update ──
             if (event.e === 'md/dom') {
-                const d = event.d;
-                if (!d) continue;
+                const doms = event.d?.doms;
+                if (!doms || !Array.isArray(doms) || doms.length === 0) continue;
 
-                const rawBids: any[] = d.bids || [];
-                const rawOffers: any[] = d.offers || [];
+                const dom = doms[0]; // Primary contract
+                const rawBids: any[] = dom.bids || [];
+                const rawOffers: any[] = dom.offers || [];
 
                 const bids = sortBids(
                     rawBids

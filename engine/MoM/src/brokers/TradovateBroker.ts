@@ -254,23 +254,24 @@ export class TradovateBroker {
      * Parses a raw Tradovate md/dom WebSocket event into a typed DOMSnapshot
      * and dispatches it to the registered callback.
      *
-     * Tradovate DOM payload structure (confirmed via RAW log):
-     *   event.d.bids   → [{ price, size }, ...]
-     *   event.d.offers → [{ price, size }, ...]
+     * Tradovate DOM payload structure:
+     *   event.d.doms[0].bids   → [{ price, size }, ...]
+     *   event.d.doms[0].offers → [{ price, size }, ...]
      *
      * We take only the top 10 levels on each side.
      */
     private parseDOMEvent(event: any): void {
         if (!this.onDOMCallback) return;
 
-        const d = event.d;
-        if (!d) return;
+        const doms = event.d?.doms;
+        if (!doms || !Array.isArray(doms) || doms.length === 0) return;
 
-        const rawBids: any[] = d.bids || [];
-        const rawOffers: any[] = d.offers || [];
+        const dom = doms[0]; // Primary contract
+        const rawBids: any[] = dom.bids || [];
+        const rawOffers: any[] = dom.offers || [];
 
         const snapshot: DOMSnapshot = {
-            timestamp: d.timestamp ? new Date(d.timestamp).getTime() : Date.now(),
+            timestamp: dom.timestamp ? new Date(dom.timestamp).getTime() : Date.now(),
             bids: rawBids
                 .map((b: any) => ({ price: b.price, size: b.size }))
                 .filter((b: DOMLevel) => b.price != null && b.size != null)
