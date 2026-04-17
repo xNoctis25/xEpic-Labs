@@ -3,23 +3,25 @@
  *
  * Thread Assignment: Core 2
  *
- * This worker runs in its own V8 isolate (worker_thread) to keep the
- * CME Globex Level 2 firehose completely off the main thread's event loop.
+ * Dual Token Architecture:
+ *   This worker creates its own TradovateBroker('LIVE') instance to
+ *   authenticate with LIVE credentials — bypassing prop firm Level 2
+ *   data restrictions on the DEMO account. The main thread may be running
+ *   a DEMO broker for order execution; this worker is completely independent.
  *
  * Lifecycle:
- *   1. Receives SharedArrayBuffer + auth credentials via workerData
- *   2. Opens its own WebSocket to wss://md.tradovateapi.com/v1/websocket
- *   3. Authenticates with the access token
- *   4. Subscribes to md/subscribeDOM for the target symbol
- *   5. On every md/dom event, writes bid/ask data into the SAB using SeqLock
- *   6. Main thread reads the SAB at any time with zero latency
+ *   1. Receives SharedArrayBuffer + symbol via workerData
+ *   2. Creates TradovateBroker('LIVE') and calls connect() (own OAuth + WebSocket)
+ *   3. Subscribes to md/subscribeDOM via the broker's API
+ *   4. On every DOMSnapshot callback, writes bid/ask data into the SAB using SeqLock
+ *   5. Main thread reads the SAB at any time with zero latency
  *
  * The worker sends status messages to the main thread via parentPort
  * for lifecycle logging (connected, subscribed, errors).
  */
 
 import { workerData, parentPort } from 'worker_threads';
-import WebSocket from 'ws';
+import { TradovateBroker, DOMSnapshot } from '../brokers/TradovateBroker';
 import {
     HEADER_BYTES, DOM_DEPTH, FIELDS_PER_LEVEL,
     IDX_TIMESTAMP, IDX_BID_COUNT, IDX_ASK_COUNT,
@@ -27,11 +29,9 @@ import {
 } from './Level2Layout';
 
 // ─── Worker Data from Main Thread ──────────────────────────────────
-const { sab, accessToken, symbol, mdUrl } = workerData as {
+const { sab, symbol } = workerData as {
     sab: SharedArrayBuffer;
-    accessToken: string;
     symbol: string;
-    mdUrl: string;
 };
 
 // ─── Shared Memory Views ───────────────────────────────────────────
@@ -52,9 +52,9 @@ let lastLogTime = Date.now();
  *
  * This guarantees the reader always sees a consistent snapshot.
  */
-function writeDOMToSAB(bids: { price: number; size: number }[], offers: { price: number; size: number }[]): void {
-    const bidCount = Math.min(bids.length, DOM_DEPTH);
-    const askCount = Math.min(offers.length, DOM_DEPTH);
+function writeDOMToSAB(snapshot: DOMSnapshot): void {
+    const bidCount = Math.min(snapshot.bids.length, DOM_DEPTH);
+    const askCount = Math.min(snapshot.offers.length, DOM_DEPTH);
 
     // Step 1: Signal write-in-progress (odd sequence)
     Atomics.add(seqLock, 0, 1);
@@ -64,11 +64,11 @@ function writeDOMToSAB(bids: { price: number; size: number }[], offers: { price:
     data[IDX_BID_COUNT] = bidCount;
     data[IDX_ASK_COUNT] = askCount;
 
-    // Write bids (sorted best-first by the broker)
+    // Write bids (already sorted best-first by the broker)
     for (let i = 0; i < bidCount; i++) {
         const offset = IDX_BIDS_START + (i * FIELDS_PER_LEVEL);
-        data[offset]     = bids[i].price;
-        data[offset + 1] = bids[i].size;
+        data[offset]     = snapshot.bids[i].price;
+        data[offset + 1] = snapshot.bids[i].size;
     }
     // Zero out unused bid slots
     for (let i = bidCount; i < DOM_DEPTH; i++) {
@@ -77,11 +77,11 @@ function writeDOMToSAB(bids: { price: number; size: number }[], offers: { price:
         data[offset + 1] = 0;
     }
 
-    // Write offers (sorted best-first by the broker)
+    // Write offers (already sorted best-first by the broker)
     for (let i = 0; i < askCount; i++) {
         const offset = IDX_ASKS_START + (i * FIELDS_PER_LEVEL);
-        data[offset]     = offers[i].price;
-        data[offset + 1] = offers[i].size;
+        data[offset]     = snapshot.offers[i].price;
+        data[offset + 1] = snapshot.offers[i].size;
     }
     // Zero out unused offer slots
     for (let i = askCount; i < DOM_DEPTH; i++) {
@@ -96,108 +96,41 @@ function writeDOMToSAB(bids: { price: number; size: number }[], offers: { price:
     updateCount++;
 }
 
-/**
- * Sorts bids descending (highest price first) and offers ascending (lowest price first).
- */
-function sortBids(arr: { price: number; size: number }[]): { price: number; size: number }[] {
-    return arr.sort((a, b) => b.price - a.price);
-}
-
-function sortOffers(arr: { price: number; size: number }[]): { price: number; size: number }[] {
-    return arr.sort((a, b) => a.price - b.price);
-}
-
 // ─── Status Reporter ───────────────────────────────────────────────
 function sendStatus(message: string): void {
     parentPort?.postMessage({ type: 'status', message });
 }
 
-// ─── WebSocket Connection ──────────────────────────────────────────
+// ─── Boot: Create LIVE Broker + Connect + Subscribe ────────────────
 
-sendStatus(`Connecting to ${mdUrl}...`);
+async function init(): Promise<void> {
+    sendStatus('Creating TradovateBroker(LIVE) for Level 2 data...');
 
-const ws = new WebSocket(mdUrl);
+    const broker = new TradovateBroker('LIVE');
 
-ws.on('open', () => {
-    sendStatus('WebSocket connected. Authenticating...');
+    sendStatus('Connecting LIVE broker (OAuth + WebSocket)...');
+    const connected = await broker.connect();
 
-    // Authenticate using the access token from the main thread
-    ws.send(`authorize\n1\n\n${accessToken}`);
-
-    // Subscribe to DOM after a short delay to ensure auth is processed
-    setTimeout(() => {
-        sendStatus(`Subscribing to md/subscribeDOM for ${symbol}...`);
-        ws.send(`md/subscribeDOM\n2\n\n{"symbol":"${symbol}"}`);
-        sendStatus(`Level 2 DOM subscription active for ${symbol}. Writing to SAB.`);
-    }, 500);
-
-    // Keep-alive heartbeat (matches main thread's 2.5s interval)
-    setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send('[]');
-        }
-    }, 2500);
-});
-
-let rawLogCount = 0;
-
-ws.on('message', (rawData: WebSocket.RawData) => {
-    const message = rawData.toString();
-
-    // Debug: log the first 5 non-heartbeat raw frames
-    if (rawLogCount < 5 && message !== '[]' && message.trim().length > 0) {
-        sendStatus(`WORKER RAW [${rawLogCount + 1}/5]: ${message.substring(0, 500)}`);
-        rawLogCount++;
+    if (!connected) {
+        sendStatus('🔴 LIVE broker connection FAILED. DOM data will not flow.');
+        return;
     }
 
-    try {
-        if (!message.startsWith('a')) return;
+    sendStatus(`LIVE broker connected. Subscribing to DOM for ${symbol}...`);
 
-        const payload = JSON.parse(message.slice(1));
-        for (const event of payload) {
-            // ── DOM Update ──
-            if (event.e === 'md/dom') {
-                const doms = event.d?.doms;
-                if (!doms || !Array.isArray(doms) || doms.length === 0) continue;
+    // The broker's subscribeDOMData handles:
+    //   - Sending md/subscribeDOM on the WebSocket
+    //   - Parsing md/dom events via the centralized dispatcher
+    //   - Calling our callback with typed DOMSnapshot objects
+    broker.subscribeDOMData(symbol, (snapshot: DOMSnapshot) => {
+        writeDOMToSAB(snapshot);
+    });
 
-                const dom = doms[0]; // Primary contract
-                const rawBids: any[] = dom.bids || [];
-                const rawOffers: any[] = dom.offers || [];
+    sendStatus(`Level 2 DOM subscription active for ${symbol}. Writing to SAB.`);
+}
 
-                const bids = sortBids(
-                    rawBids
-                        .filter((b: any) => b.price != null && b.size != null)
-                        .map((b: any) => ({ price: b.price, size: b.size }))
-                );
-
-                const offers = sortOffers(
-                    rawOffers
-                        .filter((o: any) => o.price != null && o.size != null)
-                        .map((o: any) => ({ price: o.price, size: o.size }))
-                );
-
-                writeDOMToSAB(bids, offers);
-            }
-
-            // ── Subscription errors ──
-            if (event.s && event.s !== 200) {
-                sendStatus(`🔴 Subscription Error: ${JSON.stringify(event)}`);
-            }
-            if (event.e === 'error') {
-                sendStatus(`🔴 Server Error Event: ${JSON.stringify(event)}`);
-            }
-        }
-    } catch (err) {
-        // Discard malformed frames
-    }
-});
-
-ws.on('error', (err: Error) => {
-    sendStatus(`🔴 WebSocket error: ${err.message}`);
-});
-
-ws.on('close', (code: number, reason: Buffer) => {
-    sendStatus(`WebSocket closed. Code: ${code}, Reason: ${reason.toString()}`);
+init().catch((err) => {
+    sendStatus(`🔴 Worker init failed: ${err.message}`);
 });
 
 // ─── Periodic Throughput Logger ────────────────────────────────────

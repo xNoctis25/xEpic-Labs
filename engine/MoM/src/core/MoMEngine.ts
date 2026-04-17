@@ -4,7 +4,7 @@ import { EvaluationEngine } from './EvaluationEngine';
 import { ContractManager } from './ContractManager';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMCExpert } from '../experts/SMCExpert';
-import { TradovateBroker } from '../brokers/TradovateBroker';
+import { TradovateBroker, Environment } from '../brokers/TradovateBroker';
 import { OracleService } from '../services/OracleService';
 import { SessionLedger } from '../services/SessionLedger';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
@@ -14,8 +14,8 @@ import { DOMExpert } from '../experts/DOMExpert';
 
 export class MoMEngine {
     private riskEngine: RiskEngine;
-    private executionEngine: ExecutionEngine;
-    private broker: TradovateBroker;
+    private executionEngine!: ExecutionEngine;  // Set in preflight after phase determination
+    private broker!: TradovateBroker;           // Set in preflight after phase determination
     
     private aggregator: CandleAggregator;
     private smcExpert: SMCExpert;
@@ -40,11 +40,10 @@ export class MoMEngine {
     // Dynamically resolved via ContractManager (auto-rollover)
     private symbolToTrade: string;
 
-    constructor(broker: TradovateBroker) {
-        this.broker = broker;
+    constructor() {
         this.riskEngine = new RiskEngine();
         this.db = new NeonDatabase();
-        this.executionEngine = new ExecutionEngine(broker, this.db);
+        // Broker + ExecutionEngine created in preflight after phase/environment determination
         
         this.smcExpert = new SMCExpert();
         this.domExpert = new DOMExpert();
@@ -79,16 +78,23 @@ export class MoMEngine {
         console.log('🔍  M.o.M PREFLIGHT CHECK — System Verification');
         console.log('🔍 ═══════════════════════════════════════════\n');
 
-        // --- Check 1: Neon Postgres ---
+        // --- Check 1: Neon Postgres + Phase Determination ---
         try {
             console.log('🔍 [Preflight 1/4] - Neon Postgres...');
             await this.db.initialize();
             await this.db.testConnection();
-            console.log('✅ [Preflight 1/4] - Neon Postgres: PASS\n');
+            this.currentPhase = await this.evaluationEngine.initialize();
+            console.log(`✅ [Preflight 1/4] - Neon Postgres: PASS (Phase: ${this.currentPhase})\n`);
         } catch (error: any) {
             console.error(`❌ PREFLIGHT FAILED: Neon Postgres — ${error.message}`);
             process.exit(1);
         }
+
+        // --- Determine Broker Environment from Phase ---
+        const env: Environment = this.currentPhase === 'LIVE' ? 'LIVE' : 'DEMO';
+        this.broker = new TradovateBroker(env);
+        this.executionEngine = new ExecutionEngine(this.broker, this.db);
+        console.log(`🔐 [Preflight] - Broker environment: ${env} (Phase: ${this.currentPhase})\n`);
 
         // --- Check 2: Oracle (FMP API) ---
         try {
@@ -102,12 +108,12 @@ export class MoMEngine {
 
         // --- Check 3: Tradovate Broker ---
         try {
-            console.log('🔍 [Preflight 3/4] - Tradovate Broker (OAuth + WebSocket)...');
+            console.log(`🔍 [Preflight 3/4] - Tradovate Broker (${env} OAuth + WebSocket)...`);
             const connected = await this.broker.connect();
             if (!connected) {
                 throw new Error('Broker returned false from connect().');
             }
-            console.log('✅ [Preflight 3/4] - Tradovate Broker: PASS\n');
+            console.log(`✅ [Preflight 3/4] - Tradovate Broker (${env}): PASS\n`);
         } catch (error: any) {
             console.error(`❌ PREFLIGHT FAILED: Tradovate Broker — ${error.message}`);
             process.exit(1);
@@ -123,12 +129,9 @@ export class MoMEngine {
             process.exit(1);
         }
 
-        // --- Load Phase from DB ---
-        this.currentPhase = await this.evaluationEngine.initialize();
-
         console.log('🔍 ═══════════════════════════════════════════');
         console.log('🔍  PREFLIGHT COMPLETE — All Systems Verified');
-        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade} (${ContractManager.getContractDescription('MES')})`);
+        console.log(`🔍  Broker: ${env} | Trading: ${this.symbolToTrade} (${ContractManager.getContractDescription('MES')})`);
         console.log('🔍 ═══════════════════════════════════════════\n');
 
         return this.currentPhase;
@@ -180,12 +183,10 @@ export class MoMEngine {
         });
 
         // 5. Conditional Level 2 DOM — Worker Thread on Core 2 (Triple Threat)
+        // The DOM worker ALWAYS uses a LIVE broker to bypass prop firm L2 restrictions
         if (config.USE_DOM_EXPERT) {
-            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Launching Level 2 Data Store on Core 2...");
-            this.level2DataStore = new Level2DataStore(
-                this.broker.getAccessToken(),
-                this.symbolToTrade,
-            );
+            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Launching Level 2 Data Store on Core 2 (LIVE broker)...");
+            this.level2DataStore = new Level2DataStore(this.symbolToTrade);
 
             // Phase 2 verification: periodic SAB read to confirm data flow
             // Will be removed in Phase 3 when DOMExpert consumes the SAB directly.

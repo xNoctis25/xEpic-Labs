@@ -1,5 +1,4 @@
 import * as dotenv from 'dotenv';
-import { TradovateBroker } from './brokers/TradovateBroker';
 import { MoMEngine } from './core/MoMEngine';
 import { config } from './config/env';
 
@@ -11,13 +10,9 @@ console.log("  Version 2.0 - Triple Threat Architecture ");
 console.log(`  DOM Expert: ${config.USE_DOM_EXPERT ? '🟢 ENABLED' : '🔴 DISABLED'}`);
 console.log("==========================================\n");
 
-// 1. Initialize the Broker
-const broker = new TradovateBroker();
+// Engine creates its own broker after determining phase (DEMO vs LIVE)
+const engine = new MoMEngine();
 
-// 2. Inject Broker into the Engine
-const engine = new MoMEngine(broker);
-
-// 3. Ignite the system
 engine.start().catch(err => {
     console.error("🔴 [SYSTEM FATAL] - Engine failed to start: ", err);
 });
