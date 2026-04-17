@@ -180,16 +180,13 @@ export class MoMEngine {
         });
 
         // 5. Conditional Level 2 DOM — Worker Thread on Core 2 (Triple Threat)
-        // Worker shares the main thread's token (single-token architecture)
+        // Worker creates its own TradovateBroker('LIVE') for L2 data.
+        // 2-second staggered launch prevents token acquisition race condition.
         if (config.USE_DOM_EXPERT) {
-            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Launching Level 2 Data Store on Core 2...");
-            this.level2DataStore = new Level2DataStore(
-                this.broker.getAccessToken(),
-                this.symbolToTrade,
-            );
+            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Launching Level 2 Data Store on Core 2 (LIVE endpoint)...");
+            this.level2DataStore = new Level2DataStore(this.symbolToTrade);
 
             // Phase 2 verification: periodic SAB read to confirm data flow
-            // Will be removed in Phase 3 when DOMExpert consumes the SAB directly.
             this.startDOMVerificationLogger();
         } else {
             console.log("📊 [MoMEngine] - DOM Expert DISABLED. Running SMC-only playbook.");
