@@ -10,6 +10,7 @@ import { SessionLedger } from '../services/SessionLedger';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
 import { config } from '../config/env';
 import { Level2DataStore } from '../workers/Level2DataStore';
+import { DOMExpert } from '../experts/DOMExpert';
 
 export class MoMEngine {
     private riskEngine: RiskEngine;
@@ -18,6 +19,7 @@ export class MoMEngine {
     
     private aggregator: CandleAggregator;
     private smcExpert: SMCExpert;
+    private domExpert: DOMExpert;
 
     // --- Live Execution Services ---
     private oracle: OracleService;
@@ -45,6 +47,7 @@ export class MoMEngine {
         this.executionEngine = new ExecutionEngine(broker, this.db);
         
         this.smcExpert = new SMCExpert();
+        this.domExpert = new DOMExpert();
         this.oracle = new OracleService();
         this.ledger = new SessionLedger();
         this.evaluationEngine = new EvaluationEngine(this.db);
@@ -270,10 +273,29 @@ export class MoMEngine {
         }
 
         // ==========================================
+        // Pre-Trade Gate 3: DOM Expert (Order Book Confirmation)
+        // ==========================================
+        // Only active when USE_DOM_EXPERT is true. The SMC Expert dictates
+        // the area of interest; the DOM Expert confirms execution.
+        let domApproved = true; // Default: approved (bypassed when flag is off)
+        if (config.USE_DOM_EXPERT) {
+            const snapshot = this.level2DataStore?.readSnapshot() ?? null;
+            domApproved = this.domExpert.analyze(snapshot, signal);
+            if (!domApproved) {
+                // Log rejection to SMCExpert for EoDR
+                this.smcExpert.dailyRejectedSetups.push(
+                    `${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected (DOM Imbalance failed).`
+                );
+                return;
+            }
+        }
+
+        // ==========================================
         // All Gates Passed — Execute Trade
         // ==========================================
         const modeLabel = this.currentPhase === 'EVALUATION' ? '📝 PAPER' : '🔥 LIVE';
-        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: Oracle ✅ Margin ✅ Phase ✅ → Executing ${signal}`);
+        const domLabel = config.USE_DOM_EXPERT ? 'DOM ✅' : 'DOM ⏭️';
+        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: Oracle ✅ Margin ✅ ${domLabel} Phase ✅ → Executing ${signal}`);
 
         // Reserve margin from the ledger
         this.ledger.reserveMargin(this.MES_DAY_MARGIN);
