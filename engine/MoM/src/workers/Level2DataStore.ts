@@ -11,12 +11,12 @@ import {
 /**
  * Level2DataStore — Main-Thread API for the Level 2 DOM SharedArrayBuffer
  *
- * Architecture (Dual Endpoint):
+ * Architecture:
  *   - Allocates a SharedArrayBuffer (352 bytes, 10 ticks × 2 sides)
- *   - Spawns a worker_thread (Core 2) that creates its own
- *     TradovateBroker('LIVE') for Level 2 DOM data.
- *   - The worker authenticates independently against live.tradovateapi.com,
- *     subscribes to md/subscribeDOM, and writes into the SAB.
+ *   - Spawns a worker_thread (Core 2) that opens its OWN WebSocket to
+ *     Tradovate's MD endpoint using the main thread's access token.
+ *   - The worker subscribes to md/subscribeDOM and continuously writes
+ *     bid/ask arrays into the SAB.
  *   - Exposes readSnapshot() for the main thread to read the DOM with
  *     ZERO latency (no IPC, no message passing, direct memory read).
  *
@@ -26,37 +26,32 @@ import {
  *     - Writer increments sequence to EVEN after writing (signals "safe to read")
  *     - Reader checks sequence before and after reading; retries on mismatch
  *
- * Staggered Launch:
- *   Tradovate MAY enforce 1-token-per-user. To prevent a race condition
- *   where DEMO and LIVE tokens are requested simultaneously (potentially
- *   revoking each other), the worker launch is delayed by 2 seconds.
- *   This ensures the main thread's DEMO token is fully acquired first.
+ * Single-Token Design:
+ *   Worker reuses the main thread's access token (passed via workerData).
+ *   No separate requestToken() call — avoids token revocation conflicts.
  */
 export class Level2DataStore {
-    private worker!: Worker;
+    private worker: Worker;
     private sab: SharedArrayBuffer;
     private seqLock: Int32Array;
     private data: Float64Array;
 
-    constructor(symbol: string) {
+    constructor(accessToken: string, symbol: string) {
         // 1. Allocate the SharedArrayBuffer
         this.sab = new SharedArrayBuffer(SAB_BYTE_LENGTH);
         this.seqLock = new Int32Array(this.sab, 0, 1);  // First 4 bytes
         this.data = new Float64Array(this.sab, HEADER_BYTES); // After 8-byte header
 
-        console.log('📊 [Level2DataStore] - SharedArrayBuffer allocated (352 bytes, 10-deep DOM).');
-        console.log('📊 [Level2DataStore] - Worker thread launching in 2s (staggered to avoid token race)...');
-
-        // 2. Staggered worker launch — 2s delay to let main thread's DEMO token settle
-        setTimeout(() => {
-            this.launchWorker(symbol);
-        }, 2000);
-    }
-
-    private launchWorker(symbol: string): void {
+        // 2. Launch the worker thread
         const workerPath = path.resolve(__dirname, 'Level2Worker.ts');
         const isTypeScript = __filename.endsWith('.ts');
-        const workerDataPayload = { sab: this.sab, symbol };
+
+        const workerDataPayload = {
+            sab: this.sab,
+            accessToken,
+            symbol,
+            mdUrl: 'wss://md.tradovateapi.com/v1/websocket',
+        };
 
         if (isTypeScript) {
             this.worker = new Worker(
@@ -68,7 +63,7 @@ export class Level2DataStore {
             this.worker = new Worker(jsWorkerPath, { workerData: workerDataPayload });
         }
 
-        // Worker lifecycle handlers
+        // 3. Worker lifecycle handlers
         this.worker.on('error', (err) => {
             console.error('🔴 [Level2DataStore] Worker thread error:', err);
         });
@@ -85,7 +80,8 @@ export class Level2DataStore {
             }
         });
 
-        console.log('📊 [Level2DataStore] - Worker thread launched → Core 2 (LIVE endpoint).');
+        console.log('📊 [Level2DataStore] - SharedArrayBuffer allocated (352 bytes, 10-deep DOM).');
+        console.log('📊 [Level2DataStore] - Worker thread launched → Core 2.');
     }
 
     // ─── Main Thread Reader ────────────────────────────────────────────

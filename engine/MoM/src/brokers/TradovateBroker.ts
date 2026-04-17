@@ -6,30 +6,10 @@ import { config } from '../config/env';
 
 dotEnvConfig();
 
-// ─── Dual Endpoint Architecture ────────────────────────────────────
-// DEMO = Prop Firm evaluation (order execution + L1 ticks)
-// LIVE = Personal account (Level 2 DOM data entitlements)
-// Same universal credentials, different API endpoints.
-export type Environment = 'DEMO' | 'LIVE';
-
-const ENV_ENDPOINTS = {
-    DEMO: {
-        REST_BASE: 'https://demo.tradovateapi.com/v1',
-        AUTH_URL: 'https://demo.tradovateapi.com/v1/auth/accesstokenrequest',
-        MD_WS_URL: 'wss://md.tradovateapi.com/v1/websocket',
-    },
-    LIVE: {
-        REST_BASE: 'https://live.tradovateapi.com/v1',
-        AUTH_URL: 'https://live.tradovateapi.com/v1/auth/accesstokenrequest',
-        MD_WS_URL: 'wss://md.tradovateapi.com/v1/websocket',
-    },
-};
-
 /** Token refresh interval: 1 hour (ms). Tradovate tokens expire after a few hours. */
 const TOKEN_TTL_MS = 60 * 60 * 1000;
 
 // ─── Level 2 DOM Types ─────────────────────────────────────────────
-// Used by subscribeDOMData() and consumed by the Level2DataStore (Phase 2)
 
 /** A single price level on one side of the order book. */
 export interface DOMLevel {
@@ -53,18 +33,13 @@ export class TradovateBroker {
     private accessToken: string = '';
 
     // --- Token lifecycle ---
-    /** Epoch timestamp (ms) of the last successful token acquisition */
     private tokenAcquiredAt: number = 0;
-    /** Mutex: if a refresh is already in flight, all callers await the same promise */
     private refreshPromise: Promise<void> | null = null;
 
-    // --- Environment-Routed Endpoints ---
-    private readonly env: Environment;
-    private readonly REST_BASE: string;
-    private readonly AUTH_URL: string;
-    private readonly MD_WS_URL: string;
+    // --- Tradovate LIVE API ---
+    private readonly REST_BASE = 'https://live.tradovateapi.com/v1';
+    private readonly AUTH_URL = 'https://live.tradovateapi.com/v1/auth/accesstokenrequest';
 
-    /** Shared Axios instance – headers are updated on every token refresh */
     private axiosInstance: AxiosInstance;
 
     // Cached account ID (resolved once on first use)
@@ -72,24 +47,15 @@ export class TradovateBroker {
     private accountSpec: string = '';
 
     // ─── Centralized Message Dispatcher Callbacks ───────────────────
-    // Registered once during connect(). Each subscription sets its callback.
     private onTickCallback: ((tick: Tick) => void) | null = null;
     private onDOMCallback: ((snapshot: DOMSnapshot) => void) | null = null;
 
-    constructor(env: Environment = 'DEMO') {
-        this.env = env;
-        const endpoints = ENV_ENDPOINTS[env];
-        this.REST_BASE = endpoints.REST_BASE;
-        this.AUTH_URL = endpoints.AUTH_URL;
-        this.MD_WS_URL = endpoints.MD_WS_URL;
-
+    constructor() {
         this.axiosInstance = axios.create({
             baseURL: this.REST_BASE,
             timeout: 10000,
             headers: { 'Content-Type': 'application/json' },
         });
-
-        console.log(`🔐 [TradovateBroker] - Initialized in ${env} mode → ${this.REST_BASE}`);
     }
 
     // ─── Token Management ──────────────────────────────────────────────
@@ -99,7 +65,7 @@ export class TradovateBroker {
      * shared Axios instance headers.
      */
     private async requestToken(): Promise<void> {
-        console.log(`🔐 [TradovateBroker] - Requesting OAuth Access Token (${this.env})...`);
+        console.log("🔐 [TradovateBroker] - Requesting OAuth Access Token...");
 
         const response = await axios.post(this.AUTH_URL, {
             name: config.TRADOVATE_USERNAME,
@@ -114,7 +80,7 @@ export class TradovateBroker {
         this.tokenAcquiredAt = Date.now();
         this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${this.accessToken}`;
 
-        console.log(`✅ [TradovateBroker] - OAuth Token Acquired / Refreshed (${this.env}).`);
+        console.log("✅ [TradovateBroker] - OAuth Token Acquired / Refreshed.");
     }
 
     /**
@@ -173,7 +139,7 @@ export class TradovateBroker {
 
             // 2. Connect to the WebSocket
             return new Promise((resolve) => {
-                this.ws = new WebSocket(this.MD_WS_URL);
+                this.ws = new WebSocket('wss://md.tradovateapi.com/v1/websocket');
 
                 this.ws.on('open', () => {
                     this.isConnected = true;

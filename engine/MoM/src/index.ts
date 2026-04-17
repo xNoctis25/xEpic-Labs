@@ -11,8 +11,8 @@ console.log("  Version 2.0 - Triple Threat Architecture ");
 console.log(`  DOM Expert: ${config.USE_DOM_EXPERT ? '🟢 ENABLED' : '🔴 DISABLED'}`);
 console.log("==========================================\n");
 
-// 1. Initialize the DEMO Broker (prop firm evaluation / order execution)
-const broker = new TradovateBroker('DEMO');
+// 1. Initialize the Broker (LIVE endpoint)
+const broker = new TradovateBroker();
 
 // 2. Inject Broker into the Engine
 const engine = new MoMEngine(broker);
