@@ -185,6 +185,14 @@ export class TradovateBroker {
                                     if (event.e === 'md/dom' && this.onDOMCallback) {
                                         this.parseDOMEvent(event);
                                     }
+
+                                    // ── Catch-all: Subscription errors & rejections
+                                    if (event.s && event.s !== 200) {
+                                        console.error("🔴 [Tradovate] Subscription Error:", JSON.stringify(event));
+                                    }
+                                    if (event.e === 'error') {
+                                        console.error("🔴 [Tradovate] Server Error Event:", JSON.stringify(event));
+                                    }
                                 }
                             }
                         } catch (err) {
