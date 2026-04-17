@@ -37,8 +37,8 @@ export class TradovateBroker {
     private refreshPromise: Promise<void> | null = null;
 
     // --- Tradovate LIVE API ---
-    private readonly REST_BASE = 'https://live.tradovateapi.com/v1';
-    private readonly AUTH_URL = 'https://live.tradovateapi.com/v1/auth/accesstokenrequest';
+    private readonly REST_BASE = 'https://demo.tradovateapi.com/v1';
+    private readonly AUTH_URL = 'https://demo.tradovateapi.com/v1/auth/accesstokenrequest';
 
     private axiosInstance: AxiosInstance;
 
