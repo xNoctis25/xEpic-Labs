@@ -6,24 +6,6 @@ import { config } from '../config/env';
 
 dotEnvConfig();
 
-// ─── Dual Token Architecture ───────────────────────────────────────
-// DEMO = Prop Firm (Evaluation / Paper Trading)
-// LIVE = Personal Account (Full Market Data + Level 2 entitlements)
-export type Environment = 'DEMO' | 'LIVE';
-
-const ENV_ENDPOINTS = {
-    DEMO: {
-        REST_BASE: 'https://demo.tradovateapi.com/v1',
-        AUTH_URL: 'https://demo.tradovateapi.com/v1/auth/accesstokenrequest',
-        MD_WS_URL: 'wss://md.tradovateapi.com/v1/websocket',
-    },
-    LIVE: {
-        REST_BASE: 'https://live.tradovateapi.com/v1',
-        AUTH_URL: 'https://live.tradovateapi.com/v1/auth/accesstokenrequest',
-        MD_WS_URL: 'wss://md.tradovateapi.com/v1/websocket',
-    },
-};
-
 /** Token refresh interval: 1 hour (ms). Tradovate tokens expire after a few hours. */
 const TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -57,11 +39,9 @@ export class TradovateBroker {
     /** Mutex: if a refresh is already in flight, all callers await the same promise */
     private refreshPromise: Promise<void> | null = null;
 
-    // --- Environment-Routed Endpoints ---
-    private readonly env: Environment;
-    private readonly REST_BASE: string;
-    private readonly AUTH_URL: string;
-    private readonly MD_WS_URL: string;
+    // --- Tradovate REST API Base URL (Demo) ---
+    private readonly REST_BASE = 'https://demo.tradovateapi.com/v1';
+    private readonly AUTH_URL = 'https://demo.tradovateapi.com/v1/auth/accesstokenrequest';
 
     /** Shared Axios instance – headers are updated on every token refresh */
     private axiosInstance: AxiosInstance;
@@ -75,20 +55,12 @@ export class TradovateBroker {
     private onTickCallback: ((tick: Tick) => void) | null = null;
     private onDOMCallback: ((snapshot: DOMSnapshot) => void) | null = null;
 
-    constructor(env: Environment = 'DEMO') {
-        this.env = env;
-        const endpoints = ENV_ENDPOINTS[env];
-        this.REST_BASE = endpoints.REST_BASE;
-        this.AUTH_URL = endpoints.AUTH_URL;
-        this.MD_WS_URL = endpoints.MD_WS_URL;
-
+    constructor() {
         this.axiosInstance = axios.create({
             baseURL: this.REST_BASE,
             timeout: 10000,
             headers: { 'Content-Type': 'application/json' },
         });
-
-        console.log(`🔐 [TradovateBroker] - Initialized in ${env} mode → ${this.REST_BASE}`);
     }
 
     // ─── Token Management ──────────────────────────────────────────────
@@ -98,10 +70,8 @@ export class TradovateBroker {
      * shared Axios instance headers.
      */
     private async requestToken(): Promise<void> {
-        console.log(`🔐 [TradovateBroker] - Requesting OAuth Access Token (${this.env})...`);
+        console.log("🔐 [TradovateBroker] - Requesting OAuth Access Token...");
 
-        // Universal credentials — same login for both DEMO and LIVE.
-        // Only the AUTH_URL endpoint differs (demo vs live).
         const response = await axios.post(this.AUTH_URL, {
             name: config.TRADOVATE_USERNAME,
             password: config.TRADOVATE_PASSWORD,
@@ -115,7 +85,7 @@ export class TradovateBroker {
         this.tokenAcquiredAt = Date.now();
         this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${this.accessToken}`;
 
-        console.log(`✅ [TradovateBroker] - OAuth Token Acquired / Refreshed (${this.env}).`);
+        console.log("✅ [TradovateBroker] - OAuth Token Acquired / Refreshed.");
     }
 
     /**
@@ -174,7 +144,7 @@ export class TradovateBroker {
 
             // 2. Connect to the WebSocket
             return new Promise((resolve) => {
-                this.ws = new WebSocket(this.MD_WS_URL);
+                this.ws = new WebSocket('wss://md.tradovateapi.com/v1/websocket');
 
                 this.ws.on('open', () => {
                     this.isConnected = true;
