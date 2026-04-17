@@ -139,8 +139,16 @@ ws.on('open', () => {
     }, 2500);
 });
 
+let rawLogCount = 0;
+
 ws.on('message', (rawData: WebSocket.RawData) => {
     const message = rawData.toString();
+
+    // Debug: log the first 5 non-heartbeat raw frames
+    if (rawLogCount < 5 && message !== '[]' && message.trim().length > 0) {
+        sendStatus(`WORKER RAW [${rawLogCount + 1}/5]: ${message.substring(0, 500)}`);
+        rawLogCount++;
+    }
 
     try {
         if (!message.startsWith('a')) return;
@@ -173,10 +181,10 @@ ws.on('message', (rawData: WebSocket.RawData) => {
 
             // ── Subscription errors ──
             if (event.s && event.s !== 200) {
-                sendStatus(`⚠️ Subscription response: ${JSON.stringify(event)}`);
+                sendStatus(`🔴 Subscription Error: ${JSON.stringify(event)}`);
             }
             if (event.e === 'error') {
-                sendStatus(`🔴 Server error: ${JSON.stringify(event)}`);
+                sendStatus(`🔴 Server Error Event: ${JSON.stringify(event)}`);
             }
         }
     } catch (err) {
