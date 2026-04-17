@@ -100,25 +100,15 @@ export class TradovateBroker {
     private async requestToken(): Promise<void> {
         console.log(`🔐 [TradovateBroker] - Requesting OAuth Access Token (${this.env})...`);
 
-        // Environment-specific credential lookup
-        const creds = this.env === 'DEMO'
-            ? {
-                name: config.TRADOVATE_DEMO_USERNAME,
-                password: config.TRADOVATE_DEMO_PASSWORD,
-                cid: config.TRADOVATE_DEMO_CLIENT_ID,
-                sec: config.TRADOVATE_DEMO_CLIENT_SECRET,
-            }
-            : {
-                name: config.TRADOVATE_LIVE_USERNAME,
-                password: config.TRADOVATE_LIVE_PASSWORD,
-                cid: config.TRADOVATE_LIVE_CLIENT_ID,
-                sec: config.TRADOVATE_LIVE_CLIENT_SECRET,
-            };
-
+        // Universal credentials — same login for both DEMO and LIVE.
+        // Only the AUTH_URL endpoint differs (demo vs live).
         const response = await axios.post(this.AUTH_URL, {
-            ...creds,
+            name: config.TRADOVATE_USERNAME,
+            password: config.TRADOVATE_PASSWORD,
             appId: config.TRADOVATE_APP_ID,
             appVersion: config.TRADOVATE_APP_VERSION,
+            cid: config.TRADOVATE_CLIENT_ID,
+            sec: config.TRADOVATE_CLIENT_SECRET,
         });
 
         this.accessToken = response.data.accessToken;
