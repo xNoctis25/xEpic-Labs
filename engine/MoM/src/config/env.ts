@@ -3,6 +3,7 @@ dotenv.config();
 
 export const config = {
     TRADING_MODE: process.env.TRADING_MODE || 'PAPER',
+    USE_DOM_EXPERT: process.env.USE_DOM_EXPERT === 'true',
     TRADOVATE_USERNAME: process.env.TRADOVATE_USERNAME || '',
     TRADOVATE_PASSWORD: process.env.TRADOVATE_PASSWORD || '',
     TRADOVATE_APP_ID: process.env.TRADOVATE_APP_ID || '',

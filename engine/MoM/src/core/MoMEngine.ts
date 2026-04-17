@@ -8,6 +8,7 @@ import { TradovateBroker } from '../brokers/TradovateBroker';
 import { OracleService } from '../services/OracleService';
 import { SessionLedger } from '../services/SessionLedger';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
+import { config } from '../config/env';
 
 export class MoMEngine {
     private riskEngine: RiskEngine;
@@ -170,6 +171,21 @@ export class MoMEngine {
                 this.aggregator.processTick(tick);
             }
         });
+
+        // 5. Conditional Level 2 DOM subscription (Triple Threat)
+        if (config.USE_DOM_EXPERT) {
+            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Subscribing to Level 2 DOM data...");
+            this.broker.subscribeDOMData(this.symbolToTrade, (snapshot) => {
+                // Phase 2: This callback will be replaced by the Level2DataStore worker thread
+                // writing directly into a SharedArrayBuffer on Core 2.
+                // For now, log confirmation that DOM data is flowing (throttled).
+                if (snapshot.bids.length > 0 && snapshot.offers.length > 0) {
+                    console.log(`📊 [DOM] - ${snapshot.bids.length} bids × ${snapshot.offers.length} offers | Best Bid: ${snapshot.bids[0].price} (${snapshot.bids[0].size}) | Best Ask: ${snapshot.offers[0].price} (${snapshot.offers[0].size})`);
+                }
+            });
+        } else {
+            console.log("📊 [MoMEngine] - DOM Expert DISABLED. Running SMC-only playbook.");
+        }
     }
 
     // ==========================================

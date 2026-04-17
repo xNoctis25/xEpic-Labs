@@ -8,6 +8,25 @@ dotEnvConfig();
 /** Token refresh interval: 1 hour (ms). Tradovate tokens expire after a few hours. */
 const TOKEN_TTL_MS = 60 * 60 * 1000;
 
+// ─── Level 2 DOM Types ─────────────────────────────────────────────
+// Used by subscribeDOMData() and consumed by the Level2DataStore (Phase 2)
+
+/** A single price level on one side of the order book. */
+export interface DOMLevel {
+    price: number;
+    size: number;
+}
+
+/**
+ * A point-in-time snapshot of the DOM (Depth of Market).
+ * Contains up to 10 levels deep on each side.
+ */
+export interface DOMSnapshot {
+    timestamp: number;
+    bids: DOMLevel[];   // Sorted best (highest price) first
+    offers: DOMLevel[]; // Sorted best (lowest price) first
+}
+
 export class TradovateBroker {
     private ws: WebSocket | null = null;
     private isConnected: boolean = false;
@@ -30,6 +49,11 @@ export class TradovateBroker {
     // Cached account ID (resolved once on first use)
     private accountId: number | null = null;
     private accountSpec: string = '';
+
+    // ─── Centralized Message Dispatcher Callbacks ───────────────────
+    // Registered once during connect(). Each subscription sets its callback.
+    private onTickCallback: ((tick: Tick) => void) | null = null;
+    private onDOMCallback: ((snapshot: DOMSnapshot) => void) | null = null;
 
     constructor() {
         this.axiosInstance = axios.create({
@@ -135,6 +159,39 @@ export class TradovateBroker {
                         }
                     }, 2500);
 
+                    // ─── Centralized Message Dispatcher ─────────────────
+                    // Registered ONCE. Routes events to the appropriate callback
+                    // based on the event type. Prevents listener stacking.
+                    this.ws!.on('message', (data: WebSocket.RawData) => {
+                        const message = data.toString();
+
+                        try {
+                            if (message.startsWith('a')) {
+                                const payload = JSON.parse(message.slice(1));
+                                for (const event of payload) {
+                                    // ── Level 1: md/quote → Tick callback
+                                    if (event.e === 'md/quote' && this.onTickCallback) {
+                                        const trade = event.d?.entries?.Trade;
+                                        if (trade) {
+                                            this.onTickCallback({
+                                                price: trade.price,
+                                                volume: trade.size,
+                                                timestamp: new Date(event.d.timestamp).getTime(),
+                                            });
+                                        }
+                                    }
+
+                                    // ── Level 2: md/dom → DOMSnapshot callback
+                                    if (event.e === 'md/dom' && this.onDOMCallback) {
+                                        this.parseDOMEvent(event);
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            // Silently discard malformed frames (heartbeats, auth acks, etc.)
+                        }
+                    });
+
                     resolve(true);
                 });
 
@@ -150,36 +207,87 @@ export class TradovateBroker {
         }
     }
 
-    // ─── Market Data (WebSocket) ───────────────────────────────────────
+    // ─── Market Data — Level 1 (WebSocket) ─────────────────────────────
 
+    /**
+     * Subscribes to Level 1 top-of-book quotes for a symbol.
+     * The onTick callback is invoked on every trade event.
+     *
+     * Uses request ID 2 to avoid collisions with the auth handshake (ID 1).
+     */
     public subscribeMarketData(symbol: string, onTick: (tick: Tick) => void): void {
         if (!this.isConnected || !this.ws) return;
 
         console.log(`📡 [TradovateBroker] - Subscribing to Level 1 Ticks for ${symbol}...`);
+        this.onTickCallback = onTick;
         this.ws.send(`md/subscribeQuote\n2\n\n{"symbol":"${symbol}"}`);
+    }
 
-        this.ws.on('message', (data: WebSocket.RawData) => {
-            const message = data.toString();
-            // console.log(message); // Uncomment to debug raw websocket frames
+    // ─── Market Data — Level 2 DOM (WebSocket) ─────────────────────────
 
-            try {
-                if (message.startsWith('a')) {
-                    const payload = JSON.parse(message.slice(1));
-                    payload.forEach((event: any) => {
-                        if (event.e === 'md/quote' && event.d && event.d.entries) {
-                            const trade = event.d.entries.Trade;
-                            if (trade) {
-                                onTick({
-                                    price: trade.price,
-                                    volume: trade.size,
-                                    timestamp: new Date(event.d.timestamp).getTime()
-                                });
-                            }
-                        }
-                    });
-                }
-            } catch (err) {}
-        });
+    /**
+     * Subscribes to Level 2 Depth-of-Market data for a symbol.
+     * The onDOMUpdate callback is invoked on every DOM snapshot update.
+     *
+     * Uses request ID 3 to avoid collisions with auth (1) and Level 1 (2).
+     *
+     * In Phase 2 this callback will be replaced by direct writes to a
+     * SharedArrayBuffer from a worker_thread on Core 2.
+     */
+    public subscribeDOMData(symbol: string, onDOMUpdate: (snapshot: DOMSnapshot) => void): void {
+        if (!this.isConnected || !this.ws) return;
+
+        console.log(`📡 [TradovateBroker] - Subscribing to Level 2 DOM for ${symbol}...`);
+        this.onDOMCallback = onDOMUpdate;
+        this.ws.send(`md/subscribeDOM\n3\n\n{"symbol":"${symbol}"}`);
+    }
+
+    /**
+     * Parses a raw Tradovate md/dom WebSocket event into a typed DOMSnapshot
+     * and dispatches it to the registered callback.
+     *
+     * Tradovate DOM payload structure:
+     *   event.d.doms[0].bids  → [{ price, size }, ...]
+     *   event.d.doms[0].offers → [{ price, size }, ...]
+     *
+     * We take only the top 10 levels on each side.
+     */
+    private parseDOMEvent(event: any): void {
+        if (!this.onDOMCallback) return;
+
+        const doms = event.d?.doms;
+        if (!doms || !Array.isArray(doms) || doms.length === 0) return;
+
+        const dom = doms[0]; // Primary contract
+        const rawBids: any[] = dom.bids || [];
+        const rawOffers: any[] = dom.offers || [];
+
+        const snapshot: DOMSnapshot = {
+            timestamp: dom.timestamp ? new Date(dom.timestamp).getTime() : Date.now(),
+            bids: rawBids
+                .map((b: any) => ({ price: b.price ?? b.p, size: b.size ?? b.s }))
+                .filter((b: DOMLevel) => b.price != null && b.size != null)
+                .sort((a: DOMLevel, b: DOMLevel) => b.price - a.price)  // Best (highest) bid first
+                .slice(0, 10),
+            offers: rawOffers
+                .map((o: any) => ({ price: o.price ?? o.p, size: o.size ?? o.s }))
+                .filter((o: DOMLevel) => o.price != null && o.size != null)
+                .sort((a: DOMLevel, b: DOMLevel) => a.price - b.price)  // Best (lowest) offer first
+                .slice(0, 10),
+        };
+
+        this.onDOMCallback(snapshot);
+    }
+
+    // ─── WebSocket Accessor (Phase 2 Worker Handoff) ───────────────────
+
+    /**
+     * Returns the raw Market Data WebSocket reference.
+     * Phase 2 will use this to hand off the DOM stream to a worker_thread
+     * that writes directly into a SharedArrayBuffer.
+     */
+    public getMarketDataWebSocket(): WebSocket | null {
+        return this.ws;
     }
 
     // ─── REST API Methods ──────────────────────────────────────────────
