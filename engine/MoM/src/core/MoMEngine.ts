@@ -9,6 +9,7 @@ import { OracleService } from '../services/OracleService';
 import { SessionLedger } from '../services/SessionLedger';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
 import { config } from '../config/env';
+import { Level2DataStore } from '../workers/Level2DataStore';
 
 export class MoMEngine {
     private riskEngine: RiskEngine;
@@ -26,6 +27,9 @@ export class MoMEngine {
     private db: NeonDatabase;
     private evaluationEngine: EvaluationEngine;
     private currentPhase: BotPhase = 'EVALUATION';
+
+    // --- Level 2 DOM Data Store (Phase 2 — Core 2 Worker) ---
+    private level2DataStore: Level2DataStore | null = null;
 
     // --- Trade Management ---
     private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number } | null = null;
@@ -172,20 +176,46 @@ export class MoMEngine {
             }
         });
 
-        // 5. Conditional Level 2 DOM subscription (Triple Threat)
+        // 5. Conditional Level 2 DOM — Worker Thread on Core 2 (Triple Threat)
         if (config.USE_DOM_EXPERT) {
-            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Subscribing to Level 2 DOM data...");
-            this.broker.subscribeDOMData(this.symbolToTrade, (snapshot) => {
-                // Phase 2: This callback will be replaced by the Level2DataStore worker thread
-                // writing directly into a SharedArrayBuffer on Core 2.
-                // For now, log confirmation that DOM data is flowing (throttled).
-                if (snapshot.bids.length > 0 && snapshot.offers.length > 0) {
-                    console.log(`📊 [DOM] - ${snapshot.bids.length} bids × ${snapshot.offers.length} offers | Best Bid: ${snapshot.bids[0].price} (${snapshot.bids[0].size}) | Best Ask: ${snapshot.offers[0].price} (${snapshot.offers[0].size})`);
-                }
-            });
+            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Launching Level 2 Data Store on Core 2...");
+            this.level2DataStore = new Level2DataStore(
+                this.broker.getAccessToken(),
+                this.symbolToTrade,
+            );
+
+            // Phase 2 verification: periodic SAB read to confirm data flow
+            // Will be removed in Phase 3 when DOMExpert consumes the SAB directly.
+            this.startDOMVerificationLogger();
         } else {
             console.log("📊 [MoMEngine] - DOM Expert DISABLED. Running SMC-only playbook.");
         }
+    }
+
+    // ==========================================
+    // PHASE 2 VERIFICATION — SAB Read Confirmation
+    // ==========================================
+    /**
+     * Periodically reads the SharedArrayBuffer from the main thread to confirm
+     * the Level2Worker on Core 2 is writing DOM data successfully.
+     *
+     * This is a TEMPORARY verification logger. Phase 3 will replace it with
+     * the DOMExpert consuming the SAB directly.
+     */
+    private startDOMVerificationLogger(): void {
+        setInterval(() => {
+            if (!this.level2DataStore) return;
+            const snapshot = this.level2DataStore.readSnapshot();
+            if (snapshot && snapshot.bids.length > 0 && snapshot.offers.length > 0) {
+                console.log(
+                    `📊 [Level2 SAB Read] - Best Bid: ${snapshot.bids[0].price} (${snapshot.bids[0].size}) ` +
+                    `| Best Ask: ${snapshot.offers[0].price} (${snapshot.offers[0].size}) ` +
+                    `| Depth: ${snapshot.bids.length}×${snapshot.offers.length}`
+                );
+            } else if (!snapshot) {
+                console.log(`📊 [Level2 SAB Read] - No data yet (worker may still be connecting).`);
+            }
+        }, 10000); // Every 10 seconds
     }
 
     // ==========================================

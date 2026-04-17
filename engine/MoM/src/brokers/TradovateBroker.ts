@@ -254,31 +254,30 @@ export class TradovateBroker {
      * Parses a raw Tradovate md/dom WebSocket event into a typed DOMSnapshot
      * and dispatches it to the registered callback.
      *
-     * Tradovate DOM payload structure:
-     *   event.d.doms[0].bids  → [{ price, size }, ...]
-     *   event.d.doms[0].offers → [{ price, size }, ...]
+     * Tradovate DOM payload structure (confirmed via RAW log):
+     *   event.d.bids   → [{ price, size }, ...]
+     *   event.d.offers → [{ price, size }, ...]
      *
      * We take only the top 10 levels on each side.
      */
     private parseDOMEvent(event: any): void {
         if (!this.onDOMCallback) return;
 
-        const doms = event.d?.doms;
-        if (!doms || !Array.isArray(doms) || doms.length === 0) return;
+        const d = event.d;
+        if (!d) return;
 
-        const dom = doms[0]; // Primary contract
-        const rawBids: any[] = dom.bids || [];
-        const rawOffers: any[] = dom.offers || [];
+        const rawBids: any[] = d.bids || [];
+        const rawOffers: any[] = d.offers || [];
 
         const snapshot: DOMSnapshot = {
-            timestamp: dom.timestamp ? new Date(dom.timestamp).getTime() : Date.now(),
+            timestamp: d.timestamp ? new Date(d.timestamp).getTime() : Date.now(),
             bids: rawBids
-                .map((b: any) => ({ price: b.price ?? b.p, size: b.size ?? b.s }))
+                .map((b: any) => ({ price: b.price, size: b.size }))
                 .filter((b: DOMLevel) => b.price != null && b.size != null)
                 .sort((a: DOMLevel, b: DOMLevel) => b.price - a.price)  // Best (highest) bid first
                 .slice(0, 10),
             offers: rawOffers
-                .map((o: any) => ({ price: o.price ?? o.p, size: o.size ?? o.s }))
+                .map((o: any) => ({ price: o.price, size: o.size }))
                 .filter((o: DOMLevel) => o.price != null && o.size != null)
                 .sort((a: DOMLevel, b: DOMLevel) => a.price - b.price)  // Best (lowest) offer first
                 .slice(0, 10),
@@ -291,11 +290,20 @@ export class TradovateBroker {
 
     /**
      * Returns the raw Market Data WebSocket reference.
-     * Phase 2 will use this to hand off the DOM stream to a worker_thread
-     * that writes directly into a SharedArrayBuffer.
+     * Retained for diagnostic use. Phase 2 worker opens its own connection
+     * since WebSocket objects cannot be transferred between threads.
      */
     public getMarketDataWebSocket(): WebSocket | null {
         return this.ws;
+    }
+
+    /**
+     * Returns the current OAuth access token.
+     * Used by Level2DataStore to authenticate the worker thread's
+     * independent WebSocket connection to the Tradovate MD endpoint.
+     */
+    public getAccessToken(): string {
+        return this.accessToken;
     }
 
     // ─── REST API Methods ──────────────────────────────────────────────
