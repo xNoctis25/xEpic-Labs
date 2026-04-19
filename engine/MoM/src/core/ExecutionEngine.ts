@@ -163,6 +163,54 @@ export class ExecutionEngine {
     }
 
     // ==========================================
+    // EOD KILL SWITCH — Emergency Position Flatten
+    // ==========================================
+    /**
+     * Flattens an open position at market price to prevent margin violations.
+     * Called by MoMEngine at 15:55 ET (EOD Kill Switch).
+     *
+     * Sequence:
+     *   1. Fire a market order in the opposite direction via broker.liquidatePosition()
+     *   2. Broker automatically cancels all orphaned bracket legs
+     *   3. Gracefully close the excursion tracker
+     *
+     * @param symbol     - Tradovate contract symbol (e.g., 'MESM6')
+     * @param activeSide - Current position direction ('BUY' or 'SELL')
+     * @param qty        - Total position quantity to flatten
+     * @returns true if the flatten order was accepted by the broker
+     */
+    public async flattenPosition(
+        symbol: string,
+        activeSide: 'BUY' | 'SELL',
+        qty: number,
+    ): Promise<boolean> {
+        // Opposite action to close the position
+        const exitAction: 'Buy' | 'Sell' = activeSide === 'BUY' ? 'Sell' : 'Buy';
+
+        console.log(`⚠️ [ExecutionEngine] - EOD KILL SWITCH: Flattening ${qty} ${symbol} at Market.`);
+
+        try {
+            const success = await this.broker.liquidatePosition(symbol, exitAction, qty);
+
+            if (success) {
+                console.log(`✅ [ExecutionEngine] - EOD KILL SWITCH: Position flattened successfully.`);
+            } else {
+                console.error(`🔴 [ExecutionEngine] - EOD KILL SWITCH: Flatten order was rejected by the broker.`);
+            }
+
+            // Gracefully close the excursion tracker regardless of broker response
+            // (we cannot keep tracking a position that should be flat)
+            this.tradeExcursion = null;
+
+            return success;
+        } catch (error: any) {
+            console.error(`🔴 [ExecutionEngine] - EOD KILL SWITCH FAILED:`, error.message);
+            this.tradeExcursion = null;
+            return false;
+        }
+    }
+
+    // ==========================================
     // MFE / MAE Excursion Tracking
     // ==========================================
     /**

@@ -3,6 +3,7 @@ import { ExecutionEngine } from './ExecutionEngine';
 import { EvaluationEngine } from './EvaluationEngine';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './PositionSizer';
 import { ContractBuilder } from '../utils/ContractBuilder';
+import { MarketClock } from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMCExpert } from '../experts/SMCExpert';
 import { TradovateBroker } from '../brokers/TradovateBroker';
@@ -35,7 +36,7 @@ export class MoMEngine {
     private level2DataStore: Level2DataStore | null = null;
 
     // --- Trade Management ---
-    private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number } | null = null;
+    private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number; qty: number } | null = null;
     private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
 
     // Dynamically resolved via ContractBuilder (auto-rollover)
@@ -236,6 +237,28 @@ export class MoMEngine {
     private async onCandleComplete(candle: Candle): Promise<void> {
         console.log(`📊 [MoMEngine] - 1M Candle Complete [${this.symbolToTrade}]: O:${candle.open} H:${candle.high} L:${candle.low} C:${candle.close}`);
 
+        // ==========================================
+        // EOD KILL SWITCH — 15:55 ET Margin Protection
+        // ==========================================
+        // Must fire BEFORE any gate logic. Tradovate penalizes positions
+        // held past the intraday close. Flatten immediately.
+        if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
+            if (this.activePosition) {
+                console.log(`🚨 [MoMEngine] - EOD FLATTEN TRIGGERED (15:55 ET). Liquidating open positions.`);
+                await this.executionEngine.flattenPosition(
+                    this.symbolToTrade,
+                    this.activePosition.side,
+                    this.activePosition.qty,
+                );
+
+                // Force cleanup of local state
+                this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0); // PnL syncs later via broker reconciliation
+                this.riskEngine.updatePnL(0, this.activePosition.riskBudget); // Register $0 so daily tracker stays accurate
+                this.activePosition = null;
+            }
+            return; // Do not process any new signals for the rest of the day
+        }
+
         // Update MFE/MAE excursion tracking if a trade is active
         this.executionEngine.updateExcursion(candle);
 
@@ -347,6 +370,7 @@ export class MoMEngine {
                         entryPrice: candle.close,
                         margin: totalMarginRequired,
                         riskBudget: sizing.riskBudget,
+                        qty: sizing.qty,
                     };
                     console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
                 } else {

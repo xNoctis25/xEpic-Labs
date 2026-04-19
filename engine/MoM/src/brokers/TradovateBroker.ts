@@ -486,4 +486,69 @@ export class TradovateBroker {
             return 0;
         }
     }
+
+    /**
+     * EOD Kill Switch — Liquidate a position at market and cancel orphaned orders.
+     *
+     * Fires a Market order in the opposite direction to instantly flatten,
+     * then calls /order/cancelAllOrders to clean up any orphaned bracket
+     * legs (TP limits, trailing stops) that Tradovate may still be tracking.
+     *
+     * @param symbol - Tradovate contract symbol (e.g., 'MESM6')
+     * @param exitAction - 'Buy' or 'Sell' (the CLOSING direction)
+     * @param qty - Number of contracts to flatten
+     * @returns true if the flatten order was accepted
+     */
+    public async liquidatePosition(
+        symbol: string,
+        exitAction: 'Buy' | 'Sell',
+        qty: number,
+    ): Promise<boolean> {
+        await this.refreshTokenIfNeeded();
+
+        const { id: accountId, spec: accountSpec } = await this.getAccountId();
+
+        // 1. Fire a naked Market order to flatten the position
+        const flattenPayload = {
+            accountSpec,
+            accountId,
+            action: exitAction,
+            symbol,
+            orderQty: qty,
+            orderType: 'Market',
+            isAutomated: true,
+        };
+
+        try {
+            console.log(`🚨 [TradovateBroker] - LIQUIDATE: ${exitAction} ${qty}x ${symbol} at Market`);
+
+            await this.withTokenRetry(() =>
+                this.axiosInstance.post('/order/placeOrder', flattenPayload, {
+                    timeout: 5000,
+                })
+            );
+
+            console.log(`✅ [TradovateBroker] - Flatten order accepted.`);
+        } catch (error: any) {
+            const errMsg = error.response?.data?.errorText || error.response?.data || error.message;
+            console.error(`🔴 [TradovateBroker] - Flatten order FAILED:`, errMsg);
+            return false;
+        }
+
+        // 2. Cancel all working orders (orphaned bracket legs)
+        try {
+            console.log(`🧹 [TradovateBroker] - Canceling all working orders...`);
+            await this.withTokenRetry(() =>
+                this.axiosInstance.post('/order/cancelAllOrders', {
+                    accountId,
+                })
+            );
+            console.log(`✅ [TradovateBroker] - All working orders canceled.`);
+        } catch (error: any) {
+            // Non-fatal: position is already flat, orphan cleanup is best-effort
+            console.warn(`⚠️ [TradovateBroker] - Failed to cancel orphaned orders:`, error.message);
+        }
+
+        return true;
+    }
 }
