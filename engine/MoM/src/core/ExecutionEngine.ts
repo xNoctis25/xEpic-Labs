@@ -3,15 +3,22 @@ import { NeonDatabase } from '../services/NeonDatabase';
 import { Candle } from '../market/CandleAggregator';
 
 /**
- * ExecutionEngine — Live Bracket Order Dispatcher + Trade Self-Grading
+ * ExecutionEngine — Dynamic Scale-Out Bracket Dispatcher + Trade Self-Grading
  *
  * Responsibilities:
  *   1. Calculate TP/SL targets and fire Tradovate OSO bracket orders
- *   2. Track MFE/MAE (Max Favorable/Adverse Excursion) during trade lifespan
- *   3. Self-grade each trade on close (A/B/C/F) and journal to Neon Postgres
+ *   2. Dynamically split qty into scale-out tiers using trailing stops
+ *   3. Track MFE/MAE (Max Favorable/Adverse Excursion) during trade lifespan
+ *   4. Self-grade each trade on close (A/B/C/F) and journal to Neon Postgres
  *
- * Risk Parameters (MES — Micro E-Mini S&P 500):
- *   TP = +40 points | SL = -20 points | $5 per point
+ * Scale-Out Tiers (based on qty from PositionSizer):
+ *   qty === 1  → "The Pure Runner": 1 contract with trailing stop only (no TP)
+ *   qty === 2  → "The Split": 1 contract at 1:1 RR + 1 runner with trailing stop
+ *   qty >= 3   → "The Institutional": TP1 at 1:1, TP2 at 1:2, Runner trailing stop
+ *
+ * Risk Parameters:
+ *   SL = 20 points | TP1 = 1:1 (20pts) | TP2 = 1:2 (40pts)
+ *   Trailing Stop: pegDifference = -SL_POINTS
  */
 
 export interface ActiveTradeExcursion {
@@ -25,8 +32,7 @@ export class ExecutionEngine {
     private broker: TradovateBroker;
     private db: NeonDatabase;
 
-    // Fixed TP/SL offsets in points (must match BacktestEngine for consistency)
-    private readonly TP_POINTS = 40;
+    // Fixed SL offset in points (must match MoMEngine.SL_POINTS)
     private readonly SL_POINTS = 20;
     private readonly DOLLAR_PER_POINT = 5;
 
@@ -39,14 +45,21 @@ export class ExecutionEngine {
     }
 
     /**
-     * Executes a bracket order with calculated TP/SL targets.
-     * Also initializes the MFE/MAE excursion tracker for the new trade.
+     * Executes a dynamically scaled bracket order based on qty.
+     *
+     * Scale-Out Logic:
+     *   qty === 1 → The Pure Runner (trailing stop only, no TP)
+     *   qty === 2 → The Split (1:1 TP + runner)
+     *   qty >= 3  → The Institutional (TP1 1:1 + TP2 1:2 + runner)
+     *
+     * Each tier is dispatched as a separate placeOrder/placeOSO request so
+     * Tradovate tracks individual bracket legs independently.
      *
      * @param symbol       - Tradovate contract symbol (e.g., 'MESM6')
      * @param currentPrice - Current market price at signal time
      * @param side         - 'BUY' or 'SELL' from SMCExpert
-     * @param qty          - Number of contracts (default 1)
-     * @returns Order ID from the broker, or null if the order failed
+     * @param qty          - Total contract quantity from PositionSizer
+     * @returns First order ID from the broker, or null if all orders failed
      */
     public async executeBracket(
         symbol: string,
@@ -54,33 +67,84 @@ export class ExecutionEngine {
         side: 'BUY' | 'SELL',
         qty: number = 1,
     ): Promise<string | null> {
-        // Convert internal signal format to Tradovate action format
         const action: 'Buy' | 'Sell' = side === 'BUY' ? 'Buy' : 'Sell';
 
-        // Calculate strict targets based on direction
-        let tpPrice: number;
-        let slPrice: number;
+        // Calculate price targets based on direction
+        const slPrice = side === 'BUY'
+            ? currentPrice - this.SL_POINTS
+            : currentPrice + this.SL_POINTS;
 
-        if (side === 'BUY') {
-            tpPrice = currentPrice + this.TP_POINTS;  // LONG: TP above entry
-            slPrice = currentPrice - this.SL_POINTS;  // LONG: SL below entry
-        } else {
-            tpPrice = currentPrice - this.TP_POINTS;  // SHORT: TP below entry
-            slPrice = currentPrice + this.SL_POINTS;  // SHORT: SL above entry
-        }
+        const tp1Price = side === 'BUY'
+            ? currentPrice + this.SL_POINTS       // 1:1 RR
+            : currentPrice - this.SL_POINTS;
 
-        console.log(`⚡ [ExecutionEngine] - ${side} Bracket: Entry ~${currentPrice} | TP: ${tpPrice} (+${this.TP_POINTS}pts) | SL: ${slPrice} (-${this.SL_POINTS}pts)`);
+        const tp2Price = side === 'BUY'
+            ? currentPrice + (this.SL_POINTS * 2)  // 1:2 RR
+            : currentPrice - (this.SL_POINTS * 2);
+
+        // Trailing stop offset (always negative in Tradovate's pegDifference)
+        const pegDifference = -(this.SL_POINTS);
+
+        let primaryOrderId: string | null = null;
 
         try {
-            const orderId = await this.broker.placeBracketOrder(
-                symbol,
-                action,
-                qty,
-                tpPrice,
-                slPrice,
-            );
+            // ==========================================
+            // qty === 1: The Pure Runner
+            // ==========================================
+            if (qty === 1) {
+                console.log(`⚡ [ExecutionEngine] - SCALE-OUT: The Pure Runner (1 contract)`);
+                console.log(`⚡ [ExecutionEngine] - ${side} Runner: Entry ~${currentPrice} | TrailingStop: ${this.SL_POINTS}pts`);
 
-            console.log(`✅ [ExecutionEngine] - Bracket transmitted successfully. Broker Order ID: ${orderId}`);
+                primaryOrderId = await this.broker.placeOrder(symbol, action, 1, {
+                    orderType: 'TrailingStop',
+                    pegDifference,
+                });
+
+            // ==========================================
+            // qty === 2: The Split
+            // ==========================================
+            } else if (qty === 2) {
+                console.log(`⚡ [ExecutionEngine] - SCALE-OUT: The Split (2 contracts)`);
+
+                // Order A: 1 contract with 1:1 TP + standard SL
+                console.log(`⚡ [ExecutionEngine] - Leg A: ${side} ×1 | TP: ${tp1Price} (+${this.SL_POINTS}pts 1:1) | SL: ${slPrice}`);
+                primaryOrderId = await this.broker.placeBracketOrder(symbol, action, 1, tp1Price, slPrice);
+
+                // Order B: 1 contract runner with trailing stop (no TP)
+                console.log(`⚡ [ExecutionEngine] - Leg B: ${side} ×1 | Runner TrailingStop: ${this.SL_POINTS}pts`);
+                await this.broker.placeOrder(symbol, action, 1, {
+                    orderType: 'TrailingStop',
+                    pegDifference,
+                });
+
+            // ==========================================
+            // qty >= 3: The Institutional 3-Tier
+            // ==========================================
+            } else {
+                const runnerQty = Math.floor(qty / 3);
+                const tp1Qty = Math.ceil((qty - runnerQty) / 2);
+                const tp2Qty = qty - runnerQty - tp1Qty;
+
+                console.log(`⚡ [ExecutionEngine] - SCALE-OUT: The Institutional (${qty} contracts)`);
+                console.log(`⚡ [ExecutionEngine] - TP1: ×${tp1Qty} @ 1:1 | TP2: ×${tp2Qty} @ 1:2 | Runner: ×${runnerQty} trailing`);
+
+                // Order A: TP1 tier — Take Profit at 1:1 RR + standard SL
+                console.log(`⚡ [ExecutionEngine] - Leg A: ${side} ×${tp1Qty} | TP: ${tp1Price} (+${this.SL_POINTS}pts 1:1) | SL: ${slPrice}`);
+                primaryOrderId = await this.broker.placeBracketOrder(symbol, action, tp1Qty, tp1Price, slPrice);
+
+                // Order B: TP2 tier — Take Profit at 1:2 RR + standard SL
+                console.log(`⚡ [ExecutionEngine] - Leg B: ${side} ×${tp2Qty} | TP: ${tp2Price} (+${this.SL_POINTS * 2}pts 1:2) | SL: ${slPrice}`);
+                await this.broker.placeBracketOrder(symbol, action, tp2Qty, tp2Price, slPrice);
+
+                // Order C: Runner tier — Trailing stop only (no TP)
+                console.log(`⚡ [ExecutionEngine] - Leg C: ${side} ×${runnerQty} | Runner TrailingStop: ${this.SL_POINTS}pts`);
+                await this.broker.placeOrder(symbol, action, runnerQty, {
+                    orderType: 'TrailingStop',
+                    pegDifference,
+                });
+            }
+
+            console.log(`✅ [ExecutionEngine] - All scale-out legs transmitted. Primary Order ID: ${primaryOrderId}`);
 
             // Initialize excursion tracking for this trade
             this.tradeExcursion = {
@@ -90,10 +154,10 @@ export class ExecutionEngine {
                 lowestLow: currentPrice,
             };
 
-            return orderId;
+            return primaryOrderId;
 
         } catch (error: any) {
-            console.error(`🔴 [ExecutionEngine] - Failed to place bracket:`, error.message);
+            console.error(`🔴 [ExecutionEngine] - Scale-out bracket failed:`, error.message);
             return null;
         }
     }

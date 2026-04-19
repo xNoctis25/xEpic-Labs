@@ -398,6 +398,71 @@ export class TradovateBroker {
     }
 
     /**
+     * Places a Market entry order with a single bracket leg (TrailingStop or Stop).
+     *
+     * Used by the ExecutionEngine's scale-out system for "runner" legs that
+     * have no Take Profit — only a trailing stop to lock in gains.
+     *
+     * Tradovate API:
+     *   - Entry: Market order (immediate fill)
+     *   - bracket1: { orderType: 'TrailingStop', pegDifference: -N }
+     *
+     * @param symbol  - Tradovate contract symbol
+     * @param action  - 'Buy' or 'Sell'
+     * @param qty     - Number of contracts
+     * @param bracket - Single bracket leg config (orderType + pegDifference)
+     * @returns Order ID string
+     */
+    public async placeOrder(
+        symbol: string,
+        action: 'Buy' | 'Sell',
+        qty: number,
+        bracket: { orderType: string; pegDifference: number },
+    ): Promise<string> {
+        await this.refreshTokenIfNeeded();
+
+        const { id: accountId, spec: accountSpec } = await this.getAccountId();
+        const exitAction = action === 'Buy' ? 'Sell' : 'Buy';
+
+        const payload = {
+            accountSpec,
+            accountId,
+            action,
+            symbol,
+            orderQty: qty,
+            orderType: 'Market',
+            isAutomated: true,
+            bracket1: {
+                action: exitAction,
+                orderType: bracket.orderType,
+                pegDifference: bracket.pegDifference,
+            },
+        };
+
+        try {
+            console.log(
+                `⚡ [TradovateBroker] - Sending Runner Order: ${action} ${qty}x ${symbol}` +
+                ` | ${bracket.orderType} peg: ${bracket.pegDifference}`
+            );
+
+            const response = await this.withTokenRetry(() =>
+                this.axiosInstance.post('/order/placeOrder', payload, {
+                    timeout: 5000,
+                })
+            );
+
+            const orderId = response.data?.orderId || response.data?.id || `RUN_${Date.now()}`;
+            console.log(`✅ [TradovateBroker] - Runner PLACED. Order ID: ${orderId}`);
+            return String(orderId);
+
+        } catch (error: any) {
+            const errMsg = error.response?.data?.errorText || error.response?.data || error.message;
+            console.error(`🔴 [TradovateBroker] - Runner order FAILED:`, errMsg);
+            throw new Error(`Runner order failed: ${errMsg}`);
+        }
+    }
+
+    /**
      * Fetches the real cash balance from the Tradovate REST API.
      * Used by the SessionLedger for initial sync and background reconciliation.
      */
