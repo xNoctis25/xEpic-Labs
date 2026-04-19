@@ -53,6 +53,7 @@ jobs:
               sudo npm install -g pm2
             fi
             
-            # 4. Restart or Start M.o.M seamlessly
-            pm2 restart mom-engine || pm2 start npm --name "mom-engine" -- run start
+            # 4. Flush logs and Restart/Start M.o.M seamlessly with updated env
+            pm2 flush
+            pm2 restart mom-engine --update-env || pm2 start npm --name "mom-engine" -- run start
             pm2 save

@@ -1,7 +1,7 @@
 import { RiskEngine } from './RiskEngine';
 import { ExecutionEngine } from './ExecutionEngine';
 import { EvaluationEngine } from './EvaluationEngine';
-import { ContractManager } from './ContractManager';
+import { ContractBuilder } from '../utils/ContractBuilder';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMCExpert } from '../experts/SMCExpert';
 import { TradovateBroker } from '../brokers/TradovateBroker';
@@ -52,8 +52,8 @@ export class MoMEngine {
         this.ledger = new SessionLedger();
         this.evaluationEngine = new EvaluationEngine(this.db);
 
-        // Auto-resolve the active CME front-month contract
-        this.symbolToTrade = ContractManager.getActiveSymbol('MES');
+        // Auto-resolve the active CME front-month contract via ContractBuilder
+        this.symbolToTrade = ContractBuilder.getActiveContract(config.SYMBOL_ROOT);
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
@@ -128,7 +128,7 @@ export class MoMEngine {
 
         console.log('🔍 ═══════════════════════════════════════════');
         console.log('🔍  PREFLIGHT COMPLETE — All Systems Verified');
-        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade} (${ContractManager.getContractDescription('MES')})`);
+        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade} (${ContractBuilder.getContractDescription(config.SYMBOL_ROOT)})`);
         console.log('🔍 ═══════════════════════════════════════════\n');
 
         return this.currentPhase;
@@ -236,6 +236,26 @@ export class MoMEngine {
 
         // Feed every candle to the expert regardless of gates (indicators must stay aligned)
         const signal = this.smcExpert.analyze(candle);
+
+        // ==========================================
+        // SMC Heartbeat — Verbose Debug Log
+        // ==========================================
+        if (config.VERBOSE_SMC_LOGGING) {
+            const hb = this.smcExpert.lastHeartbeat;
+            const etTime = new Date(candle.timestamp).toLocaleTimeString('en-US', {
+                timeZone: 'America/New_York',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+            console.log(
+                `[SMC Heartbeat] ${etTime} ET` +
+                ` | O: ${candle.open} H: ${candle.high} L: ${candle.low} C: ${candle.close}` +
+                ` | Trend: ${hb.trend}` +
+                ` | FVG: ${hb.fvg}` +
+                ` | Decision: ${hb.decision}`
+            );
+        }
 
         // Only process BUY/SELL signals — skip HOLD
         if (signal === 'HOLD') return;

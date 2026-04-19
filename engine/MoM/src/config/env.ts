@@ -4,6 +4,8 @@ dotenv.config();
 export const config = {
     TRADING_MODE: process.env.TRADING_MODE || 'PAPER',
     USE_DOM_EXPERT: process.env.USE_DOM_EXPERT === 'true',
+    VERBOSE_SMC_LOGGING: process.env.VERBOSE_SMC_LOGGING === 'true',
+    SYMBOL_ROOT: process.env.SYMBOL_ROOT || 'MES',
 
     // Tradovate Credentials (Universal — same for Demo and Live)
     TRADOVATE_USERNAME: process.env.TRADOVATE_USERNAME || '',

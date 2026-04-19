@@ -1,5 +1,15 @@
 import { Candle } from '../market/CandleAggregator';
 
+/**
+ * Snapshot of the SMCExpert's state after each analyze() call.
+ * Used by MoMEngine for the verbose heartbeat log.
+ */
+export interface HeartbeatSnapshot {
+    trend: 'Bullish' | 'Bearish' | 'Neutral';
+    fvg: 'Bullish FVG' | 'Bearish FVG' | 'None';
+    decision: 'BUY' | 'SELL' | 'HOLD';
+}
+
 export class SMCExpert {
     private candles: Candle[] = [];
 
@@ -13,6 +23,9 @@ export class SMCExpert {
     // Tracks why valid FVG gaps were rejected by secondary filters
     public dailyRejectedSetups: string[] = [];
     private rejectionDay: number = -1;
+
+    // --- Debug Heartbeat Snapshot (updated every analyze call) ---
+    public lastHeartbeat: HeartbeatSnapshot = { trend: 'Neutral', fvg: 'None', decision: 'HOLD' };
 
     public analyze(candle: Candle): 'BUY' | 'SELL' | 'HOLD' {
         this.candles.push(candle);
@@ -38,15 +51,31 @@ export class SMCExpert {
         this.cumVol += candle.volume;
         const vwap = this.cumVol > 0 ? this.cumVolPrice / this.cumVol : 0;
 
+        // --- Determine Trend Bias (VWAP-relative) ---
+        let trend: HeartbeatSnapshot['trend'] = 'Neutral';
+        if (vwap > 0) {
+            trend = candle.close > vwap ? 'Bullish' : candle.close < vwap ? 'Bearish' : 'Neutral';
+        }
+
+        // Default heartbeat — updated at each exit point below
+        let fvgLabel: HeartbeatSnapshot['fvg'] = 'None';
+        let decision: HeartbeatSnapshot['decision'] = 'HOLD';
+
         // VWAP must be valid to proceed
-        if (vwap <= 0) return 'HOLD';
+        if (vwap <= 0) {
+            this.lastHeartbeat = { trend, fvg: fvgLabel, decision };
+            return 'HOLD';
+        }
 
         // ==========================================
         // SMC Signal: Fair Value Gap (FVG) + Market Structure Shift (MSS)
         // ==========================================
         // Need 19 candles: 15 lookback for MSS + 4 for FVG (c1, c2, c3, curr)
         const len = this.candles.length;
-        if (len < 19) return 'HOLD';
+        if (len < 19) {
+            this.lastHeartbeat = { trend, fvg: fvgLabel, decision };
+            return 'HOLD';
+        }
 
         const c1   = this.candles[len - 4]; // Candle 1 — defines one edge of the gap
         const c2   = this.candles[len - 3]; // Candle 2 — the displacement (impulse) candle
@@ -69,6 +98,7 @@ export class SMCExpert {
         if (c1.high < c3.low) {
             const gapSize = c3.low - c1.high;
             if (gapSize >= 2.0) {
+                fvgLabel = 'Bullish FVG';
                 // Gap is structurally valid — check secondary filters
                 if (c3.low <= vwap) {
                     this.dailyRejectedSetups.push(`${timeStr}: Bullish FVG rejected (Price below VWAP).`);
@@ -79,6 +109,8 @@ export class SMCExpert {
                 } else {
                     // All filters passed — check for tap entry
                     if (curr.low <= c3.low && curr.close > c1.high) {
+                        decision = 'BUY';
+                        this.lastHeartbeat = { trend, fvg: fvgLabel, decision };
                         return 'BUY';  // Bullish FVG Tap — MSS + Volume Spike + VWAP confirmed
                     }
                 }
@@ -90,6 +122,7 @@ export class SMCExpert {
         if (c1.low > c3.high) {
             const gapSize = c1.low - c3.high;
             if (gapSize >= 2.0) {
+                fvgLabel = 'Bearish FVG';
                 // Gap is structurally valid — check secondary filters
                 if (c3.high >= vwap) {
                     this.dailyRejectedSetups.push(`${timeStr}: Bearish FVG rejected (Price above VWAP).`);
@@ -100,12 +133,15 @@ export class SMCExpert {
                 } else {
                     // All filters passed — check for tap entry
                     if (curr.high >= c3.high && curr.close < c1.low) {
+                        decision = 'SELL';
+                        this.lastHeartbeat = { trend, fvg: fvgLabel, decision };
                         return 'SELL'; // Bearish FVG Tap — MSS + Volume Spike + VWAP confirmed
                     }
                 }
             }
         }
 
+        this.lastHeartbeat = { trend, fvg: fvgLabel, decision };
         return 'HOLD';
     }
 
