@@ -7,6 +7,7 @@ export const config = {
     VERBOSE_SMC_LOGGING: process.env.VERBOSE_SMC_LOGGING === 'true',
     INDICES: process.env.INDICES || 'MES',
     RISK: parseInt(process.env.RISK || '2', 10),
+    BACKTEST_CAPITAL: parseInt(process.env.BACKTEST_CAPITAL || '50000', 10),
 
     // Tradovate Credentials (Universal — same for Demo and Live)
     TRADOVATE_USERNAME: process.env.TRADOVATE_USERNAME || '',
