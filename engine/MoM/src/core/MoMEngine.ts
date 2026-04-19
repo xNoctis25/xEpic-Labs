@@ -1,6 +1,7 @@
 import { RiskEngine } from './RiskEngine';
 import { ExecutionEngine } from './ExecutionEngine';
 import { EvaluationEngine } from './EvaluationEngine';
+import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './PositionSizer';
 import { ContractBuilder } from '../utils/ContractBuilder';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMCExpert } from '../experts/SMCExpert';
@@ -35,9 +36,9 @@ export class MoMEngine {
 
     // --- Trade Management ---
     private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number } | null = null;
-    private readonly MES_DAY_MARGIN = 50; // $50 day margin for MES
+    private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
 
-    // Dynamically resolved via ContractManager (auto-rollover)
+    // Dynamically resolved via ContractBuilder (auto-rollover)
     private symbolToTrade: string;
 
     constructor(broker: TradovateBroker) {
@@ -122,6 +123,9 @@ export class MoMEngine {
             console.error(`❌ PREFLIGHT FAILED: Session Ledger — ${error.message}`);
             process.exit(1);
         }
+
+        // --- Sync RiskEngine buying power baseline ---
+        this.riskEngine.setBuyingPower(this.ledger.getAvailableBuyingPower());
 
         // --- Load Phase from DB ---
         this.currentPhase = await this.evaluationEngine.initialize();
@@ -285,12 +289,26 @@ export class MoMEngine {
         }
 
         // ==========================================
-        // Pre-Trade Gate 2: Session Ledger (Margin)
+        // Pre-Trade Gate 2: PositionSizer (Dynamic Risk Budget)
         // ==========================================
-        if (!this.ledger.hasSufficientMargin(this.MES_DAY_MARGIN)) {
-            console.log(`💰 [MoMEngine] - Signal IGNORED: Insufficient margin ($${this.ledger.getAvailableBuyingPower().toFixed(2)} < $${this.MES_DAY_MARGIN}).`);
+        const buyingPower = this.ledger.getAvailableBuyingPower();
+        const sizing = PositionSizer.calculate(buyingPower, this.SL_POINTS);
+        if (!sizing) {
+            console.log(`💰 [MoMEngine] - Signal IGNORED: Account cannot afford the trade. Buying Power: $${buyingPower.toFixed(2)}`);
             return;
         }
+
+        // Calculate required margin based on sizer output
+        const marginPerContract = sizing.symbolRoot === 'ES' ? ES_DAY_MARGIN : MES_DAY_MARGIN;
+        const totalMarginRequired = sizing.qty * marginPerContract;
+
+        if (!this.ledger.hasSufficientMargin(totalMarginRequired)) {
+            console.log(`💰 [MoMEngine] - Signal IGNORED: Insufficient margin ($${buyingPower.toFixed(2)} < $${totalMarginRequired} for ${sizing.qty}× ${sizing.symbolRoot}).`);
+            return;
+        }
+
+        // Resolve the exact contract symbol for the sizer's chosen root (ES or MES)
+        const tradeSymbol = ContractBuilder.getActiveContract(sizing.symbolRoot);
 
         // ==========================================
         // Pre-Trade Gate 3: DOM Expert (Order Book Confirmation)
@@ -315,28 +333,28 @@ export class MoMEngine {
         // ==========================================
         const modeLabel = this.currentPhase === 'EVALUATION' ? '📝 PAPER' : '🔥 LIVE';
         const domLabel = config.USE_DOM_EXPERT ? 'DOM ✅' : 'DOM ⏭️';
-        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: Oracle ✅ Margin ✅ ${domLabel} Phase ✅ → Executing ${signal}`);
+        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: Oracle ✅ Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) ${domLabel} Phase ✅ → Executing ${signal}`);
 
         // Reserve margin from the ledger
-        this.ledger.reserveMargin(this.MES_DAY_MARGIN);
+        this.ledger.reserveMargin(totalMarginRequired);
 
         // Fire the bracket order via the ExecutionEngine
-        this.executionEngine.executeBracket(this.symbolToTrade, candle.close, signal, 1)
+        this.executionEngine.executeBracket(tradeSymbol, candle.close, signal, sizing.qty)
             .then((orderId) => {
                 if (orderId) {
                     this.activePosition = {
                         side: signal,
                         entryPrice: candle.close,
-                        margin: this.MES_DAY_MARGIN,
+                        margin: totalMarginRequired,
                     };
-                    console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | Order: ${orderId}`);
+                    console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
                 } else {
-                    this.ledger.releaseMarginAndApplyPnL(this.MES_DAY_MARGIN, 0);
+                    this.ledger.releaseMarginAndApplyPnL(totalMarginRequired, 0);
                     console.error(`🔴 [MoMEngine] - Bracket order failed. Margin released.`);
                 }
             })
             .catch(() => {
-                this.ledger.releaseMarginAndApplyPnL(this.MES_DAY_MARGIN, 0);
+                this.ledger.releaseMarginAndApplyPnL(totalMarginRequired, 0);
             });
     }
 

@@ -4,19 +4,18 @@ import { SMCExpert } from '../experts/SMCExpert';
 import { SessionLedger } from '../services/SessionLedger';
 
 /**
- * EvaluationEngine — Lifecycle State Machine + EoDR Generator
+ * EvaluationEngine — Lifecycle State Machine + EoDR Generator (Cash Account)
  *
  * Two scheduled jobs:
- *   1. 16:00 ET — State machine evaluation (promotion/demotion)
+ *   1. 16:00 ET — State machine evaluation (promotion only)
  *   2. 17:15 ET — EoDR generation during CME maintenance window
  *
- * State Transitions (Ladder):
+ * State Transitions:
  *   BACKTEST → EVALUATION  : (manual reset after passing new backtest)
  *   EVALUATION → LIVE      : 20 profitable trading days (running_pnl > 0)
- *   LIVE → EVALUATION      : Running P&L drops below max_drawdown_limit
- *   EVALUATION → BACKTEST  : Running P&L drops below max_drawdown_limit
  *
- * On every transition (up or down), P&L and trading days are RESET to 0.
+ * Pure Cash Account — no forced drawdown demotions.
+ * On promotion, P&L and trading days are RESET to 0.
  */
 export class EvaluationEngine {
     private db: NeonDatabase;
@@ -33,7 +32,7 @@ export class EvaluationEngine {
         const state = await this.db.getState();
         this.currentPhase = state.currentPhase;
         console.log(`🏛️ [EvaluationEngine] - Current Phase: ${this.currentPhase}`);
-        console.log(`🏛️ [EvaluationEngine] - Active Days: ${state.activeTradingDays}/20 | Running P&L: $${state.runningPnl.toFixed(2)} | Drawdown Limit: $${state.maxDrawdownLimit.toFixed(2)}`);
+        console.log(`🏛️ [EvaluationEngine] - Active Days: ${state.activeTradingDays}/20 | Running P&L: $${state.runningPnl.toFixed(2)}`);
         return this.currentPhase;
     }
 
@@ -61,28 +60,7 @@ export class EvaluationEngine {
         console.log(`🏛️ [EvaluationEngine] - Running P&L: $${state.runningPnl.toFixed(2)} | Days: ${state.activeTradingDays}/20 | Phase: ${state.currentPhase}`);
 
         // ==========================================
-        // Rule 1: DEMOTION — Drawdown Limit Breached (Ladder Down)
-        // ==========================================
-        if (state.runningPnl <= state.maxDrawdownLimit) {
-            if (state.currentPhase === 'LIVE') {
-                console.error(`🔴 [EvaluationEngine] - DEMOTION! P&L ($${state.runningPnl.toFixed(2)}) breached limit ($${state.maxDrawdownLimit.toFixed(2)}).`);
-                console.error(`🔴 [EvaluationEngine] - Phase: LIVE → EVALUATION. Must re-prove over 20 days.`);
-                await this.db.updatePhase('EVALUATION');
-                await this.db.resetForNewPhase();
-                this.currentPhase = 'EVALUATION';
-
-            } else if (state.currentPhase === 'EVALUATION') {
-                console.error(`🔴 [EvaluationEngine] - DEMOTION! P&L ($${state.runningPnl.toFixed(2)}) breached limit ($${state.maxDrawdownLimit.toFixed(2)}).`);
-                console.error(`🔴 [EvaluationEngine] - Phase: EVALUATION → BACKTEST. Live execution HALTED.`);
-                await this.db.updatePhase('BACKTEST');
-                await this.db.resetForNewPhase();
-                this.currentPhase = 'BACKTEST';
-            }
-            return;
-        }
-
-        // ==========================================
-        // Rule 2: PROMOTION — Evaluation Complete
+        // Rule 1: PROMOTION — Evaluation Complete (Cash Account)
         // ==========================================
         if (state.currentPhase === 'EVALUATION' && state.activeTradingDays >= 20 && state.runningPnl > 0) {
             console.log(`🟢 [EvaluationEngine] - PROMOTION! 20 days completed with positive P&L ($${state.runningPnl.toFixed(2)}).`);
@@ -94,7 +72,7 @@ export class EvaluationEngine {
         }
 
         // ==========================================
-        // Rule 3: CONTINUATION — Keep Evaluating
+        // Rule 2: CONTINUATION — Keep Evaluating
         // ==========================================
         const daysRemaining = Math.max(0, 20 - state.activeTradingDays);
         console.log(`🏛️ [EvaluationEngine] - Evaluation continues. ${daysRemaining} day(s) remaining.`);

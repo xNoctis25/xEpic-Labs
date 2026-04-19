@@ -1,4 +1,5 @@
 import * as dotenv from 'dotenv';
+import type { RiskProfile } from '../core/PositionSizer';
 dotenv.config();
 
 export const config = {
@@ -6,6 +7,7 @@ export const config = {
     USE_DOM_EXPERT: process.env.USE_DOM_EXPERT === 'true',
     VERBOSE_SMC_LOGGING: process.env.VERBOSE_SMC_LOGGING === 'true',
     SYMBOL_ROOT: process.env.SYMBOL_ROOT || 'MES',
+    RISK_PROFILE: (process.env.RISK_PROFILE || 'MODEST') as RiskProfile,
 
     // Tradovate Credentials (Universal — same for Demo and Live)
     TRADOVATE_USERNAME: process.env.TRADOVATE_USERNAME || '',
@@ -16,5 +18,4 @@ export const config = {
     TRADOVATE_CLIENT_SECRET: process.env.TRADOVATE_CLIENT_SECRET || '',
 
     ORACLE_API_KEY: process.env.ORACLE_API_KEY || '',
-    DAILY_LOSS_LIMIT: -200.00
 };
