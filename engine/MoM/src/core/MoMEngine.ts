@@ -54,7 +54,7 @@ export class MoMEngine {
         this.evaluationEngine = new EvaluationEngine(this.db);
 
         // Auto-resolve the active CME front-month contract via ContractBuilder
-        this.symbolToTrade = ContractBuilder.getActiveContract(config.SYMBOL_ROOT);
+        this.symbolToTrade = ContractBuilder.getActiveContract(config.INDICES);
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
@@ -132,7 +132,7 @@ export class MoMEngine {
 
         console.log('🔍 ═══════════════════════════════════════════');
         console.log('🔍  PREFLIGHT COMPLETE — All Systems Verified');
-        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade} (${ContractBuilder.getContractDescription(config.SYMBOL_ROOT)})`);
+        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade} (${ContractBuilder.getContractDescription(config.INDICES)})`);
         console.log('🔍 ═══════════════════════════════════════════\n');
 
         return this.currentPhase;

@@ -1,39 +1,28 @@
 import { config } from '../config/env';
 
 /**
- * PositionSizer — 4-Tier Dynamic Risk Profile with Pure Math Position Sizing
+ * PositionSizer — Dynamic Position Sizing with Pure Math
  *
  * Calculates the optimal contract type (ES vs MES) and quantity based on
- * available buying power, the configured risk profile, and the current
- * stop-loss distance in points.
+ * available buying power, the configured RISK percentage (whole integer 1-10),
+ * and the current stop-loss distance in points.
  *
- * Risk Tiers:
- *   SAFE       → 1% of available buying power per trade
- *   MODEST     → 2% of available buying power per trade
- *   AGGRESSIVE → 5% of available buying power per trade
- *   MOON       → 10% of available buying power per trade
+ * RISK (env):
+ *   A whole number from 1 to 10 representing the percent of buying power
+ *   to risk per trade. e.g., RISK=2 means 2% of available buying power.
  *
  * Core Rule (Pure Math, Zero Forced Minimums):
- *   1. RiskBudget = availableBuyingPower * riskPercent
+ *   1. RiskBudget = availableBuyingPower * (RISK / 100)
  *   2. If (RiskBudget / ES_Risk) >= 3 → trade ES at that quantity
  *   3. Else if (RiskBudget / MES_Risk) >= 1 → trade MES at that quantity
  *   4. Else → null (account cannot afford the trade, reject it)
  */
-
-export type RiskProfile = 'SAFE' | 'MODEST' | 'AGGRESSIVE' | 'MOON';
 
 export interface SizingResult {
     symbolRoot: string;   // 'ES' or 'MES'
     qty: number;          // Number of contracts
     riskBudget: number;   // Dollar amount at risk this trade
 }
-
-const RISK_PERCENTS: Record<RiskProfile, number> = {
-    SAFE: 0.01,
-    MODEST: 0.02,
-    AGGRESSIVE: 0.05,
-    MOON: 0.10,
-};
 
 // Dollar-per-point multipliers for CME S&P futures
 const ES_DOLLAR_PER_POINT = 50;   // ES: $50/point
@@ -52,18 +41,18 @@ export class PositionSizer {
      * @returns SizingResult with symbolRoot, qty, and riskBudget — or null if unaffordable
      */
     public static calculate(availableBuyingPower: number, slPoints: number): SizingResult | null {
-        const riskPercent = RISK_PERCENTS[config.RISK_PROFILE] ?? RISK_PERCENTS.MODEST;
+        const riskPercent = config.RISK / 100;
         const riskBudget = availableBuyingPower * riskPercent;
 
         // Risk per contract at the given stop-loss distance
         const esRisk = slPoints * ES_DOLLAR_PER_POINT;    // e.g., 20 pts × $50 = $1,000
-        const mesRisk = slPoints * MES_DOLLAR_PER_POINT;   // e.g., 20 pts × $5 = $100
+        const mesRisk = slPoints * MES_DOLLAR_PER_POINT;   // e.g., 20 pts × $5  = $100
 
         // --- Attempt ES first (upgrade when account can afford ≥3 contracts) ---
         const potentialES = Math.floor(riskBudget / esRisk);
         if (potentialES >= 3) {
             console.log(
-                `📐 [PositionSizer] - Profile: ${config.RISK_PROFILE} (${(riskPercent * 100).toFixed(0)}%)` +
+                `📐 [PositionSizer] - Risk: ${config.RISK}%` +
                 ` | Budget: $${riskBudget.toFixed(2)} | ES Risk/ct: $${esRisk}` +
                 ` → ES × ${potentialES}`
             );
@@ -74,7 +63,7 @@ export class PositionSizer {
         const potentialMES = Math.floor(riskBudget / mesRisk);
         if (potentialMES >= 1) {
             console.log(
-                `📐 [PositionSizer] - Profile: ${config.RISK_PROFILE} (${(riskPercent * 100).toFixed(0)}%)` +
+                `📐 [PositionSizer] - Risk: ${config.RISK}%` +
                 ` | Budget: $${riskBudget.toFixed(2)} | MES Risk/ct: $${mesRisk}` +
                 ` → MES × ${potentialMES}`
             );
@@ -83,7 +72,7 @@ export class PositionSizer {
 
         // --- Account cannot afford even 1 MES contract at this SL ---
         console.log(
-            `📐 [PositionSizer] - Profile: ${config.RISK_PROFILE} (${(riskPercent * 100).toFixed(0)}%)` +
+            `📐 [PositionSizer] - Risk: ${config.RISK}%` +
             ` | Budget: $${riskBudget.toFixed(2)} | MES Risk/ct: $${mesRisk}` +
             ` → REJECTED (insufficient risk budget)`
         );
@@ -91,11 +80,11 @@ export class PositionSizer {
     }
 
     /**
-     * Returns the current risk budget based on buying power and profile.
+     * Returns the current risk budget based on buying power and RISK %.
      * Used by RiskEngine for dynamic daily loss limit calculation.
      */
     public static getRiskBudget(availableBuyingPower: number): number {
-        const riskPercent = RISK_PERCENTS[config.RISK_PROFILE] ?? RISK_PERCENTS.MODEST;
+        const riskPercent = config.RISK / 100;
         return availableBuyingPower * riskPercent;
     }
 }

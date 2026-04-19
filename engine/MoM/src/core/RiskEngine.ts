@@ -9,7 +9,7 @@ import { PositionSizer } from './PositionSizer';
  *   dailyLossLimit = -3 × RiskBudget (allows 3 full stop-outs before halting)
  *
  * The risk budget is recalculated from PositionSizer on each P&L update,
- * making the limit scale with both account size and the active risk profile.
+ * making the limit scale with both account size and the RISK percentage.
  */
 export class RiskEngine {
     private dailyRealizedPnL: number = 0.0;
