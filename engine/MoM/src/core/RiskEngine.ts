@@ -8,55 +8,59 @@ import { PositionSizer } from './PositionSizer';
  * Dynamic Limit:
  *   dailyLossLimit = -3 × RiskBudget (allows 3 full stop-outs before halting)
  *
- * The risk budget is recalculated from PositionSizer on each P&L update,
+ * The risk budget is passed in from MoMEngine on each trade close,
  * making the limit scale with both account size and the RISK percentage.
  */
 export class RiskEngine {
     private dailyRealizedPnL: number = 0.0;
     private isHalted: boolean = false;
 
-    // Snapshot of buying power at session start, set via setBuyingPower()
-    private sessionBuyingPower: number = 0;
+    // Last known risk budget, updated on each trade close
+    private lastRiskBudget: number = 0;
 
     constructor() {
         this.scheduleMidnightReset();
     }
 
     /**
-     * Sets the buying power baseline for dynamic limit calculations.
-     * Called once during boot after the SessionLedger syncs from the broker.
+     * Updates the daily P&L and evaluates if the halt threshold is breached.
+     *
+     * @param realizedTradePnL - The P&L from the just-closed trade
+     * @param riskBudget       - The risk budget at the time of this trade (from PositionSizer)
      */
-    public setBuyingPower(buyingPower: number): void {
-        this.sessionBuyingPower = buyingPower;
-        const dynamicLimit = this.getDailyLossLimit();
-        console.log(`🛡️ [RiskEngine] - Session Buying Power: $${buyingPower.toFixed(2)} | Dynamic Daily Limit: $${dynamicLimit.toFixed(2)}`);
+    public updatePnL(realizedTradePnL: number, riskBudget: number): void {
+        this.dailyRealizedPnL += realizedTradePnL;
+        this.lastRiskBudget = riskBudget;
+        console.log(`🛡️ [RiskEngine] - Daily PnL Updated: $${this.dailyRealizedPnL.toFixed(2)}`);
+        this.evaluateRisk(riskBudget);
     }
 
     /**
-     * Calculates the dynamic daily loss limit.
-     * Allows 3 full stop-outs before halting: -3 × RiskBudget.
+     * Evaluates if trading should halt for the day.
+     * Halt condition: dailyRealizedPnL <= -3 × riskBudget
+     *
+     * @param riskBudget - Dollar amount the sizer allocated for the last trade
      */
-    private getDailyLossLimit(): number {
-        const riskBudget = PositionSizer.getRiskBudget(this.sessionBuyingPower);
-        return -(3 * riskBudget);
-    }
-
-    public updatePnL(realizedTradePnL: number): void {
-        this.dailyRealizedPnL += realizedTradePnL;
-        console.log(`🛡️ [RiskEngine] - Daily PnL Updated: $${this.dailyRealizedPnL.toFixed(2)}`);
-        this.evaluateRisk();
-    }
-
-    private evaluateRisk(): void {
-        const dynamicLimit = this.getDailyLossLimit();
+    private evaluateRisk(riskBudget: number): void {
+        const dynamicLimit = -(3 * riskBudget);
         if (this.dailyRealizedPnL <= dynamicLimit && !this.isHalted) {
             this.isHalted = true;
-            console.error(`🛑 [RiskEngine] - HARD HALT TRIGGERED. Daily Loss ($${this.dailyRealizedPnL.toFixed(2)}) breached dynamic limit ($${dynamicLimit.toFixed(2)}).`);
+            console.error(
+                `🛑 [RiskEngine] - HARD HALT TRIGGERED. Daily Loss ($${this.dailyRealizedPnL.toFixed(2)})` +
+                ` breached dynamic limit ($${dynamicLimit.toFixed(2)}) [3 × $${riskBudget.toFixed(2)} risk budget].`
+            );
         }
     }
 
     public canTrade(): boolean {
         return !this.isHalted;
+    }
+
+    /**
+     * Returns the last known risk budget for preflight logging.
+     */
+    public getLastRiskBudget(): number {
+        return this.lastRiskBudget;
     }
 
     private scheduleMidnightReset(): void {

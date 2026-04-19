@@ -35,7 +35,7 @@ export class MoMEngine {
     private level2DataStore: Level2DataStore | null = null;
 
     // --- Trade Management ---
-    private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number } | null = null;
+    private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number } | null = null;
     private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
 
     // Dynamically resolved via ContractBuilder (auto-rollover)
@@ -124,8 +124,6 @@ export class MoMEngine {
             process.exit(1);
         }
 
-        // --- Sync RiskEngine buying power baseline ---
-        this.riskEngine.setBuyingPower(this.ledger.getAvailableBuyingPower());
 
         // --- Load Phase from DB ---
         this.currentPhase = await this.evaluationEngine.initialize();
@@ -292,7 +290,7 @@ export class MoMEngine {
         // Pre-Trade Gate 2: PositionSizer (Dynamic Risk Budget)
         // ==========================================
         const buyingPower = this.ledger.getAvailableBuyingPower();
-        const sizing = PositionSizer.calculate(buyingPower, this.SL_POINTS);
+        const sizing = PositionSizer.calculate(buyingPower, this.SL_POINTS, config.INDICES);
         if (!sizing) {
             console.log(`💰 [MoMEngine] - Signal IGNORED: Account cannot afford the trade. Buying Power: $${buyingPower.toFixed(2)}`);
             return;
@@ -346,6 +344,7 @@ export class MoMEngine {
                         side: signal,
                         entryPrice: candle.close,
                         margin: totalMarginRequired,
+                        riskBudget: sizing.riskBudget,
                     };
                     console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
                 } else {
@@ -377,8 +376,8 @@ export class MoMEngine {
         // Release margin back to the ledger with P&L applied
         this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, realizedPnL);
 
-        // Update the risk engine's daily P&L tracker
-        this.riskEngine.updatePnL(realizedPnL);
+        // Update the risk engine's daily P&L tracker (pass riskBudget for dynamic halt limit)
+        this.riskEngine.updatePnL(realizedPnL, this.activePosition.riskBudget);
 
         const pnlStr = realizedPnL >= 0 ? `+$${realizedPnL.toFixed(2)}` : `-$${Math.abs(realizedPnL).toFixed(2)}`;
         console.log(`📊 [MoMEngine] - Position closed: ${pnlStr} | Buying Power: $${this.ledger.getAvailableBuyingPower().toFixed(2)}`);
