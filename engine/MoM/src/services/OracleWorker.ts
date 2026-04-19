@@ -27,10 +27,24 @@ import cron from 'node-cron';
 // ─── Config from Main Thread ──────────────────────────────────────
 const { apiKey } = workerData as { apiKey: string };
 
-const BLOCKOUT_WINDOW_MS = 15 * 60 * 1000; // ±15 minutes
+// ─── Dynamic Blockout Rules ──────────────────────────────────────
+// Maps event keywords (lowercased) to blockout windows (±minutes)
+const BLOCKOUT_RULES: Record<string, number> = {
+    'fomc': 60,
+    'fed': 60,
+    'cpi': 30,
+    'nfp': 30,
+    'payrolls': 30,
+    'jobless': 5,
+    'default': 15,
+};
 
 // ─── Local Cache ──────────────────────────────────────────────────
-let cachedEventTimestamps: number[] = [];
+interface CachedEvent {
+    timestampMs: number;
+    description: string;
+}
+let cachedEvents: CachedEvent[] = [];
 let cachedEventDescriptions: string[] = [];
 
 // ─── Status Reporter ──────────────────────────────────────────────
@@ -71,21 +85,22 @@ async function fetchTodaysEvents(): Promise<void> {
             return isUS && isHigh;
         });
 
-        // Cache timestamps
-        cachedEventTimestamps = highImpactUS
+        // Cache events with descriptions for dynamic blockout matching
+        cachedEvents = highImpactUS
             .map((event: any) => {
                 const ts = new Date(event.date).getTime();
-                return isNaN(ts) ? null : ts;
+                if (isNaN(ts)) return null;
+                return { timestampMs: ts, description: event.event || '' };
             })
-            .filter((ts): ts is number => ts !== null);
+            .filter((e): e is CachedEvent => e !== null);
 
         // Cache descriptions for logging
         cachedEventDescriptions = highImpactUS.map(
             (event: any) => `${event.event} @ ${event.date} (Impact: ${event.impact})`
         );
 
-        if (cachedEventTimestamps.length > 0) {
-            sendStatus(`${cachedEventTimestamps.length} high-impact US event(s) cached.`);
+        if (cachedEvents.length > 0) {
+            sendStatus(`${cachedEvents.length} high-impact US event(s) cached.`);
             cachedEventDescriptions.forEach((desc) => {
                 sendStatus(`   🔴 ${desc}`);
             });
@@ -95,7 +110,7 @@ async function fetchTodaysEvents(): Promise<void> {
 
         parentPort?.postMessage({
             type: 'FETCH_COMPLETE',
-            eventCount: cachedEventTimestamps.length,
+            eventCount: cachedEvents.length,
             events: cachedEventDescriptions,
         });
 
@@ -104,18 +119,33 @@ async function fetchTodaysEvents(): Promise<void> {
         // Still send FETCH_COMPLETE so preflight doesn't hang
         parentPort?.postMessage({
             type: 'FETCH_COMPLETE',
-            eventCount: cachedEventTimestamps.length,
+            eventCount: cachedEvents.length,
             events: cachedEventDescriptions,
         });
     }
 }
 
-// ─── Blockout Calculation ─────────────────────────────────────────
+// ─── Dynamic Blockout Calculation ─────────────────────────────────
+/**
+ * Determines the blockout duration for an event by matching its
+ * description against BLOCKOUT_RULES keywords.
+ */
+function getBlockoutMs(eventDescription: string): number {
+    const lower = eventDescription.toLowerCase();
+    for (const [keyword, minutes] of Object.entries(BLOCKOUT_RULES)) {
+        if (keyword !== 'default' && lower.includes(keyword)) {
+            return minutes * 60 * 1000;
+        }
+    }
+    return BLOCKOUT_RULES['default'] * 60 * 1000;
+}
+
 function isBlockoutActive(): boolean {
     const now = Date.now();
-    for (let i = 0; i < cachedEventTimestamps.length; i++) {
-        const diff = Math.abs(now - cachedEventTimestamps[i]);
-        if (diff <= BLOCKOUT_WINDOW_MS) {
+    for (const event of cachedEvents) {
+        const windowMs = getBlockoutMs(event.description);
+        const diff = Math.abs(now - event.timestampMs);
+        if (diff <= windowMs) {
             return true;
         }
     }
@@ -127,11 +157,11 @@ function getNextEvent(): { timestampMs: number; minutesUntil: number } | null {
     let closest: number | null = null;
     let minDiff = Infinity;
 
-    for (const eventTs of cachedEventTimestamps) {
-        const diff = eventTs - now;
+    for (const event of cachedEvents) {
+        const diff = event.timestampMs - now;
         if (diff > 0 && diff < minDiff) {
             minDiff = diff;
-            closest = eventTs;
+            closest = event.timestampMs;
         }
     }
 
@@ -143,7 +173,7 @@ function pushBlockoutStatus(): void {
     parentPort?.postMessage({
         type: 'BLOCKOUT_STATUS',
         isActive: isBlockoutActive(),
-        eventCount: cachedEventTimestamps.length,
+        eventCount: cachedEvents.length,
         nextEvent: getNextEvent(),
     });
 }

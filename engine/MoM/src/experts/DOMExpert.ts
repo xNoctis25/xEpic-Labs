@@ -1,7 +1,7 @@
 import { DOMSnapshot } from '../brokers/TradovateBroker';
 
 /**
- * DOMExpert — Order Book Imbalance Analyzer (Phase 3: Triple Threat)
+ * DOMExpert — Order Book Imbalance + Iceberg Detection + Anti-Spoofing (God-Mode)
  *
  * Architecture:
  *   The SMC Expert dictates the "Area of Interest" (e.g., a Fair Value Gap).
@@ -12,16 +12,18 @@ import { DOMSnapshot } from '../brokers/TradovateBroker';
  *
  * Hierarchical State Machine:
  *   SMC Expert → "I want to BUY here" (FVG + MSS + Volume)
- *   DOM Expert → "The order book agrees" (Bid/Ask imbalance confirms)
+ *   DOM Expert → "The order book agrees" (Imbalance + Proximity Floor)
  *
- * Detection Logic:
- *   1. Order Book Imbalance — Compares total size across the top 10 bid
- *      vs ask levels. Requires a minimum 1.2x ratio favoring the signal
- *      direction to approve. This filters out signals where the opposing
- *      side has overwhelming liquidity (likely to reject price).
+ * Detection Logic (3-Layer):
+ *   1. Global Imbalance — 1.2x ratio favoring signal direction
+ *   2. Proximity Floor (Iceberg) — Top 3 levels hold ≥30% of total
+ *      directional volume, confirming institutional liquidity is
+ *      concentrated near the current price (not distant spoofs)
+ *   3. Anti-Spoofing Micro-Memory — confirmSetup() runs 3 consecutive
+ *      analyze() checks 1 second apart. If liquidity vanishes between
+ *      checks, the setup is flagged as a spoof and rejected.
  *
- *   2. Staleness Guard — If the DOM snapshot is empty or older than 5 seconds,
- *      the expert blocks the trade. Stale data is worse than no data.
+ *   Staleness Guard — If snapshot is empty or older than 5s, blocked.
  */
 
 /** Maximum age (ms) of a DOM snapshot before it's considered stale. */
@@ -30,15 +32,32 @@ const MAX_STALENESS_MS = 5000; // 5 seconds
 /** Minimum imbalance ratio required to confirm a signal. */
 const IMBALANCE_THRESHOLD = 1.2; // 1.2x
 
+/** Minimum concentration of volume in top 3 levels (Proximity Floor). */
+const PROXIMITY_FLOOR = 0.30; // 30%
+
+/** Number of top levels to check for proximity concentration. */
+const TOP_LEVELS = 3;
+
 export class DOMExpert {
 
     // --- Rejection Logging (for EoDR) ---
     public dailyRejectedByDOM: string[] = [];
     private rejectionDay: number = -1;
 
+    // --- Level2 Data Source (injected by MoMEngine for confirmSetup reads) ---
+    private snapshotReader: (() => DOMSnapshot | null) | null = null;
+
     /**
-     * Analyzes the current DOM snapshot against a directional signal
-     * from the SMC Expert.
+     * Sets the snapshot reader function.
+     * Called by MoMEngine after Level2DataStore is initialized.
+     */
+    public setSnapshotReader(reader: () => DOMSnapshot | null): void {
+        this.snapshotReader = reader;
+    }
+
+    /**
+     * Analyzes the current DOM snapshot against a directional signal.
+     * Checks both Global Imbalance (1.2x) and Proximity Floor (30%).
      *
      * @param snapshot - Current DOM state read from the SharedArrayBuffer
      * @param signal   - 'BUY' or 'SELL' from the SMC Expert
@@ -93,12 +112,11 @@ export class DOMExpert {
         }
 
         // ==========================================
-        // Order Book Imbalance Calculation
+        // Layer 1: Global Order Book Imbalance
         // ==========================================
         const totalBidSize = snapshot.bids.reduce((sum, level) => sum + level.size, 0);
         const totalAskSize = snapshot.offers.reduce((sum, level) => sum + level.size, 0);
 
-        // Prevent division by zero
         if (totalBidSize === 0 || totalAskSize === 0) {
             console.log(`📕 [DOMExpert] - BLOCKED: Zero liquidity on one side (Bids: ${totalBidSize}, Asks: ${totalAskSize}).`);
             this.dailyRejectedByDOM.push(
@@ -107,37 +125,114 @@ export class DOMExpert {
             return false;
         }
 
-        let ratio: number;
-        let approved: boolean;
+        let imbalanceRatio: number;
+        let imbalanceOk: boolean;
 
         if (signal === 'BUY') {
-            // For BUY: Bids must dominate Asks (buyers are stacking)
-            ratio = totalBidSize / totalAskSize;
-            approved = ratio >= IMBALANCE_THRESHOLD;
+            imbalanceRatio = totalBidSize / totalAskSize;
+            imbalanceOk = imbalanceRatio >= IMBALANCE_THRESHOLD;
         } else {
-            // For SELL: Asks must dominate Bids (sellers are stacking)
-            ratio = totalAskSize / totalBidSize;
-            approved = ratio >= IMBALANCE_THRESHOLD;
+            imbalanceRatio = totalAskSize / totalBidSize;
+            imbalanceOk = imbalanceRatio >= IMBALANCE_THRESHOLD;
         }
 
-        if (approved) {
-            console.log(
-                `📗 [DOMExpert] - CONFIRMED: ${signal} approved. ` +
-                `Imbalance ratio: ${ratio.toFixed(2)}x (threshold: ${IMBALANCE_THRESHOLD}x) | ` +
-                `Bids: ${totalBidSize} | Asks: ${totalAskSize}`
-            );
-            return true;
-        } else {
+        if (!imbalanceOk) {
             console.log(
                 `📕 [DOMExpert] - BLOCKED: ${signal} rejected. ` +
-                `Imbalance ratio: ${ratio.toFixed(2)}x (need ≥${IMBALANCE_THRESHOLD}x) | ` +
+                `Imbalance ratio: ${imbalanceRatio.toFixed(2)}x (need ≥${IMBALANCE_THRESHOLD}x) | ` +
                 `Bids: ${totalBidSize} | Asks: ${totalAskSize}`
             );
             this.dailyRejectedByDOM.push(
-                `${timeStr}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected by DOM (Imbalance ${ratio.toFixed(2)}x < ${IMBALANCE_THRESHOLD}x).`
+                `${timeStr}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected by DOM (Imbalance ${imbalanceRatio.toFixed(2)}x < ${IMBALANCE_THRESHOLD}x).`
             );
             return false;
         }
+
+        // ==========================================
+        // Layer 2: Proximity Floor (Iceberg Detection)
+        // ==========================================
+        let proximityOk: boolean;
+        let proximityRatio: number;
+
+        if (signal === 'BUY') {
+            // LONG: Top 3 highest bid levels must hold ≥30% of total bid volume
+            const top3BidVolume = snapshot.bids
+                .slice(0, TOP_LEVELS)
+                .reduce((sum, level) => sum + level.size, 0);
+            proximityRatio = top3BidVolume / totalBidSize;
+            proximityOk = proximityRatio >= PROXIMITY_FLOOR;
+        } else {
+            // SHORT: Top 3 lowest ask levels must hold ≥30% of total ask volume
+            const top3AskVolume = snapshot.offers
+                .slice(0, TOP_LEVELS)
+                .reduce((sum, level) => sum + level.size, 0);
+            proximityRatio = top3AskVolume / totalAskSize;
+            proximityOk = proximityRatio >= PROXIMITY_FLOOR;
+        }
+
+        if (!proximityOk) {
+            console.log(
+                `📕 [DOMExpert] - BLOCKED: ${signal} rejected (Iceberg Check). ` +
+                `Top ${TOP_LEVELS} proximity: ${(proximityRatio * 100).toFixed(1)}% (need ≥${PROXIMITY_FLOOR * 100}%) | ` +
+                `Liquidity is too dispersed — possible iceberg/spoof.`
+            );
+            this.dailyRejectedByDOM.push(
+                `${timeStr}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected by DOM (Proximity Floor ${(proximityRatio * 100).toFixed(1)}% < ${PROXIMITY_FLOOR * 100}%).`
+            );
+            return false;
+        }
+
+        // ==========================================
+        // Both layers passed — Approved
+        // ==========================================
+        console.log(
+            `📗 [DOMExpert] - CONFIRMED: ${signal} approved. ` +
+            `Imbalance: ${imbalanceRatio.toFixed(2)}x (≥${IMBALANCE_THRESHOLD}x) | ` +
+            `Proximity: ${(proximityRatio * 100).toFixed(1)}% (≥${PROXIMITY_FLOOR * 100}%) | ` +
+            `Bids: ${totalBidSize} | Asks: ${totalAskSize}`
+        );
+        return true;
+    }
+
+    // ==========================================
+    // Anti-Spoofing Micro-Memory (3-Second Confirmation)
+    // ==========================================
+    /**
+     * Runs 3 consecutive analyze() checks, 1 second apart.
+     * If the order book liquidity holds steady for 3 seconds, the setup
+     * is confirmed as institutional (not a spoof).
+     *
+     * If any check fails, the setup is immediately rejected — liquidity
+     * was pulled between reads, indicating a potential spoof.
+     *
+     * @param signal - 'BUY' or 'SELL' direction to confirm
+     * @returns true if all 3 checks pass, false if any fails
+     */
+    public async confirmSetup(signal: 'BUY' | 'SELL'): Promise<boolean> {
+        console.log(`🔒 [DOMExpert] - Anti-Spoof: Starting 3-second confirmation for ${signal}...`);
+
+        for (let i = 0; i < 3; i++) {
+            const snapshot = this.snapshotReader ? this.snapshotReader() : null;
+            const passed = this.analyze(snapshot, signal);
+
+            if (!passed) {
+                console.log(
+                    `🔒 [DOMExpert] - Anti-Spoof: FAILED on check ${i + 1}/3. ` +
+                    `Liquidity pulled — possible spoof detected.`
+                );
+                return false;
+            }
+
+            console.log(`🔒 [DOMExpert] - Anti-Spoof: Check ${i + 1}/3 PASSED.`);
+
+            // Wait 1 second before next check (skip wait on final iteration)
+            if (i < 2) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+
+        console.log(`🔒 [DOMExpert] - Anti-Spoof: CONFIRMED. Institutional liquidity held for 3 seconds.`);
+        return true;
     }
 
     /**

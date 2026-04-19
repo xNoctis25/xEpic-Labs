@@ -190,6 +190,9 @@ export class MoMEngine {
                 this.symbolToTrade,
             );
 
+            // Inject snapshot reader into DOMExpert for anti-spoof re-reads
+            this.domExpert.setSnapshotReader(() => this.level2DataStore?.readSnapshot() ?? null);
+
             // Phase 2 verification: periodic SAB read to confirm data flow
             this.startDOMVerificationLogger();
         } else {
@@ -230,7 +233,7 @@ export class MoMEngine {
      * Called every time a 1-minute candle completes.
      * Updates excursion tracking for active trades, then runs gate pipeline.
      */
-    private onCandleComplete(candle: Candle): void {
+    private async onCandleComplete(candle: Candle): Promise<void> {
         console.log(`📊 [MoMEngine] - 1M Candle Complete [${this.symbolToTrade}]: O:${candle.open} H:${candle.high} L:${candle.low} C:${candle.close}`);
 
         // Update MFE/MAE excursion tracking if a trade is active
@@ -309,18 +312,17 @@ export class MoMEngine {
         const tradeSymbol = ContractBuilder.getActiveContract(sizing.symbolRoot);
 
         // ==========================================
-        // Pre-Trade Gate 3: DOM Expert (Order Book Confirmation)
+        // Pre-Trade Gate 3: DOM Expert (Order Book + Anti-Spoof Confirmation)
         // ==========================================
-        // Only active when USE_DOM_EXPERT is true. The SMC Expert dictates
-        // the area of interest; the DOM Expert confirms execution.
+        // Only active when USE_DOM_EXPERT is true. Uses 3-second anti-spoof
+        // confirmation to ensure institutional liquidity holds steady.
         let domApproved = true; // Default: approved (bypassed when flag is off)
         if (config.USE_DOM_EXPERT) {
-            const snapshot = this.level2DataStore?.readSnapshot() ?? null;
-            domApproved = this.domExpert.analyze(snapshot, signal);
+            domApproved = await this.domExpert.confirmSetup(signal);
             if (!domApproved) {
                 // Log rejection to SMCExpert for EoDR
                 this.smcExpert.dailyRejectedSetups.push(
-                    `${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected (DOM Imbalance failed).`
+                    `${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected (DOM Anti-Spoof failed).`
                 );
                 return;
             }
