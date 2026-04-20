@@ -9,7 +9,6 @@ console.log("==========================================");
 console.log("  M.o.M (Master of Master) Quant Engine   ");
 console.log("  Version 2.0 - True Cash Account          ");
 console.log(`  Risk: ${config.RISK}%`);
-
 console.log("==========================================\n");
 
 // 1. Initialize the Broker (LIVE endpoint)
