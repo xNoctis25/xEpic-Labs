@@ -3,7 +3,7 @@ import { ExecutionEngine } from './ExecutionEngine';
 import { EvaluationEngine } from './EvaluationEngine';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './PositionSizer';
 import { ContractBuilder } from '../utils/ContractBuilder';
-import { ContractResolver } from '../utils/ContractResolver';
+
 import { MarketClock } from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMCExpert } from '../experts/SMCExpert';
@@ -36,7 +36,7 @@ export class MoMEngine {
     private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number; qty: number } | null = null;
     private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
 
-    // Dynamically resolved via ContractResolver (auto-rollover)
+    // Dynamically resolved via ContractBuilder (auto-rollover)
     private symbolToTrade: string;
 
     constructor(broker: TradovateBroker) {
@@ -51,8 +51,8 @@ export class MoMEngine {
         this.evaluationEngine = new EvaluationEngine(this.db);
         this.databento = new DatabentoLiveService();
 
-        // Auto-resolve the active CME front-month contract via ContractResolver
-        this.symbolToTrade = ContractResolver.getActiveCMEContract('MES');
+        // Auto-resolve the active CME front-month contract via ContractBuilder
+        this.symbolToTrade = ContractBuilder.getActiveContract('MES');
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
