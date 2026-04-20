@@ -218,24 +218,26 @@ async function run(): Promise<void> {
 
             if (recordSize === 0 || binaryBuffer.length < recordSize) break;
 
-            // Extract this record
             const record = binaryBuffer.slice(0, recordSize);
             binaryBuffer = binaryBuffer.slice(recordSize);
 
-            // RecordHeader fields
             const rtype = record[1];
 
-            // TradeMsg rtype: check for MBP-0 (trades schema uses rtype 0x00 or specific values)
-            // The ts_event is at offset 8 (uint64 LE)
-            if (record.length < 48) continue; // Not a full trade record
+            // STRICT FILTER: Only process Mbp0Msg (Trades). Ignore System/Mapping messages.
+            if (rtype !== 0x00) continue;
 
-            const tsEventNs = readUInt64LE(record, 8);
-            const priceRaw = readInt64LE(record, 32);
-            const size = record.readUInt32LE(40);
-            const action = String.fromCharCode(record[44]);
-            const side = String.fromCharCode(record[45]);
+            // MUST be exactly 48 bytes
+            if (record.length < 48) continue;
 
-            const priceFloat = Number(priceRaw) * PRICE_SCALE;
+            // EXACT DBN V2 MBP-0 (Trade) Byte Offsets
+            const tsEventNs = record.readBigUInt64LE(8);
+            const priceRaw = record.readBigInt64LE(16);
+            const size = record.readUInt32LE(24);
+            const action = String.fromCharCode(record[28]);
+            const side = String.fromCharCode(record[29]);
+
+            // Databento CME prices are scaled by 1e9
+            const priceFloat = Number(priceRaw) / 1e9;
             const tsMs = Number(tsEventNs / BigInt(1_000_000));
             const timestamp = new Date(tsMs).toISOString();
 
