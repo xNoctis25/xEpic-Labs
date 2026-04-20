@@ -20,11 +20,11 @@ import * as net from 'net';
 import * as crypto from 'crypto';
 
 // ─── Constants ─────────────────────────────────────────────────
-const LSG_HOST = 'lsg.databento.com';
+const LSG_HOST = 'dc3.databento.com';
 const LSG_PORT = 13000;
-const DATASET  = 'GLBX.MDP3';
-const SYMBOL   = 'MESM6';
-const SCHEMA   = 'trades';
+const DATASET = 'GLBX.MDP3';
+const SYMBOL = 'MESM6';
+const SCHEMA = 'trades';
 
 const PRICE_SCALE = 1e-9;   // DBN fixed-point: 1 unit = $0.000000001
 
@@ -46,7 +46,7 @@ const RECORD_HEADER_SIZE = 16;
 // ─── CRAM Authentication ───────────────────────────────────────
 function cramResponse(challenge: string, apiKey: string): string {
     const bucketId = apiKey.slice(-5);
-    const sha256   = crypto.createHash('sha256')
+    const sha256 = crypto.createHash('sha256')
         .update(`${challenge}|${apiKey}`)
         .digest('hex');
     return `${sha256}-${bucketId}`;
@@ -229,15 +229,15 @@ async function run(): Promise<void> {
             // The ts_event is at offset 8 (uint64 LE)
             if (record.length < 48) continue; // Not a full trade record
 
-            const tsEventNs  = readUInt64LE(record, 8);
-            const priceRaw   = readInt64LE(record, 32);
-            const size       = record.readUInt32LE(40);
-            const action     = String.fromCharCode(record[44]);
-            const side       = String.fromCharCode(record[45]);
+            const tsEventNs = readUInt64LE(record, 8);
+            const priceRaw = readInt64LE(record, 32);
+            const size = record.readUInt32LE(40);
+            const action = String.fromCharCode(record[44]);
+            const side = String.fromCharCode(record[45]);
 
             const priceFloat = Number(priceRaw) * PRICE_SCALE;
-            const tsMs       = Number(tsEventNs / BigInt(1_000_000));
-            const timestamp  = new Date(tsMs).toISOString();
+            const tsMs = Number(tsEventNs / BigInt(1_000_000));
+            const timestamp = new Date(tsMs).toISOString();
 
             tradeCount++;
             console.log(
