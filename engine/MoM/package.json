@@ -5,7 +5,8 @@
   "main": "src/index.ts",
   "scripts": {
     "start": "ts-node src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "test:dom": "ts-node src/workers/testDOM.ts"
   },
   "dependencies": {
     "axios": "^1.6.0",
