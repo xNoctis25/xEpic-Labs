@@ -182,7 +182,7 @@ export class MoMEngine {
         console.log("🚀 [MoMEngine] - All systems online. Subscribing to market data...\n");
 
         // 4. Subscribe to live ticks and pipe into the candle aggregator
-        this.broker.subscribeMarketData(this.symbolToTrade, (tick: Tick) => {
+        await this.broker.subscribeMarketData(this.symbolToTrade, (tick: Tick) => {
             if (this.riskEngine.canTrade()) {
                 this.aggregator.processTick(tick);
             }

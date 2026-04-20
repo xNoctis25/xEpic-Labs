@@ -211,20 +211,51 @@ export class TradovateBroker {
         }
     }
 
+    // ─── Contract Resolution ───────────────────────────────────────────
+
+    /**
+     * Resolves a human-readable symbol name (e.g., 'MESM6') to Tradovate's
+     * internal numeric Contract ID via the REST API.
+     *
+     * The MD WebSocket requires the integer `id`, not the string symbol.
+     */
+    public async getContractId(symbolName: string): Promise<number> {
+        await this.refreshTokenIfNeeded();
+
+        const res = await this.withTokenRetry(() =>
+            this.axiosInstance.get('/contract/find', {
+                params: { name: symbolName },
+            })
+        );
+
+        const contractId = res.data?.id;
+        if (contractId == null) {
+            throw new Error(`Could not resolve Contract ID for symbol: ${symbolName}. Response: ${JSON.stringify(res.data)}`);
+        }
+
+        console.log(`🔑 [TradovateBroker] - Resolved ${symbolName} → Contract ID: ${contractId}`);
+        return contractId;
+    }
+
     // ─── Market Data — Level 1 (WebSocket) ─────────────────────────────
 
     /**
      * Subscribes to Level 1 top-of-book quotes for a symbol.
      * The onTick callback is invoked on every trade event.
      *
+     * Resolves the symbol to its numeric Contract ID via REST first,
+     * then sends the WebSocket subscription with the integer ID.
+     *
      * Uses request ID 2 to avoid collisions with the auth handshake (ID 1).
      */
-    public subscribeMarketData(symbol: string, onTick: (tick: Tick) => void): void {
+    public async subscribeMarketData(symbol: string, onTick: (tick: Tick) => void): Promise<void> {
         if (!this.isConnected || !this.ws) return;
 
-        console.log(`📡 [TradovateBroker] - Subscribing to Level 1 Ticks for ${symbol}...`);
+        const contractId = await this.getContractId(symbol);
+
+        console.log(`📡 [TradovateBroker] - Subscribing to Level 1 Ticks for ${symbol} (Contract ID: ${contractId})...`);
         this.onTickCallback = onTick;
-        this.ws.send(`md/subscribeQuote\n2\n\n{"symbol":"${symbol}"}`);
+        this.ws.send(`md/subscribeQuote\n2\n\n${JSON.stringify({ symbol: contractId })}`);
     }
 
     // ─── Market Data — Level 2 DOM (WebSocket) ─────────────────────────
