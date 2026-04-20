@@ -93,13 +93,17 @@ export class MoMEngine {
         }
 
         // --- Check 2: Oracle (FMP API) ---
-        try {
-            console.log('🔍 [Preflight 2/4] - Oracle (FMP Economic Calendar)...');
-            await this.oracle.fetchTodaysEvents();
-            console.log('✅ [Preflight 2/4] - Oracle: PASS\n');
-        } catch (error: any) {
-            console.error(`❌ PREFLIGHT FAILED: Oracle (FMP API) — ${error.message}`);
-            process.exit(1);
+        if (config.USE_ORACLE) {
+            try {
+                console.log('🔍 [Preflight 2/4] - Oracle (FMP Economic Calendar)...');
+                await this.oracle.fetchTodaysEvents();
+                console.log('✅ [Preflight 2/4] - Oracle: PASS\n');
+            } catch (error: any) {
+                console.error(`❌ PREFLIGHT FAILED: Oracle (FMP API) — ${error.message}`);
+                process.exit(1);
+            }
+        } else {
+            console.log('🔍 [Preflight 2/4] - Oracle: BYPASSED (USE_ORACLE=false)\n');
         }
 
         // --- Check 3: Tradovate Broker ---
@@ -165,7 +169,9 @@ export class MoMEngine {
         console.log(`🚀 [MoMEngine] - Phase: ${phase} — ${modeLabel}`);
 
         // 3. Start background services
-        this.oracle.startScheduler().catch(() => {}); // Cron already fetched in preflight
+        if (config.USE_ORACLE) {
+            this.oracle.startScheduler().catch(() => {}); // Cron already fetched in preflight
+        }
         this.ledger.startBackgroundReconciliation(this.broker);
         this.evaluationEngine.startSchedulers(
             () => this.ledger.getSessionPnL(),
@@ -303,7 +309,7 @@ export class MoMEngine {
         // ==========================================
         // Pre-Trade Gate 1: Oracle (News Blackout)
         // ==========================================
-        if (this.oracle.isNewsBlockoutActive(Date.now())) {
+        if (config.USE_ORACLE && this.oracle.isNewsBlockoutActive(Date.now())) {
             console.log(`🔮 [MoMEngine] - Signal IGNORED: News blackout active (±15 min window).`);
             // Log rejection to SMCExpert for EoDR
             this.smcExpert.dailyRejectedSetups.push(
@@ -355,8 +361,9 @@ export class MoMEngine {
         // All Gates Passed — Execute Trade
         // ==========================================
         const modeLabel = this.currentPhase === 'EVALUATION' ? '📝 PAPER' : '🔥 LIVE';
+        const oracleLabel = config.USE_ORACLE ? 'Oracle ✅' : 'Oracle ⏭️';
         const domLabel = config.USE_DOM_EXPERT ? 'DOM ✅' : 'DOM ⏭️';
-        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: Oracle ✅ Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) ${domLabel} Phase ✅ → Executing ${signal}`);
+        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: ${oracleLabel} Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) ${domLabel} Phase ✅ → Executing ${signal}`);
 
         // Reserve margin from the ledger
         this.ledger.reserveMargin(totalMarginRequired);
