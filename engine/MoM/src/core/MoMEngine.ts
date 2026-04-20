@@ -18,7 +18,7 @@ export class MoMEngine {
     private riskEngine: RiskEngine;
     private executionEngine: ExecutionEngine;
     private broker: TradovateBroker;
-    
+
     private aggregator: CandleAggregator;
     private smcExpert: SMCExpert;
     private domExpert: DOMExpert;
@@ -47,7 +47,7 @@ export class MoMEngine {
         this.riskEngine = new RiskEngine();
         this.db = new NeonDatabase();
         this.executionEngine = new ExecutionEngine(broker, this.db);
-        
+
         this.smcExpert = new SMCExpert();
         this.domExpert = new DOMExpert();
         this.oracle = new OracleService();
@@ -153,7 +153,7 @@ export class MoMEngine {
      */
     public async start(): Promise<void> {
         console.log("🚀 [MoMEngine] - Central Orchestrator Online. Booting sub-systems...\n");
-        
+
         // 1. Preflight — sequential system verification (exits on failure)
         const phase = await this.runPreflightCheck();
 
@@ -170,7 +170,7 @@ export class MoMEngine {
 
         // 3. Start background services
         if (config.USE_ORACLE) {
-            this.oracle.startScheduler().catch(() => {}); // Cron already fetched in preflight
+            this.oracle.startScheduler().catch(() => { }); // Cron already fetched in preflight
         }
         this.ledger.startBackgroundReconciliation(this.broker);
         this.evaluationEngine.startSchedulers(

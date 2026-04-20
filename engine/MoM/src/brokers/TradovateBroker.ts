@@ -159,6 +159,7 @@ export class TradovateBroker {
                     // based on the event type. Prevents listener stacking.
                     this.ws!.on('message', (data: WebSocket.RawData) => {
                         const message = data.toString();
+                        console.log("[WS RAW MESSAGE]: " + message);
 
                         try {
                             if (message.startsWith('a')) {
