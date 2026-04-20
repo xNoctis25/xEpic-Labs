@@ -3,7 +3,6 @@ dotenv.config();
 
 export const config = {
     TRADING_MODE: process.env.TRADING_MODE || 'PAPER',
-    USE_DOM_EXPERT: process.env.USE_DOM_EXPERT === 'true',
     USE_ORACLE: process.env.USE_ORACLE === 'true',
     VERBOSE_SMC_LOGGING: process.env.VERBOSE_SMC_LOGGING === 'true',
     INDICES: process.env.INDICES || 'MES',

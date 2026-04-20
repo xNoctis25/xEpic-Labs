@@ -3,6 +3,7 @@ import { ExecutionEngine } from './ExecutionEngine';
 import { EvaluationEngine } from './EvaluationEngine';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './PositionSizer';
 import { ContractBuilder } from '../utils/ContractBuilder';
+import { ContractResolver } from '../utils/ContractResolver';
 import { MarketClock } from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMCExpert } from '../experts/SMCExpert';
@@ -10,9 +11,8 @@ import { TradovateBroker } from '../brokers/TradovateBroker';
 import { OracleService } from '../services/OracleService';
 import { SessionLedger } from '../services/SessionLedger';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
+import { DatabentoLiveService } from '../services/DatabentoLiveService';
 import { config } from '../config/env';
-import { Level2DataStore } from '../workers/Level2DataStore';
-import { DOMExpert } from '../experts/DOMExpert';
 
 export class MoMEngine {
     private riskEngine: RiskEngine;
@@ -21,25 +21,22 @@ export class MoMEngine {
 
     private aggregator: CandleAggregator;
     private smcExpert: SMCExpert;
-    private domExpert: DOMExpert;
 
     // --- Live Execution Services ---
     private oracle: OracleService;
     private ledger: SessionLedger;
+    private databento: DatabentoLiveService;
 
     // --- Persistent Brain ---
     private db: NeonDatabase;
     private evaluationEngine: EvaluationEngine;
     private currentPhase: BotPhase = 'EVALUATION';
 
-    // --- Level 2 DOM Data Store (Phase 2 — Core 2 Worker) ---
-    private level2DataStore: Level2DataStore | null = null;
-
     // --- Trade Management ---
     private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number; qty: number } | null = null;
     private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
 
-    // Dynamically resolved via ContractBuilder (auto-rollover)
+    // Dynamically resolved via ContractResolver (auto-rollover)
     private symbolToTrade: string;
 
     constructor(broker: TradovateBroker) {
@@ -49,13 +46,13 @@ export class MoMEngine {
         this.executionEngine = new ExecutionEngine(broker, this.db);
 
         this.smcExpert = new SMCExpert();
-        this.domExpert = new DOMExpert();
         this.oracle = new OracleService();
         this.ledger = new SessionLedger();
         this.evaluationEngine = new EvaluationEngine(this.db);
+        this.databento = new DatabentoLiveService();
 
-        // Auto-resolve the active CME front-month contract via ContractBuilder
-        this.symbolToTrade = ContractBuilder.getActiveContract(config.INDICES);
+        // Auto-resolve the active CME front-month contract via ContractResolver
+        this.symbolToTrade = ContractResolver.getActiveCMEContract('MES');
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
@@ -71,7 +68,7 @@ export class MoMEngine {
      * Sequence:
      *   1. Neon Postgres — connectivity + schema + state load
      *   2. Oracle (FMP API) — fetch today's economic events
-     *   3. Tradovate Broker — OAuth authentication + WebSocket
+     *   3. Tradovate Broker — OAuth authentication
      *   4. Session Ledger — balance sync from broker
      *
      * Returns the current BotPhase from the database.
@@ -108,7 +105,7 @@ export class MoMEngine {
 
         // --- Check 3: Tradovate Broker ---
         try {
-            console.log('🔍 [Preflight 3/4] - Tradovate Broker (OAuth + WebSocket)...');
+            console.log('🔍 [Preflight 3/4] - Tradovate Broker (OAuth)...');
             const connected = await this.broker.connect();
             if (!connected) {
                 throw new Error('Broker returned false from connect().');
@@ -129,13 +126,12 @@ export class MoMEngine {
             process.exit(1);
         }
 
-
         // --- Load Phase from DB ---
         this.currentPhase = await this.evaluationEngine.initialize();
 
         console.log('🔍 ═══════════════════════════════════════════');
         console.log('🔍  PREFLIGHT COMPLETE — All Systems Verified');
-        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade} (${ContractBuilder.getContractDescription(config.INDICES)})`);
+        console.log(`🔍  Trading Active Contract: ${this.symbolToTrade}`);
         console.log('🔍 ═══════════════════════════════════════════\n');
 
         return this.currentPhase;
@@ -149,7 +145,8 @@ export class MoMEngine {
      *   1. Run preflight checks (exits on failure)
      *   2. Check lifecycle phase (exit if BACKTEST)
      *   3. Start background services (crons, ghost sync)
-     *   4. Subscribe to live market data
+     *   4. Preflight 5: Databento data feed verification
+     *   5. Stream ticks into the candle aggregator
      */
     public async start(): Promise<void> {
         console.log("🚀 [MoMEngine] - Central Orchestrator Online. Booting sub-systems...\n");
@@ -170,7 +167,7 @@ export class MoMEngine {
 
         // 3. Start background services
         if (config.USE_ORACLE) {
-            this.oracle.startScheduler().catch(() => { }); // Cron already fetched in preflight
+            this.oracle.startScheduler().catch(() => { });
         }
         this.ledger.startBackgroundReconciliation(this.broker);
         this.evaluationEngine.startSchedulers(
@@ -179,58 +176,29 @@ export class MoMEngine {
             this.smcExpert,
         );
 
-        console.log("🚀 [MoMEngine] - All systems online. Subscribing to market data...\n");
+        // 4. Preflight 5: Databento Data Feed — verify 5 ticks before going live
+        console.log(`\n🔍 [Preflight 5/5] - Databento Data Feed...`);
+        console.log(`📡 Binding Eyes and Hands to exact auto-rolled contract: ${this.symbolToTrade}`);
 
-        // 4. Subscribe to live ticks and pipe into the candle aggregator
-        await this.broker.subscribeMarketData(this.symbolToTrade, (tick: Tick) => {
-            if (this.riskEngine.canTrade()) {
-                this.aggregator.processTick(tick);
-            }
+        let preflightTicks = 0;
+        await new Promise<void>((resolve) => {
+            this.databento.start('MES.c.0', (tick: Tick) => {
+                if (preflightTicks < 5) {
+                    preflightTicks++;
+                    console.log(`🔥 [Preflight Tick ${preflightTicks}/5] Price: $${tick.price} | Vol: ${tick.volume}`);
+                    if (preflightTicks === 5) {
+                        console.log(`✅ [Preflight 5/5] - Databento Feed: PASS\n`);
+                        resolve(); // Boot sequence continues
+                    }
+                }
+
+                if (preflightTicks >= 5 && this.riskEngine.canTrade()) {
+                    this.aggregator.processTick(tick);
+                }
+            });
         });
 
-        // 5. Conditional Level 2 DOM — Worker Thread on Core 2 (Triple Threat)
-        // Worker shares the main thread's token (single-token architecture)
-        if (config.USE_DOM_EXPERT) {
-            console.log("📊 [MoMEngine] - DOM Expert ENABLED. Launching Level 2 Data Store on Core 2...");
-            this.level2DataStore = new Level2DataStore(
-                this.broker.getAccessToken(),
-                this.symbolToTrade,
-            );
-
-            // Inject snapshot reader into DOMExpert for anti-spoof re-reads
-            this.domExpert.setSnapshotReader(() => this.level2DataStore?.readSnapshot() ?? null);
-
-            // Phase 2 verification: periodic SAB read to confirm data flow
-            this.startDOMVerificationLogger();
-        } else {
-            console.log("📊 [MoMEngine] - DOM Expert DISABLED. Running SMC-only playbook.");
-        }
-    }
-
-    // ==========================================
-    // PHASE 2 VERIFICATION — SAB Read Confirmation
-    // ==========================================
-    /**
-     * Periodically reads the SharedArrayBuffer from the main thread to confirm
-     * the Level2Worker on Core 2 is writing DOM data successfully.
-     *
-     * This is a TEMPORARY verification logger. Phase 3 will replace it with
-     * the DOMExpert consuming the SAB directly.
-     */
-    private startDOMVerificationLogger(): void {
-        setInterval(() => {
-            if (!this.level2DataStore) return;
-            const snapshot = this.level2DataStore.readSnapshot();
-            if (snapshot && snapshot.bids.length > 0 && snapshot.offers.length > 0) {
-                console.log(
-                    `📊 [Level2 SAB Read] - Best Bid: ${snapshot.bids[0].price} (${snapshot.bids[0].size}) ` +
-                    `| Best Ask: ${snapshot.offers[0].price} (${snapshot.offers[0].size}) ` +
-                    `| Depth: ${snapshot.bids.length}×${snapshot.offers.length}`
-                );
-            } else if (!snapshot) {
-                console.log(`📊 [Level2 SAB Read] - No data yet (worker may still be connecting).`);
-            }
-        }, 10000); // Every 10 seconds
+        console.log("🚀 [MoMEngine] - All systems online. Live trading active.\n");
     }
 
     // ==========================================
@@ -341,29 +309,11 @@ export class MoMEngine {
         const tradeSymbol = ContractBuilder.getActiveContract(sizing.symbolRoot);
 
         // ==========================================
-        // Pre-Trade Gate 3: DOM Expert (Order Book + Anti-Spoof Confirmation)
-        // ==========================================
-        // Only active when USE_DOM_EXPERT is true. Uses 3-second anti-spoof
-        // confirmation to ensure institutional liquidity holds steady.
-        let domApproved = true; // Default: approved (bypassed when flag is off)
-        if (config.USE_DOM_EXPERT) {
-            domApproved = await this.domExpert.confirmSetup(signal);
-            if (!domApproved) {
-                // Log rejection to SMCExpert for EoDR
-                this.smcExpert.dailyRejectedSetups.push(
-                    `${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected (DOM Anti-Spoof failed).`
-                );
-                return;
-            }
-        }
-
-        // ==========================================
         // All Gates Passed — Execute Trade
         // ==========================================
         const modeLabel = this.currentPhase === 'EVALUATION' ? '📝 PAPER' : '🔥 LIVE';
         const oracleLabel = config.USE_ORACLE ? 'Oracle ✅' : 'Oracle ⏭️';
-        const domLabel = config.USE_DOM_EXPERT ? 'DOM ✅' : 'DOM ⏭️';
-        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: ${oracleLabel} Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) ${domLabel} Phase ✅ → Executing ${signal}`);
+        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: ${oracleLabel} Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) Phase ✅ → Executing ${signal}`);
 
         // Reserve margin from the ledger
         this.ledger.reserveMargin(totalMarginRequired);
