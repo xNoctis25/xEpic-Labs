@@ -9,7 +9,7 @@ console.log("==========================================");
 console.log("  M.o.M (Master of Master) Quant Engine   ");
 console.log("  Version 2.0 - True Cash Account          ");
 console.log(`  Risk: ${config.RISK}%`);
-console.log(`  DOM Expert: ${config.USE_DOM_EXPERT ? '🟢 ENABLED' : '🔴 DISABLED'}`);
+
 console.log("==========================================\n");
 
 // 1. Initialize the Broker (LIVE endpoint)
