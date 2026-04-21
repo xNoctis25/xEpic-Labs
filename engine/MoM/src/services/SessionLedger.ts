@@ -107,7 +107,7 @@ export class SessionLedger {
                         const driftSign = drift > 0 ? '+' : '';
                         console.log(`👻 [Ledger] - Ghost Sync: drift detected (${driftSign}$${drift.toFixed(2)}). Syncing P&L...`);
                         this.availableBuyingPower = correctedAvailable;
-                        this.sessionPnL += drift; // Update the daily P&L for the EoDR
+                        this.sessionPnL += drift; // Add the drift directly to the EoDR Daily PnL
                     }
                 }
             } catch {

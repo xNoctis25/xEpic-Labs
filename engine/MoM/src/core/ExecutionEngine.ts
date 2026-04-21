@@ -166,39 +166,34 @@ export class ExecutionEngine {
     // EOD KILL SWITCH — Emergency Position Flatten
     // ==========================================
     /**
-     * Flattens an open position at market price to prevent margin violations.
-     * Called by MoMEngine at 15:55 ET (EOD Kill Switch).
+     * EOD Rolling Sweeper — Unconditionally flattens any open position.
+     * Called by MoMEngine every minute from 15:55 ET onward.
      *
      * Sequence:
-     *   1. Fire a market order in the opposite direction via broker.liquidatePosition()
-     *   2. Broker automatically cancels all orphaned bracket legs
-     *   3. Gracefully close the excursion tracker
+     *   1. Cancel all working orders (bracket legs, trailing stops)
+     *   2. Wait 2s for Tradovate to clear the order book
+     *   3. Poll exact net position from broker REST API
+     *   4. Fire a precisely-sized market order to flatten
      *
-     * @param symbol     - Tradovate contract symbol (e.g., 'MESM6')
-     * @param activeSide - Current position direction ('BUY' or 'SELL')
-     * @param qty        - Total position quantity to flatten
-     * @returns true if the flatten order was accepted by the broker
+     * @param symbol - Tradovate contract symbol (e.g., 'MESM6')
+     * @returns true if the position is confirmed flat
      */
-    public async flattenPosition(
-        symbol: string,
-        activeSide: 'BUY' | 'SELL',
-        qty: number,
-    ): Promise<boolean> {
-        console.log(`⚠️ [ExecutionEngine] - EOD KILL SWITCH: Flattening ${symbol}`);
+    public async flattenPosition(symbol: string): Promise<boolean> {
+        console.log(`⚠️ [ExecutionEngine] - Sweeping ${symbol} for orphaned orders/positions.`);
         this.tradeExcursion = null;
 
         try {
             // 1. Cancel all working orders FIRST
             await this.broker.cancelAllWorkingOrders();
 
-            // 2. Wait 2 seconds for Tradovate to clear the book
+            // 2. Wait 2 seconds for Tradovate to clear the order book
             await new Promise(res => setTimeout(res, 2000));
 
-            // 3. Fetch EXACT net position from broker
+            // 3. Fetch EXACT net position directly from Tradovate
             const netPos = await this.broker.getNetPositionQty(symbol);
 
             if (netPos === 0) {
-                console.log(`✅ [ExecutionEngine] - Position is already flat (0).`);
+                console.log(`✅ [ExecutionEngine] - Position is flat (0). Account secured.`);
                 return true;
             }
 
@@ -209,7 +204,7 @@ export class ExecutionEngine {
             console.log(`🚨 [ExecutionEngine] - Liquidating EXACT net position: ${exitAction} ${qtyToClose}x ${symbol}`);
             return await this.broker.liquidatePosition(symbol, exitAction, qtyToClose);
         } catch (error: any) {
-            console.error(`🔴 [ExecutionEngine] - EOD KILL SWITCH FAILED:`, error.message);
+            console.error(`🔴 [ExecutionEngine] - SWEEP FAILED:`, error.message);
             return false;
         }
     }

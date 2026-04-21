@@ -368,20 +368,6 @@ export class TradovateBroker {
             return false;
         }
 
-        // 2. Cancel all working orders (orphaned bracket legs)
-        try {
-            console.log(`🧹 [TradovateBroker] - Canceling all working orders...`);
-            await this.withTokenRetry(() =>
-                this.axiosInstance.post('/order/cancelAllOrders', {
-                    accountId,
-                })
-            );
-            console.log(`✅ [TradovateBroker] - All working orders canceled.`);
-        } catch (error: any) {
-            // Non-fatal: position is already flat, orphan cleanup is best-effort
-            console.warn(`⚠️ [TradovateBroker] - Failed to cancel orphaned orders:`, error.message);
-        }
-
         return true;
     }
 

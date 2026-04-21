@@ -215,22 +215,18 @@ export class MoMEngine {
         console.log(`📊 [MoMEngine] - 1M Candle Complete [${this.symbolToTrade}]: O:${candle.open} H:${candle.high} L:${candle.low} C:${candle.close}`);
 
         // ==========================================
-        // EOD KILL SWITCH — 15:55 ET Margin Protection
+        // EOD KILL SWITCH — 15:55 ET Rolling Sweeper
         // ==========================================
-        // Must fire BEFORE any gate logic. Tradovate penalizes positions
-        // held past the intraday close. Flatten immediately.
         if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
+            console.log(`🚨 [MoMEngine] - EOD SWEEP TRIGGERED (15:55+ ET). Enforcing flat state.`);
+            
+            // Unconditionally sweep to catch any orphaned local/remote states
+            await this.executionEngine.flattenPosition(this.symbolToTrade);
+            
             if (this.activePosition) {
-                console.log(`🚨 [MoMEngine] - EOD FLATTEN TRIGGERED (15:55 ET). Liquidating open positions.`);
-                await this.executionEngine.flattenPosition(
-                    this.symbolToTrade,
-                    this.activePosition.side,
-                    this.activePosition.qty,
-                );
-
-                // Force cleanup of local state
-                this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0); // PnL syncs later via broker reconciliation
-                this.riskEngine.updatePnL(0, this.activePosition.riskBudget); // Register $0 so daily tracker stays accurate
+                // Force cleanup of local state if it was still stuck open
+                this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0); 
+                this.riskEngine.updatePnL(0, this.activePosition.riskBudget); 
                 this.activePosition = null;
             }
             return; // Do not process any new signals for the rest of the day
