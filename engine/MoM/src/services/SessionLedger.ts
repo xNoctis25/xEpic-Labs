@@ -102,10 +102,12 @@ export class SessionLedger {
                     // total minus whatever we currently have reserved in open positions.
                     const correctedAvailable = brokerBalance - this.reservedMargin;
 
-                    const drift = Math.abs(correctedAvailable - this.availableBuyingPower);
-                    if (drift > 0.01) {
-                        console.log(`👻 [Ledger] - Ghost Sync: drift detected ($${drift.toFixed(2)}). Correcting...`);
+                    const drift = correctedAvailable - this.availableBuyingPower;
+                    if (Math.abs(drift) > 0.01) {
+                        const driftSign = drift > 0 ? '+' : '';
+                        console.log(`👻 [Ledger] - Ghost Sync: drift detected (${driftSign}$${drift.toFixed(2)}). Syncing P&L...`);
                         this.availableBuyingPower = correctedAvailable;
+                        this.sessionPnL += drift; // Update the daily P&L for the EoDR
                     }
                 }
             } catch {

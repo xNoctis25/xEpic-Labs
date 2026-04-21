@@ -184,28 +184,32 @@ export class ExecutionEngine {
         activeSide: 'BUY' | 'SELL',
         qty: number,
     ): Promise<boolean> {
-        // Opposite action to close the position
-        const exitAction: 'Buy' | 'Sell' = activeSide === 'BUY' ? 'Sell' : 'Buy';
-
-        console.log(`⚠️ [ExecutionEngine] - EOD KILL SWITCH: Flattening ${qty} ${symbol} at Market.`);
+        console.log(`⚠️ [ExecutionEngine] - EOD KILL SWITCH: Flattening ${symbol}`);
+        this.tradeExcursion = null;
 
         try {
-            const success = await this.broker.liquidatePosition(symbol, exitAction, qty);
+            // 1. Cancel all working orders FIRST
+            await this.broker.cancelAllWorkingOrders();
 
-            if (success) {
-                console.log(`✅ [ExecutionEngine] - EOD KILL SWITCH: Position flattened successfully.`);
-            } else {
-                console.error(`🔴 [ExecutionEngine] - EOD KILL SWITCH: Flatten order was rejected by the broker.`);
+            // 2. Wait 2 seconds for Tradovate to clear the book
+            await new Promise(res => setTimeout(res, 2000));
+
+            // 3. Fetch EXACT net position from broker
+            const netPos = await this.broker.getNetPositionQty(symbol);
+
+            if (netPos === 0) {
+                console.log(`✅ [ExecutionEngine] - Position is already flat (0).`);
+                return true;
             }
 
-            // Gracefully close the excursion tracker regardless of broker response
-            // (we cannot keep tracking a position that should be flat)
-            this.tradeExcursion = null;
+            // 4. Fire market order for exact remaining quantity
+            const exitAction = netPos > 0 ? 'Sell' : 'Buy';
+            const qtyToClose = Math.abs(netPos);
 
-            return success;
+            console.log(`🚨 [ExecutionEngine] - Liquidating EXACT net position: ${exitAction} ${qtyToClose}x ${symbol}`);
+            return await this.broker.liquidatePosition(symbol, exitAction, qtyToClose);
         } catch (error: any) {
             console.error(`🔴 [ExecutionEngine] - EOD KILL SWITCH FAILED:`, error.message);
-            this.tradeExcursion = null;
             return false;
         }
     }

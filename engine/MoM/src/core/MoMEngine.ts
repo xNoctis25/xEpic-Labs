@@ -33,7 +33,7 @@ export class MoMEngine {
     private currentPhase: BotPhase = 'EVALUATION';
 
     // --- Trade Management ---
-    private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number; qty: number } | null = null;
+    private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number; qty: number; timestamp: number } | null = null;
     private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
 
     // Dynamically resolved via ContractBuilder (auto-rollover)
@@ -56,6 +56,9 @@ export class MoMEngine {
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
+
+        // Dynamic position monitor — polls Tradovate every 10s to detect bracket fills
+        setInterval(() => this.monitorActivePosition(), 10000);
     }
 
     // ==========================================
@@ -328,6 +331,7 @@ export class MoMEngine {
                         margin: totalMarginRequired,
                         riskBudget: sizing.riskBudget,
                         qty: sizing.qty,
+                        timestamp: Date.now(),
                     };
                     console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
                 } else {
@@ -366,5 +370,21 @@ export class MoMEngine {
         console.log(`📊 [MoMEngine] - Position closed: ${pnlStr} | Buying Power: $${this.ledger.getAvailableBuyingPower().toFixed(2)}`);
 
         this.activePosition = null;
+    }
+
+    private async monitorActivePosition(): Promise<void> {
+        if (!this.activePosition) return;
+        
+        // Wait at least 15 seconds after entry to avoid polling before broker registers it
+        if (Date.now() - this.activePosition.timestamp < 15000) return;
+
+        try {
+            const netPos = await this.broker.getNetPositionQty(this.symbolToTrade);
+            
+            if (netPos === 0) {
+                console.log(`✅ [MoMEngine] - Position Monitor: Tradovate targets hit (Position flat). Releasing brain.`);
+                await this.onPositionClosed(this.activePosition.entryPrice, 0); // P&L handled inherently by Ghost Sync
+            }
+        } catch (e) { }
     }
 }

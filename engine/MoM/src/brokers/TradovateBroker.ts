@@ -384,4 +384,36 @@ export class TradovateBroker {
 
         return true;
     }
+
+    public async getNetPositionQty(symbol: string): Promise<number> {
+        await this.refreshTokenIfNeeded();
+        const { id: accountId } = await this.getAccountId();
+        try {
+            const contractRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/contract/find', { params: { name: symbol } })
+            );
+            const contractId = contractRes.data?.id;
+            if (!contractId) return 0;
+
+            const posRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/position/list', { params: { accountId } })
+            );
+            const positions = posRes.data || [];
+            const pos = positions.find((p: any) => p.contractId === contractId);
+            return pos ? pos.netPos : 0;
+        } catch (error: any) {
+            return 0;
+        }
+    }
+
+    public async cancelAllWorkingOrders(): Promise<void> {
+        await this.refreshTokenIfNeeded();
+        const { id: accountId } = await this.getAccountId();
+        try {
+            await this.withTokenRetry(() =>
+                this.axiosInstance.post('/order/cancelAllOrders', { accountId })
+            );
+            console.log(`🧹 [TradovateBroker] - All working orders canceled.`);
+        } catch (error: any) { }
+    }
 }
