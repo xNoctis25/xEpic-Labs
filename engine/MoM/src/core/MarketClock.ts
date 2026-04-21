@@ -47,14 +47,23 @@ export class MarketClock {
     }
 
     /**
-     * Returns true if the given timestamp is at or past the EOD flatten time (15:55 ET).
+     * Returns true if the given timestamp falls within the EOD flatten window.
      * Used to force-close any open positions before the market close.
      *
-     * @param timestampMs - UNIX epoch in milliseconds
+     * ONLY triggers strictly between 15:55 and 15:59 ET.
+     * Once 16:00 hits, this returns false and stops the sweep.
+     *
+     * @param timestamp - UNIX epoch in milliseconds
      */
-    public static isEndOfDayFlatten(timestampMs: number): boolean {
-        const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
-        return totalMinutes >= 955; // 15:55 ET = 955 minutes
+    public static isEndOfDayFlatten(timestamp: number): boolean {
+        const date = new Date(timestamp);
+        const estDate = new Date(date.toLocaleString("en-US", { timeZone: "America/New_York" }));
+        const hour = estDate.getHours();
+        const minute = estDate.getMinutes();
+
+        // ONLY trigger the rolling sweeper strictly between 15:55 and 15:59 ET.
+        // Once 16:00 hits, this returns false and stops the sweep.
+        return hour === 15 && minute >= 55;
     }
 
     /**
