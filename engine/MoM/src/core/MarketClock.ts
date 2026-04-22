@@ -47,6 +47,28 @@ export class MarketClock {
     }
 
     /**
+     * Returns true if the given timestamp falls within the PM Killzone.
+     * PM Killzone: 13:30 – 15:30 ET (inclusive)
+     *
+     * @param timestampMs - UNIX epoch in milliseconds
+     */
+    public static isPMKillzone(timestampMs: number): boolean {
+        const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
+        return totalMinutes >= 810 && totalMinutes <= 930; // 13:30 (810) – 15:30 (930)
+    }
+
+    /**
+     * Returns true if the given timestamp falls within ANY active trading window
+     * (AM or PM Killzone). Used by MoMEngine Pre-Trade Gate 0.5 to reject
+     * signals that fire outside designated institutional sessions.
+     *
+     * @param timestampMs - UNIX epoch in milliseconds
+     */
+    public static isWithinTradingWindow(timestampMs: number): boolean {
+        return MarketClock.isAMKillzone(timestampMs) || MarketClock.isPMKillzone(timestampMs);
+    }
+
+    /**
      * Returns true if the given timestamp falls within the EOD flatten window.
      * Used to force-close any open positions before the market close.
      *

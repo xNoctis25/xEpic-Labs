@@ -274,6 +274,14 @@ export class MoMEngine {
         }
 
         // ==========================================
+        // Pre-Trade Gate 0.5: Time Filter (Killzones)
+        // ==========================================
+        if (!MarketClock.isWithinTradingWindow(candle.timestamp)) {
+            // Silently ignore setups outside the AM and PM killzones
+            return;
+        }
+
+        // ==========================================
         // Pre-Trade Gate 1: Oracle (News Blackout)
         // ==========================================
         if (config.USE_ORACLE && this.oracle.isNewsBlockoutActive(Date.now())) {
