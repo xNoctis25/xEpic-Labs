@@ -58,14 +58,24 @@ export class MarketClock {
     }
 
     /**
-     * Returns true if the given timestamp falls within ANY active trading window
-     * (AM or PM Killzone). Used by MoMEngine Pre-Trade Gate 0.5 to reject
-     * signals that fire outside designated institutional sessions.
-     *
-     * @param timestampMs - UNIX epoch in milliseconds
+     * Returns true if the given timestamp falls within one of the three strict SMC Killzones:
+     * - London Killzone (02:00 - 05:00 ET)
+     * - AM Killzone (09:30 - 12:00 ET)
+     * - PM Killzone (13:30 - 15:55 ET)
      */
     public static isWithinTradingWindow(timestampMs: number): boolean {
-        return MarketClock.isAMKillzone(timestampMs) || MarketClock.isPMKillzone(timestampMs);
+        const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
+
+        // London Killzone: 02:00 ET (120) to 05:00 ET (300)
+        const isLondon = totalMinutes >= 120 && totalMinutes < 300;
+
+        // AM Killzone: 09:30 ET (570) to 12:00 ET (720)
+        const isAM = totalMinutes >= 570 && totalMinutes < 720;
+
+        // PM Killzone: 13:30 ET (810) to 15:55 ET (955)
+        const isPM = totalMinutes >= 810 && totalMinutes < 955;
+
+        return isLondon || isAM || isPM;
     }
 
     /**
