@@ -18,4 +18,7 @@ export const config = {
     TRADOVATE_CLIENT_SECRET: process.env.TRADOVATE_CLIENT_SECRET || '',
 
     ORACLE_API_KEY: process.env.ORACLE_API_KEY || '',
+
+    // Prop Firm Safety Ceiling (0 = uncapped / dynamic)
+    MAX_CONTRACTS: process.env.MAX_CONTRACTS ? parseInt(process.env.MAX_CONTRACTS, 10) : 0,
 };

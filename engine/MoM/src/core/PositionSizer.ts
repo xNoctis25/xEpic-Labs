@@ -61,7 +61,13 @@ export class PositionSizer {
         // Strict Ceiling: MES — never upgrade to ES
         // ==========================================
         if (baseIndex === 'MES') {
-            const potentialMES = Math.floor(riskBudget / mesRisk);
+            let potentialMES = Math.floor(riskBudget / mesRisk);
+
+            // Apply Topstep / Prop Firm Cap
+            if (config.MAX_CONTRACTS > 0) {
+                potentialMES = Math.min(potentialMES, config.MAX_CONTRACTS);
+            }
+
             if (potentialMES >= 1) {
                 console.log(
                     `📐 [PositionSizer] - Risk: ${safeRisk}% | Ceiling: MES` +
@@ -84,7 +90,13 @@ export class PositionSizer {
         // ES Mode: Try ES first, fallback to MES
         // ==========================================
         if (baseIndex === 'ES') {
-            const potentialES = Math.floor(riskBudget / esRisk);
+            let potentialES = Math.floor(riskBudget / esRisk);
+
+            // Apply Topstep / Prop Firm Cap
+            if (config.MAX_CONTRACTS > 0) {
+                potentialES = Math.min(potentialES, config.MAX_CONTRACTS);
+            }
+
             if (potentialES >= 1) {
                 console.log(
                     `📐 [PositionSizer] - Risk: ${safeRisk}% | Ceiling: ES` +
@@ -95,7 +107,13 @@ export class PositionSizer {
             }
 
             // ES unaffordable — fallback to MES
-            const potentialMES = Math.floor(riskBudget / mesRisk);
+            let potentialMES = Math.floor(riskBudget / mesRisk);
+
+            // Apply Topstep / Prop Firm Cap
+            if (config.MAX_CONTRACTS > 0) {
+                potentialMES = Math.min(potentialMES, config.MAX_CONTRACTS);
+            }
+
             if (potentialMES >= 1) {
                 console.log(
                     `📐 [PositionSizer] - Risk: ${safeRisk}% | Ceiling: ES (fallback MES)` +
