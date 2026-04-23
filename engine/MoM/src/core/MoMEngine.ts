@@ -135,6 +135,12 @@ export class MoMEngine {
         console.log('🔍 ═══════════════════════════════════════════');
         console.log('🔍  PREFLIGHT COMPLETE — All Systems Verified');
         console.log(`🔍  Trading Active Contract: ${this.symbolToTrade}`);
+        
+        const playbookLabel = config.MAX_CONTRACTS > 0 
+            ? `TopStep Restricted (Max ${config.MAX_CONTRACTS})` 
+            : `Cash Account Unrestricted`;
+        console.log(`🔍  Active Playbook: ${playbookLabel}`);
+        
         console.log('🔍 ═══════════════════════════════════════════\n');
 
         return this.currentPhase;
