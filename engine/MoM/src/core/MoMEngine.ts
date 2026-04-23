@@ -52,7 +52,7 @@ export class MoMEngine {
         this.databento = new DatabentoLiveService();
 
         // Auto-resolve the active CME front-month contract via ContractBuilder
-        this.symbolToTrade = ContractBuilder.getActiveContract('MES');
+        this.symbolToTrade = ContractBuilder.getActiveContract(config.INDICES);
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
@@ -185,7 +185,7 @@ export class MoMEngine {
 
         let preflightTicks = 0;
         await new Promise<void>((resolve) => {
-            this.databento.start('MES.c.0', (tick: Tick) => {
+            this.databento.start(`${config.INDICES}.c.0`, (tick: Tick) => {
                 if (preflightTicks < 5) {
                     preflightTicks++;
                     console.log(`🔥 [Preflight Tick ${preflightTicks}/5] Price: $${tick.price} | Vol: ${tick.volume}`);
