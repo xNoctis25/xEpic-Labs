@@ -80,9 +80,11 @@ export class ActiveTradeMonitor {
     private failsafeInterval: ReturnType<typeof setInterval> | null = null;
     private failsafeInjected: boolean = false; // Prevent duplicate injections per cycle
 
-    // --- System 3: Time Decay & Volume Tracking ---
+    // --- System 3: Time Decay, Volume & Price Progress Tracking ---
     private candlesSinceEntry: number = 0;
     private volumeHistory: number[] = [];
+    private candleHighHistory: number[] = [];  // Tracks candle highs for price stall detection
+    private candleLowHistory: number[] = [];   // Tracks candle lows for price stall detection
 
     // --- System 4: Choke Hold ---
     private isChokeActive: boolean = false;
@@ -117,6 +119,8 @@ export class ActiveTradeMonitor {
         this.lastPrice = ctx.entryPrice;
         this.candlesSinceEntry = 0;
         this.volumeHistory = [];
+        this.candleHighHistory = [];
+        this.candleLowHistory = [];
         this.isChokeActive = false;
         this.failsafeInjected = false;
         this.isFlattenInProgress = false;
@@ -149,6 +153,8 @@ export class ActiveTradeMonitor {
         this.isActive = false;
         this.candlesSinceEntry = 0;
         this.volumeHistory = [];
+        this.candleHighHistory = [];
+        this.candleLowHistory = [];
         this.isChokeActive = false;
         this.failsafeInjected = false;
         this.isFlattenInProgress = false;
@@ -182,6 +188,8 @@ export class ActiveTradeMonitor {
         this.lastPrice = candle.close;
         this.candlesSinceEntry++;
         this.volumeHistory.push(candle.volume);
+        this.candleHighHistory.push(candle.high);
+        this.candleLowHistory.push(candle.low);
 
         // Calculate current profit in points
         const profitPoints = this.ctx.side === 'BUY'
@@ -200,11 +208,15 @@ export class ActiveTradeMonitor {
             return;
         }
 
-        // --- System 3b: Momentum Exhaustion (volume decline) ---
-        const isExhausted = this.checkVolumeExhaustion();
-        if (isExhausted) {
+        // --- System 3b: Momentum Exhaustion (volume decline + price stall) ---
+        const decliningVol = this.checkVolumeDecline();
+        const priceStalled = this.checkPriceStalled();
+
+        if (decliningVol && priceStalled) {
+            console.log(`📉 [MONITOR] - EXHAUSTION CONFIRMED: Declining volume + price stalled.`);
+
             if (profitPoints <= 0) {
-                await this.triggerFlatten('Volume exhaustion with negative PnL');
+                await this.triggerFlatten('Volume exhaustion + price stall with negative PnL');
                 return;
             }
 
@@ -346,12 +358,12 @@ export class ActiveTradeMonitor {
     }
 
     /**
-     * Volume Exhaustion: If volume decreases for 3 consecutive candles,
-     * momentum is dying.
+     * Volume Decline: Checks if volume decreases for 3 consecutive candles.
+     * This alone is NOT sufficient to declare exhaustion — price must also be stalling.
      *
-     * @returns true if volume exhaustion is detected
+     * @returns true if volume is declining
      */
-    private checkVolumeExhaustion(): boolean {
+    private checkVolumeDecline(): boolean {
         if (this.volumeHistory.length < VOLUME_DECLINE_COUNT) return false;
 
         const len = this.volumeHistory.length;
@@ -366,10 +378,64 @@ export class ActiveTradeMonitor {
 
         if (declining) {
             const recentVols = this.volumeHistory.slice(-VOLUME_DECLINE_COUNT).map(v => Math.round(v));
-            console.log(`📉 [MONITOR] - VOLUME EXHAUSTION: ${VOLUME_DECLINE_COUNT} consecutive declining candles [${recentVols.join(' → ')}]`);
+            console.log(`📉 [MONITOR] - Volume declining: [${recentVols.join(' → ')}]`);
         }
 
         return declining;
+    }
+
+    /**
+     * Price Stall Detection: Checks if price has stopped making progress.
+     *
+     * For LONGS: priceStalled = current candle's high failed to break
+     *   above the highest high of the previous 2 candles.
+     * For SHORTS: priceStalled = current candle's low failed to break
+     *   below the lowest low of the previous 2 candles.
+     *
+     * This prevents choking out healthy runners in a strong trend where
+     * volume naturally tapers but price is still aggressively progressing.
+     *
+     * @returns true if price is stalling in the trade's direction
+     */
+    private checkPriceStalled(): boolean {
+        if (!this.ctx) return false;
+
+        // Need at least 3 candles (2 lookback + current)
+        if (this.candleHighHistory.length < 3) return false;
+
+        const len = this.candleHighHistory.length;
+
+        if (this.ctx.side === 'BUY') {
+            // For longs: is the current high failing to break above prior 2 highs?
+            const currentHigh = this.candleHighHistory[len - 1];
+            const prevHigh1 = this.candleHighHistory[len - 2];
+            const prevHigh2 = this.candleHighHistory[len - 3];
+            const highestPrior = Math.max(prevHigh1, prevHigh2);
+
+            const stalled = currentHigh <= highestPrior;
+            if (stalled) {
+                console.log(
+                    `📊 [MONITOR] - Price stalled (LONG): Current high ${currentHigh.toFixed(2)}` +
+                    ` ≤ prior highs [${prevHigh2.toFixed(2)}, ${prevHigh1.toFixed(2)}]`
+                );
+            }
+            return stalled;
+        } else {
+            // For shorts: is the current low failing to break below prior 2 lows?
+            const currentLow = this.candleLowHistory[len - 1];
+            const prevLow1 = this.candleLowHistory[len - 2];
+            const prevLow2 = this.candleLowHistory[len - 3];
+            const lowestPrior = Math.min(prevLow1, prevLow2);
+
+            const stalled = currentLow >= lowestPrior;
+            if (stalled) {
+                console.log(
+                    `📊 [MONITOR] - Price stalled (SHORT): Current low ${currentLow.toFixed(2)}` +
+                    ` ≥ prior lows [${prevLow2.toFixed(2)}, ${prevLow1.toFixed(2)}]`
+                );
+            }
+            return stalled;
+        }
     }
 
     // ==========================================
