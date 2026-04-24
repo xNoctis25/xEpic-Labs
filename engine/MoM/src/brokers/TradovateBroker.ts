@@ -402,4 +402,172 @@ export class TradovateBroker {
             console.log(`🧹 [TradovateBroker] - All working orders canceled.`);
         } catch (error: any) { }
     }
+
+    // ─── Active Trade Monitor Support ──────────────────────────────────
+
+    /**
+     * Counts the number of active Stop/TrailingStop/StopLimit orders for a given symbol.
+     * Used by ActiveTradeMonitor to detect "naked" positions (net position != 0 but no stops).
+     *
+     * @param symbol - Tradovate contract symbol (e.g., 'MESM6')
+     * @returns Number of working stop orders (0 = naked, >0 = protected)
+     */
+    public async getWorkingStopOrders(symbol: string): Promise<number> {
+        await this.refreshTokenIfNeeded();
+        const { id: accountId } = await this.getAccountId();
+
+        try {
+            // Resolve contract ID for the symbol
+            const contractRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/contract/find', { params: { name: symbol } })
+            );
+            const contractId = contractRes.data?.id;
+            if (!contractId) return 0;
+
+            // Fetch all orders for the account
+            const orderRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/order/list')
+            );
+            const orders = orderRes.data || [];
+
+            // Filter for working stop-type orders matching our contract
+            const stopTypes = ['Stop', 'TrailingStop', 'StopLimit'];
+            const workingStops = orders.filter((o: any) =>
+                o.contractId === contractId &&
+                o.ordStatus === 'Working' &&
+                stopTypes.includes(o.ordType)
+            );
+
+            return workingStops.length;
+        } catch (error: any) {
+            console.error(`🔴 [TradovateBroker] - Failed to query working stop orders:`, error.message);
+            return -1; // Negative = query failed, do not act on it
+        }
+    }
+
+    /**
+     * Places a standalone resting Stop Market order for position protection.
+     * This is NOT a bracket — it's a single protective exit order.
+     * Used by ActiveTradeMonitor's Naked Position Failsafe and Choke Hold systems.
+     *
+     * @param symbol    - Tradovate contract symbol
+     * @param exitAction - 'Buy' or 'Sell' (the CLOSING direction)
+     * @param qty       - Number of contracts to protect
+     * @param stopPrice - The price at which the stop triggers
+     * @returns Order ID string, or null on failure
+     */
+    public async placeProtectiveStop(
+        symbol: string,
+        exitAction: 'Buy' | 'Sell',
+        qty: number,
+        stopPrice: number,
+    ): Promise<string | null> {
+        await this.refreshTokenIfNeeded();
+        const { id: accountId, spec: accountSpec } = await this.getAccountId();
+
+        const payload = {
+            accountSpec,
+            accountId,
+            action: exitAction,
+            symbol,
+            orderQty: qty,
+            orderType: 'Stop',
+            stopPrice,
+            isAutomated: true,
+        };
+
+        try {
+            console.log(`🛡️ [TradovateBroker] - Placing protective stop: ${exitAction} ${qty}x ${symbol} @ Stop $${stopPrice}`);
+
+            const response = await this.withTokenRetry(() =>
+                this.axiosInstance.post('/order/placeOrder', payload, { timeout: 5000 })
+            );
+
+            const orderId = response.data?.orderId || response.data?.id || `PSTOP_${Date.now()}`;
+            console.log(`✅ [TradovateBroker] - Protective stop PLACED. Order ID: ${orderId}`);
+            return String(orderId);
+
+        } catch (error: any) {
+            const errMsg = error.response?.data?.errorText || error.response?.data || error.message;
+            console.error(`🔴 [TradovateBroker] - Protective stop FAILED:`, errMsg);
+            return null;
+        }
+    }
+
+    /**
+     * Modifies an existing resting stop order's price.
+     * Used by the Choke Hold system to dynamically tighten stops.
+     *
+     * If modify fails (some brokers reject modifications), falls back to
+     * cancel + re-place via placeProtectiveStop().
+     *
+     * @param symbol       - Tradovate contract symbol (for fallback re-place)
+     * @param exitAction   - 'Buy' or 'Sell' (for fallback re-place)
+     * @param qty          - Number of contracts (for fallback re-place)
+     * @param newStopPrice - The new stop price to set
+     * @returns true if the stop was successfully moved
+     */
+    public async modifyOrReplaceStop(
+        symbol: string,
+        exitAction: 'Buy' | 'Sell',
+        qty: number,
+        newStopPrice: number,
+    ): Promise<boolean> {
+        await this.refreshTokenIfNeeded();
+        const { id: accountId } = await this.getAccountId();
+
+        try {
+            // Find the existing working stop order for this symbol
+            const contractRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/contract/find', { params: { name: symbol } })
+            );
+            const contractId = contractRes.data?.id;
+            if (!contractId) return false;
+
+            const orderRes = await this.withTokenRetry(() =>
+                this.axiosInstance.get('/order/list')
+            );
+            const orders = orderRes.data || [];
+
+            const stopTypes = ['Stop', 'TrailingStop', 'StopLimit'];
+            const existingStop = orders.find((o: any) =>
+                o.contractId === contractId &&
+                o.ordStatus === 'Working' &&
+                stopTypes.includes(o.ordType)
+            );
+
+            if (existingStop) {
+                // Try to modify in-place
+                try {
+                    await this.withTokenRetry(() =>
+                        this.axiosInstance.post('/order/modifyOrder', {
+                            orderId: existingStop.id,
+                            orderQty: qty,
+                            orderType: 'Stop',
+                            stopPrice: newStopPrice,
+                            isAutomated: true,
+                        })
+                    );
+                    console.log(`✅ [TradovateBroker] - Stop modified to $${newStopPrice} (Order: ${existingStop.id})`);
+                    return true;
+                } catch (modifyErr: any) {
+                    console.warn(`⚠️ [TradovateBroker] - Modify rejected. Falling back to cancel + replace.`);
+                    // Cancel the old one
+                    try {
+                        await this.withTokenRetry(() =>
+                            this.axiosInstance.post('/order/cancelOrder', { orderId: existingStop.id })
+                        );
+                    } catch { }
+                }
+            }
+
+            // Fallback: place a fresh protective stop
+            const result = await this.placeProtectiveStop(symbol, exitAction, qty, newStopPrice);
+            return result !== null;
+
+        } catch (error: any) {
+            console.error(`🔴 [TradovateBroker] - modifyOrReplaceStop FAILED:`, error.message);
+            return false;
+        }
+    }
 }

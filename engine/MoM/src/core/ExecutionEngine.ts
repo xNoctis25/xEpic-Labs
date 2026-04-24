@@ -304,4 +304,12 @@ export class ExecutionEngine {
     public hasActiveExcursion(): boolean {
         return this.tradeExcursion !== null;
     }
+
+    /**
+     * Returns the current trade excursion state.
+     * Used by ActiveTradeMonitor to read MFE/MAE without duplicating tracking.
+     */
+    public getTradeExcursion(): ActiveTradeExcursion | null {
+        return this.tradeExcursion;
+    }
 }

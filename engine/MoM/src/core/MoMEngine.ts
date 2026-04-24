@@ -1,6 +1,7 @@
 import { RiskEngine } from './RiskEngine';
 import { ExecutionEngine } from './ExecutionEngine';
 import { EvaluationEngine } from './EvaluationEngine';
+import { ActiveTradeMonitor } from './ActiveTradeMonitor';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './PositionSizer';
 import { ContractBuilder } from '../utils/ContractBuilder';
 
@@ -17,6 +18,7 @@ import { config } from '../config/env';
 export class MoMEngine {
     private riskEngine: RiskEngine;
     private executionEngine: ExecutionEngine;
+    private monitor: ActiveTradeMonitor;
     private broker: TradovateBroker;
 
     private aggregator: CandleAggregator;
@@ -45,6 +47,13 @@ export class MoMEngine {
         this.db = new NeonDatabase();
         this.executionEngine = new ExecutionEngine(broker, this.db);
 
+        // Active Trade Monitor — institutional position management
+        this.monitor = new ActiveTradeMonitor(
+            broker,
+            this.executionEngine,
+            async (reason: string) => this.onMonitorFlatten(reason),
+        );
+
         this.smcExpert = new SMCExpert();
         this.oracle = new OracleService();
         this.ledger = new SessionLedger();
@@ -56,9 +65,6 @@ export class MoMEngine {
 
         // Build 1-minute candles from the tick stream
         this.aggregator = new CandleAggregator(1, this.onCandleComplete.bind(this));
-
-        // Dynamic position monitor — polls Tradovate every 10s to detect bracket fills
-        setInterval(() => this.monitorActivePosition(), 10000);
     }
 
     // ==========================================
@@ -226,6 +232,9 @@ export class MoMEngine {
         if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
             console.log(`🚨 [MoMEngine] - EOD SWEEP TRIGGERED (15:55+ ET). Enforcing flat state.`);
             
+            // Stop the monitor FIRST to prevent failsafe from re-injecting during sweep
+            this.monitor.stop();
+            
             // Unconditionally sweep to catch any orphaned local/remote states
             await this.executionEngine.flattenPosition(this.symbolToTrade);
             
@@ -262,6 +271,15 @@ export class MoMEngine {
                 ` | FVG: ${hb.fvg}` +
                 ` | Decision: ${hb.decision}`
             );
+        }
+
+        // ==========================================
+        // Active Trade Monitor — Forward candle to monitor while in-trade
+        // ==========================================
+        if (this.activePosition && this.monitor.isMonitoring()) {
+            await this.monitor.onCandleComplete(candle, signal);
+            // If the monitor triggered a flatten, activePosition will be null now
+            if (!this.activePosition) return;
         }
 
         // Only process BUY/SELL signals — skip HOLD
@@ -344,6 +362,19 @@ export class MoMEngine {
                         timestamp: Date.now(),
                     };
                     console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
+
+                    // Activate the Active Trade Monitor
+                    const hardStopPrice = signal === 'BUY'
+                        ? candle.close - this.SL_POINTS
+                        : candle.close + this.SL_POINTS;
+
+                    this.monitor.start({
+                        symbol: tradeSymbol,
+                        side: signal,
+                        entryPrice: candle.close,
+                        hardStopPrice,
+                        qty: sizing.qty,
+                    });
                 } else {
                     this.ledger.releaseMarginAndApplyPnL(totalMarginRequired, 0);
                     console.error(`🔴 [MoMEngine] - Bracket order failed. Margin released.`);
@@ -367,6 +398,9 @@ export class MoMEngine {
     public async onPositionClosed(exitPrice: number, realizedPnL: number): Promise<void> {
         if (!this.activePosition) return;
 
+        // Stop the Active Trade Monitor
+        this.monitor.stop();
+
         // Grade and journal the trade (MFE/MAE → Neon Postgres)
         await this.executionEngine.gradeAndJournalTrade(exitPrice, realizedPnL);
 
@@ -382,19 +416,26 @@ export class MoMEngine {
         this.activePosition = null;
     }
 
-    private async monitorActivePosition(): Promise<void> {
+    // ==========================================
+    // MONITOR FLATTEN CALLBACK
+    // ==========================================
+    /**
+     * Called by ActiveTradeMonitor when it triggers a flatten.
+     * Cleans up local state (ledger, risk engine, activePosition).
+     * P&L is captured by Ghost Sync on the next reconciliation cycle.
+     *
+     * CRITICAL: Does NOT open an opposite trade. Standard gate pipeline
+     * requires a fresh pullback/retest into a new FVG — inherently preventing revenge.
+     */
+    private async onMonitorFlatten(reason: string): Promise<void> {
         if (!this.activePosition) return;
-        
-        // Wait at least 15 seconds after entry to avoid polling before broker registers it
-        if (Date.now() - this.activePosition.timestamp < 15000) return;
 
-        try {
-            const netPos = await this.broker.getNetPositionQty(this.symbolToTrade);
-            
-            if (netPos === 0) {
-                console.log(`✅ [MoMEngine] - Position Monitor: Tradovate targets hit (Position flat). Releasing brain.`);
-                await this.onPositionClosed(this.activePosition.entryPrice, 0); // P&L handled inherently by Ghost Sync
-            }
-        } catch (e) { }
+        console.log(`🔄 [MoMEngine] - Monitor-triggered flatten: ${reason}`);
+
+        // Release margin — P&L will be corrected by Ghost Sync
+        this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0);
+        this.riskEngine.updatePnL(0, this.activePosition.riskBudget);
+
+        this.activePosition = null;
     }
 }
