@@ -495,78 +495,104 @@ export class TradovateBroker {
     }
 
     /**
-     * Modifies an existing resting stop order's price.
-     * Used by the Choke Hold system to dynamically tighten stops.
+     * Modifies ALL working stop orders in-place for a given symbol.
      *
-     * If modify fails (some brokers reject modifications), falls back to
-     * cancel + re-place via placeProtectiveStop().
+     * Uses a strict "Modify and Verify" pattern — NO cancel/replace fallback.
+     * If any modification is rejected by Tradovate, the method returns false
+     * and logs a [RETRY] warning. Because ActiveTradeMonitor runs on a
+     * continuous 5-second polling loop, returning false naturally forces
+     * re-evaluation on the next tick — creating an inherent retry mechanism.
      *
-     * @param symbol       - Tradovate contract symbol (for fallback re-place)
-     * @param exitAction   - 'Buy' or 'Sell' (for fallback re-place)
-     * @param qty          - Number of contracts (for fallback re-place)
-     * @param newStopPrice - The new stop price to set
-     * @returns true if the stop was successfully moved
+     * CRITICAL: Each stop's orderQty is preserved exactly as-is.
+     * Only the stopPrice is updated. This prevents qty drift on multi-leg
+     * scale-out positions (e.g., 3 separate 1-lot stops for a 3-contract position).
+     *
+     * @param symbol       - Tradovate contract symbol (e.g., 'MESM6')
+     * @param exitAction   - 'Buy' or 'Sell' (unused here, kept for API compatibility)
+     * @param qty          - Total position qty (unused here, kept for API compatibility)
+     * @param newStopPrice - The new stop price to set on all working stops
+     * @returns true if ALL stops were successfully modified, false otherwise
      */
-    public async modifyOrReplaceStop(
+    public async modifyStopWithVerification(
         symbol: string,
         exitAction: 'Buy' | 'Sell',
         qty: number,
         newStopPrice: number,
     ): Promise<boolean> {
         await this.refreshTokenIfNeeded();
-        const { id: accountId } = await this.getAccountId();
+        await this.getAccountId();
 
         try {
-            // Find the existing working stop order for this symbol
+            // Resolve contract ID for the symbol
             const contractRes = await this.withTokenRetry(() =>
                 this.axiosInstance.get('/contract/find', { params: { name: symbol } })
             );
             const contractId = contractRes.data?.id;
-            if (!contractId) return false;
+            if (!contractId) {
+                console.error(`🔴 [TradovateBroker] - modifyStopWithVerification: Could not resolve contractId for ${symbol}`);
+                return false;
+            }
 
             const orderRes = await this.withTokenRetry(() =>
                 this.axiosInstance.get('/order/list')
             );
             const orders = orderRes.data || [];
 
+            // Find ALL working stop-type orders for this contract
             const stopTypes = ['Stop', 'TrailingStop', 'StopLimit'];
-            const existingStop = orders.find((o: any) =>
+            const workingStops = orders.filter((o: any) =>
                 o.contractId === contractId &&
                 o.ordStatus === 'Working' &&
                 stopTypes.includes(o.ordType)
             );
 
-            if (existingStop) {
-                // Try to modify in-place
+            if (workingStops.length === 0) {
+                console.warn(`⚠️ [TradovateBroker] - modifyStopWithVerification: No working stops found for ${symbol}. Nothing to modify.`);
+                return false;
+            }
+
+            console.log(
+                `🔄 [TradovateBroker] - Modifying ${workingStops.length} working stop(s) for ${symbol} → $${newStopPrice}...`
+            );
+
+            // Attempt to modify each stop in-place
+            let allModified = true;
+            for (const stop of workingStops) {
                 try {
                     await this.withTokenRetry(() =>
                         this.axiosInstance.post('/order/modifyOrder', {
-                            orderId: existingStop.id,
-                            orderQty: qty,
-                            orderType: 'Stop',
+                            orderId: stop.id,
+                            orderQty: stop.orderQty,   // CRITICAL: Preserve the individual leg size!
+                            orderType: 'Stop',         // Force TrailingStop → static Stop
                             stopPrice: newStopPrice,
                             isAutomated: true,
                         })
                     );
-                    console.log(`✅ [TradovateBroker] - Stop modified to $${newStopPrice} (Order: ${existingStop.id})`);
-                    return true;
+                    console.log(`  ✅ Stop ${stop.id} modified (qty: ${stop.orderQty}, price: $${newStopPrice})`);
                 } catch (modifyErr: any) {
-                    console.warn(`⚠️ [TradovateBroker] - Modify rejected. Falling back to cancel + replace.`);
-                    // Cancel the old one
-                    try {
-                        await this.withTokenRetry(() =>
-                            this.axiosInstance.post('/order/cancelOrder', { orderId: existingStop.id })
-                        );
-                    } catch { }
+                    const errDetail = modifyErr.response?.data?.errorText || modifyErr.message;
+                    console.error(
+                        `🔴 [RETRY] Stop ${stop.id} modification rejected (was ${stop.ordType}, qty: ${stop.orderQty}). ` +
+                        `ActiveTradeMonitor will retry next cycle. Error: ${errDetail}`
+                    );
+                    allModified = false;
+                    // Do NOT break — continue attempting remaining stops to maximize coverage
                 }
             }
 
-            // Fallback: place a fresh protective stop
-            const result = await this.placeProtectiveStop(symbol, exitAction, qty, newStopPrice);
-            return result !== null;
+            if (allModified) {
+                console.log(`✅ [TradovateBroker] - All ${workingStops.length} stops successfully modified to $${newStopPrice}`);
+            } else {
+                console.warn(
+                    `⚠️ [TradovateBroker] - Partial modification: some stops failed. ` +
+                    `Returning false — ActiveTradeMonitor will retry on next 5s tick.`
+                );
+            }
+
+            return allModified;
 
         } catch (error: any) {
-            console.error(`🔴 [TradovateBroker] - modifyOrReplaceStop FAILED:`, error.message);
+            console.error(`🔴 [TradovateBroker] - modifyStopWithVerification FAILED:`, error.message);
             return false;
         }
     }

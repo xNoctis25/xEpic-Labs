@@ -479,7 +479,7 @@ export class ActiveTradeMonitor {
             ` | Profit: ${profitPoints.toFixed(1)}pts`
         );
 
-        const success = await this.broker.modifyOrReplaceStop(
+        const success = await this.broker.modifyStopWithVerification(
             this.ctx.symbol,
             exitAction,
             this.ctx.qty,
