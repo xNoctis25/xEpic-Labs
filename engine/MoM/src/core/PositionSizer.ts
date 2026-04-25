@@ -1,4 +1,5 @@
 import { config } from '../config/env';
+import { PropPhase, PropRiskProfile } from '../services/NeonDatabase';
 
 /**
  * PositionSizer — Dynamic Position Sizing with Strict Ceiling Math
@@ -27,6 +28,16 @@ export interface SizingResult {
     riskBudget: number;   // Dollar amount at risk this trade
 }
 
+/**
+ * PropOverride — When present, bypasses cash math and uses strict scaling ladders.
+ * Passed by MoMEngine when a prop firm account is active.
+ */
+export interface PropOverride {
+    phase: PropPhase;
+    riskProfile: PropRiskProfile;
+    currentBuffer: number;   // Total P&L buffer from the DB
+}
+
 // Dollar-per-point multipliers for CME S&P futures
 const ES_DOLLAR_PER_POINT = 50;   // ES: $50/point
 const MES_DOLLAR_PER_POINT = 5;   // MES: $5/point
@@ -48,7 +59,48 @@ export class PositionSizer {
         availableBuyingPower: number,
         slPoints: number,
         baseIndex: string,
+        propOverride?: PropOverride,
     ): SizingResult | null {
+        // ==========================================
+        // PROP FIRM OVERRIDE — Mega Heist Scaling Ladder
+        // ==========================================
+        if (propOverride) {
+            // EVAL Phase: Symmetrical Overshoot — Always 3 ES
+            if (propOverride.phase === 'EVAL') {
+                console.log(`📐 [PositionSizer] - PROP EVAL: 3× ES (Symmetrical Overshoot)`);
+                return { symbolRoot: 'ES', qty: 3, riskBudget: 0 };
+            }
+
+            // FUNDED Phase: The Scaling Ladder
+            if (propOverride.phase === 'FUNDED') {
+                const buffer = Number(propOverride.currentBuffer);
+                let qty = 1;
+                let tier = '';
+
+                if (propOverride.riskProfile === 'SAFE') {
+                    if (buffer < 4500)       { qty = 1;  tier = 'The Trench'; }
+                    else if (buffer < 10000) { qty = 3;  tier = 'The Armor'; }
+                    else if (buffer < 20000) { qty = 5;  tier = 'Momentum'; }
+                    else if (buffer < 30000) { qty = 10; tier = 'Heavyweight'; }
+                    else                     { qty = 15; tier = 'Final Boss'; }
+                } else if (propOverride.riskProfile === 'AGGRESSIVE') {
+                    if (buffer < 10000)      { qty = 3;  tier = 'The Sprint'; }
+                    else if (buffer < 25000) { qty = 5;  tier = 'Momentum'; }
+                    else if (buffer < 45000) { qty = 10; tier = 'Heavyweight'; }
+                    else                     { qty = 15; tier = 'Mega Heist'; }
+                }
+
+                console.log(
+                    `📐 [PositionSizer] - PROP FUNDED [${propOverride.riskProfile}]:` +
+                    ` Buffer $${buffer.toFixed(2)} → ${tier} → ES × ${qty}`
+                );
+                return { symbolRoot: 'ES', qty, riskBudget: 0 };
+            }
+        }
+
+        // ==========================================
+        // CASH ACCOUNT — Standard Risk Budget Math
+        // ==========================================
         // Safety clamp: enforce 1-10% range regardless of .env value
         const safeRisk = Math.min(10, Math.max(1, config.RISK));
         const riskBudget = availableBuyingPower * (safeRisk / 100);

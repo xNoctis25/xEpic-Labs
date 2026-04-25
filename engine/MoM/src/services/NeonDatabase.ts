@@ -23,6 +23,26 @@ export interface BotState {
     maxDrawdownLimit: number;
 }
 
+// ==========================================
+// Prop Firm Account Types
+// ==========================================
+export type PropPhase = 'EVAL' | 'FUNDED';
+export type PropRiskProfile = 'SAFE' | 'AGGRESSIVE';
+export type PropStatus = 'ACTIVE' | 'PASSED' | 'PAYOUT_READY' | 'BLOWN';
+
+export interface PropAccount {
+    id: number;
+    account_name: string;
+    firm: string;
+    phase: PropPhase;
+    risk_profile: PropRiskProfile;
+    profit_target: number;
+    current_pnl: number;
+    best_day_pnl: number;
+    days_traded: number;
+    status: PropStatus;
+}
+
 export class NeonDatabase {
     private pool: Pool;
 
@@ -83,6 +103,22 @@ export class NeonDatabase {
                 net_pnl NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
                 rejected_setups_log JSONB DEFAULT '[]'::jsonb,
                 eodr_summary TEXT
+            );
+        `);
+
+        // Create the prop_accounts table — Master Ledger for Prop Firm Accounts
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS prop_accounts (
+                id SERIAL PRIMARY KEY,
+                account_name VARCHAR(100) NOT NULL,
+                firm VARCHAR(50) NOT NULL,
+                phase VARCHAR(10) NOT NULL CHECK (phase IN ('EVAL', 'FUNDED')),
+                risk_profile VARCHAR(15) NOT NULL CHECK (risk_profile IN ('SAFE', 'AGGRESSIVE')),
+                profit_target NUMERIC(12, 2) NOT NULL DEFAULT 9000,
+                current_pnl NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                best_day_pnl NUMERIC(12, 2) NOT NULL DEFAULT 0,
+                days_traded INT NOT NULL DEFAULT 0,
+                status VARCHAR(15) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','PASSED','PAYOUT_READY','BLOWN'))
             );
         `);
 
@@ -234,6 +270,58 @@ export class NeonDatabase {
         const result = await this.pool.query('SELECT NOW() AS server_time');
         const serverTime = result.rows[0].server_time;
         console.log(`🧠 [NeonDB] - Connection verified. Server time: ${serverTime}`);
+    }
+
+    // ==========================================
+    // Prop Firm Account — CRUD Operations
+    // ==========================================
+
+    /**
+     * Fetches all ACTIVE prop firm accounts from the database.
+     */
+    public async getActiveAccounts(): Promise<PropAccount[]> {
+        const res = await this.pool.query(`SELECT * FROM prop_accounts WHERE status = 'ACTIVE'`);
+        return res.rows;
+    }
+
+    /**
+     * Updates the status of a prop firm account.
+     * @param id     - The account row ID
+     * @param status - New status: 'ACTIVE', 'PASSED', 'PAYOUT_READY', or 'BLOWN'
+     */
+    public async updateAccountStatus(id: number, status: PropStatus): Promise<void> {
+        await this.pool.query(`UPDATE prop_accounts SET status = $1 WHERE id = $2`, [status, id]);
+        console.log(`🏦 [NeonDB] - Account #${id} status updated to: ${status}`);
+    }
+
+    /**
+     * Updates a prop account's PnL, best day, and days traded after a session.
+     * Also runs the FUNDED payout eligibility check.
+     *
+     * @param id       - The account row ID
+     * @param dailyPnl - Today's realized session P&L
+     */
+    public async updateAccountPnL(id: number, dailyPnl: number): Promise<void> {
+        // Increment PnL, calculate best day, and add 1 to days_traded
+        await this.pool.query(`
+            UPDATE prop_accounts
+            SET current_pnl = current_pnl + $1,
+                best_day_pnl = GREATEST(best_day_pnl, $1),
+                days_traded = days_traded + 1
+            WHERE id = $2;
+        `, [dailyPnl, id]);
+
+        console.log(`🏦 [NeonDB] - Account #${id} PnL updated: ${dailyPnl >= 0 ? '+' : ''}$${dailyPnl.toFixed(2)}`);
+
+        // Payout Check Logic for FUNDED accounts
+        const res = await this.pool.query(`SELECT * FROM prop_accounts WHERE id = $1`, [id]);
+        if (res.rows.length > 0) {
+            const acc = res.rows[0];
+            if (acc.phase === 'FUNDED' && acc.days_traded >= 5 && Number(acc.current_pnl) >= (Number(acc.best_day_pnl) * 2)) {
+                await this.updateAccountStatus(id, 'PAYOUT_READY');
+                console.log(`🤑 [NeonDB] - MEGA HEIST ALERT: Account ${acc.account_name} is PAYOUT READY!`);
+            }
+        }
     }
 
     /**

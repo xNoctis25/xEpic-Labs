@@ -11,7 +11,7 @@ import { SMCExpert } from '../experts/SMCExpert';
 import { TradovateBroker } from '../brokers/TradovateBroker';
 import { OracleService } from '../services/OracleService';
 import { SessionLedger } from '../services/SessionLedger';
-import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
+import { NeonDatabase, BotPhase, PropAccount } from '../services/NeonDatabase';
 import { DatabentoLiveService } from '../services/DatabentoLiveService';
 import { config } from '../config/env';
 
@@ -37,6 +37,11 @@ export class MoMEngine {
     // --- Trade Management ---
     private activePosition: { side: 'BUY' | 'SELL'; entryPrice: number; margin: number; riskBudget: number; qty: number; timestamp: number } | null = null;
     private readonly SL_POINTS = 20; // Must match ExecutionEngine.SL_POINTS
+
+    // --- Prop Firm Account ---
+    private propAccount: PropAccount | null = null;
+    private evalDayLocked: boolean = false;
+    private eodProcessed: boolean = false;
 
     // Dynamically resolved via ContractBuilder (auto-rollover)
     private symbolToTrade: string;
@@ -169,6 +174,15 @@ export class MoMEngine {
         // 1. Preflight — sequential system verification (exits on failure)
         const phase = await this.runPreflightCheck();
 
+        // --- Prop Firm Account Binding ---
+        const activeAccounts = await this.db.getActiveAccounts();
+        if (activeAccounts && activeAccounts.length > 0) {
+            this.propAccount = activeAccounts[0];
+            console.log(`🏦 [MoMEngine] - Prop Leader Bound: ${this.propAccount.account_name} | Phase: ${this.propAccount.phase} | Risk: ${this.propAccount.risk_profile}`);
+        } else {
+            console.log(`🏦 [MoMEngine] - No active prop accounts. Running in cash mode.`);
+        }
+
         // 2. Phase Gate — BACKTEST = no live execution
         if (phase === 'BACKTEST') {
             console.error("🔴 [MoMEngine] - Bot is in BACKTEST mode. Aborting live connection.");
@@ -244,7 +258,59 @@ export class MoMEngine {
                 this.riskEngine.updatePnL(0, this.activePosition.riskBudget); 
                 this.activePosition = null;
             }
+
+            // Prop Firm EOD Ledger Sync (fires once per day during the sweep window)
+            if (this.propAccount && !this.eodProcessed) {
+                const dailyPnl = this.ledger.getSessionPnL();
+                await this.db.updateAccountPnL(this.propAccount.id, dailyPnl);
+                console.log(`📊 [EOD] - Prop Firm Ledger Synced. Daily PnL: $${dailyPnl.toFixed(2)}`);
+                this.eodProcessed = true;
+            }
+
             return; // Do not process any new signals for the rest of the day
+        }
+
+        // ==========================================
+        // EVAL GOVERNOR — Symmetrical Overshoot Hard Cap
+        // ==========================================
+        if (this.propAccount && this.propAccount.phase === 'EVAL' && !this.evalDayLocked) {
+            let openTradePnl = 0;
+
+            // Calculate live PnL of open position
+            if (this.activePosition) {
+                const pointValue = this.activePosition.side === 'BUY'
+                    ? (candle.close - this.activePosition.entryPrice)
+                    : (this.activePosition.entryPrice - candle.close);
+                openTradePnl = pointValue * 50 * this.activePosition.qty; // ES $50/pt multiplier
+            }
+
+            const dailyRealized = this.ledger.getSessionPnL();
+            const totalDailyPnl = dailyRealized + openTradePnl;
+
+            // Symmetrical Overshoot Hard Cap ($4,600)
+            if (totalDailyPnl >= 4600 && this.activePosition) {
+                console.log(`🛑 [EVAL GOVERNOR] - Daily Cap Reached ($${totalDailyPnl.toFixed(2)}). Flattening position.`);
+                this.monitor.stop();
+                await this.executionEngine.flattenPosition(this.symbolToTrade);
+                this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0);
+                this.riskEngine.updatePnL(0, this.activePosition.riskBudget);
+                this.activePosition = null;
+                this.evalDayLocked = true;
+            }
+
+            // Mathematical Challenge Pass Check
+            const totalPnl = Number(this.propAccount.current_pnl) + dailyRealized;
+            if (totalPnl >= Number(this.propAccount.profit_target)) {
+                console.log(`🎉 [EVAL GOVERNOR] - Challenge PASSED! Total PnL: $${totalPnl.toFixed(2)} >= Target: $${this.propAccount.profit_target}`);
+                await this.db.updateAccountStatus(this.propAccount.id, 'PASSED');
+                this.propAccount.status = 'PASSED';
+                this.evalDayLocked = true;
+            }
+        }
+
+        // Day-locked by EVAL Governor — halt all signal processing
+        if (this.evalDayLocked) {
+            return;
         }
 
         // Update MFE/MAE excursion tracking if a trade is active
@@ -321,7 +387,12 @@ export class MoMEngine {
         // Pre-Trade Gate 2: PositionSizer (Dynamic Risk Budget)
         // ==========================================
         const buyingPower = this.ledger.getAvailableBuyingPower();
-        const sizing = PositionSizer.calculate(buyingPower, this.SL_POINTS, config.INDICES);
+        const propOverride = this.propAccount ? {
+            phase: this.propAccount.phase,
+            riskProfile: this.propAccount.risk_profile,
+            currentBuffer: Number(this.propAccount.current_pnl),
+        } : undefined;
+        const sizing = PositionSizer.calculate(buyingPower, this.SL_POINTS, config.INDICES, propOverride);
         if (!sizing) {
             console.log(`💰 [MoMEngine] - Signal IGNORED: Account cannot afford the trade. Buying Power: $${buyingPower.toFixed(2)}`);
             return;
