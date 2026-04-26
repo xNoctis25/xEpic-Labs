@@ -36,6 +36,7 @@ body {
   justify-content: center;
   align-items: flex-start;
   padding-top: 25vh;
+  padding-inline: 16px; /* Allow panel to expand freely without hitting edges */
   min-height: 100vh;
   overflow: hidden;
   position: relative;
@@ -94,7 +95,9 @@ body::after {
 
 /* Dynamic width expansion for the 2x2 signup grid */
 .glass-panel.wide {
-  max-width: 800px !important;
+  max-width: 860px !important;
+  min-width: min(700px, calc(100vw - 32px)); /* Force visibly wider than 400px Sign In panel */
+  padding-inline: 48px; /* Extra breathing room for the 2-column layout */
 }
 
 @keyframes fadeUp {
@@ -529,7 +532,7 @@ input::-webkit-credentials-auto-fill-button {
    ========================================= */
 .form-row {
   display: flex;
-  gap: 12px;
+  gap: 20px; /* Increased from 12px for real column separation */
   width: 100%;
   margin-bottom: 1rem;
 }
