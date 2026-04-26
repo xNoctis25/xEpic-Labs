@@ -343,27 +343,36 @@ body::after {
 }
 
 /* ── Utilities ── */
-/* ── Smooth Form Accordion Animation ── */
+/* ── Apple-Level Smooth Form Accordion Animation ── */
 form {
-  max-height: 800px;
+  max-height: 500px; /* Tighter fit to actual content for accurate timing */
   opacity: 1;
   overflow: hidden;
-  transition: max-height 0.5s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+  transform: translateY(0);
+
+  /* Animate EVERYTHING smoothly so margins/padding never snap */
+  transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 form.hidden {
   max-height: 0 !important;
   opacity: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
   border: none !important;
+
+  /* Premium subtle slide-up effect when hiding */
+  transform: translateY(-10px);
+  pointer-events: none; /* Prevent ghost clicks while fading */
 }
 
-/* Ensure glass panel breathes with the form */
+/* Ensure glass panel perfectly matches the form's easing curve */
 .glass-panel {
   height: auto !important;
   min-height: 0 !important;
-  transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1) !important;
 }
 
 .text-center {
