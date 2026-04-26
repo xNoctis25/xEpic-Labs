@@ -69,7 +69,7 @@ loginForm.addEventListener('submit', async (e) => {
         }
         auth.showError('alertBox', err.message);
         btn.disabled = false;
-        btn.textContent = 'Log In';
+        btn.textContent = 'Sign In';
     }
 });
 
