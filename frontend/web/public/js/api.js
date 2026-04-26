@@ -1,8 +1,11 @@
 const API_BASE = '/api/auth';
 const auth = {
-    setToken: (token) => localStorage.setItem('jwt_token', token),
-    getToken: () => localStorage.getItem('jwt_token'),
-    clearToken: () => localStorage.removeItem('jwt_token'),
+    setToken: (token, remember = false) => {
+        if (remember) localStorage.setItem('jwt_token', token);
+        else sessionStorage.setItem('jwt_token', token);
+    },
+    getToken: () => localStorage.getItem('jwt_token') || sessionStorage.getItem('jwt_token'),
+    clearToken: () => { localStorage.removeItem('jwt_token'); sessionStorage.removeItem('jwt_token'); },
     request: async (endpoint, options = {}) => {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         const token = auth.getToken();
