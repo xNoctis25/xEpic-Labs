@@ -198,6 +198,25 @@ app.post('/api/auth/logout', (_req, res) => {
     // JWT is stateless — client clears the token
     res.status(200).json({ message: 'Logged out successfully.' });
 });
+// ── REAL-TIME EXISTENCE CHECK ─────────────────────────────────────────────────
+app.post('/api/auth/check-exists', async (req, res) => {
+    try {
+        const { field, value } = req.body;
+        // Allowlist — never interpolate arbitrary column names
+        if (field !== 'username' && field !== 'email') {
+            return res.status(400).json({ message: 'Invalid field parameter.' });
+        }
+        const query = field === 'username'
+            ? 'SELECT id FROM users WHERE username = $1'
+            : 'SELECT id FROM users WHERE email = $1';
+        const check = await db_1.default.query(query, [value]);
+        res.status(200).json({ exists: check.rows.length > 0 });
+    }
+    catch (error) {
+        console.error('[AUTH ERROR] /check-exists:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
 // ── FORGOT PASSWORD (enumeration-safe) ───────────────────────────────────────
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {

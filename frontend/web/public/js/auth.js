@@ -49,11 +49,56 @@ const strengthText      = document.getElementById('strengthText');
 const matchText         = document.getElementById('matchText');
 const signupSubmitBtn   = document.getElementById('signupSubmitBtn');
 
-let passwordScore = 0;
+let passwordScore    = 0;
+let usernameAvail    = true; // tracks real-time availability state
+let emailAvail       = true;
 
 function checkSubmitReady() {
     const passwordsMatch = confirmPassword.value === signupPassword.value && confirmPassword.value.length > 0;
-    signupSubmitBtn.disabled = !(passwordScore >= 4 && passwordsMatch);
+    signupSubmitBtn.disabled = !(passwordScore >= 4 && passwordsMatch && usernameAvail && emailAvail);
+}
+
+// ── Real-Time Username / Email Availability ──
+async function validateAvailability(field, element, displayName, setFlag) {
+    if (!element.value.trim()) return;
+    try {
+        const res = await auth.request('/check-exists', {
+            method: 'POST',
+            body: JSON.stringify({ field, value: element.value.trim() })
+        });
+        if (res.exists) {
+            element.style.borderColor = '#f87171';
+            element.style.boxShadow   = '0 0 0 3px rgba(248,113,113,0.15)';
+            auth.showError('alertBox', `${displayName} is already taken.`);
+            setFlag(false);
+        } else {
+            element.style.borderColor = '#34d399';
+            element.style.boxShadow   = '0 0 0 3px rgba(52,211,153,0.12)';
+            alertBox.style.display    = 'none';
+            setFlag(true);
+        }
+    } catch (err) {
+        console.warn('Availability check failed:', err);
+    }
+    checkSubmitReady();
+}
+
+// Reset border when user starts re-typing
+function resetFieldStyle(element) {
+    element.style.borderColor = '';
+    element.style.boxShadow   = '';
+}
+
+const signupUsernameEl = document.getElementById('signupUsername');
+const signupEmailEl    = document.getElementById('signupEmail');
+
+if (signupUsernameEl) {
+    signupUsernameEl.addEventListener('input',  () => { resetFieldStyle(signupUsernameEl); usernameAvail = true; });
+    signupUsernameEl.addEventListener('blur',   () => validateAvailability('username', signupUsernameEl, 'Username',     (v) => { usernameAvail = v; }));
+}
+if (signupEmailEl) {
+    signupEmailEl.addEventListener('input',  () => { resetFieldStyle(signupEmailEl); emailAvail = true; });
+    signupEmailEl.addEventListener('blur',   () => validateAvailability('email',    signupEmailEl,    'Email address', (v) => { emailAvail = v; }));
 }
 
 signupPassword.addEventListener('input', (e) => {
