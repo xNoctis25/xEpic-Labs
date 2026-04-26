@@ -576,3 +576,43 @@ input::-webkit-credentials-auto-fill-button {
     margin-bottom: 0.5rem;
   }
 }
+
+/* =========================================
+   FLAWLESS "SLIDING DOOR" ANIMATION
+   ========================================= */
+
+/* 1. Panel acts as a clipping window */
+.glass-panel {
+  overflow: hidden !important;
+}
+
+/* 2. Form crossfade + height transition */
+form {
+  transition: opacity 0.3s ease, max-height 0.45s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+/* 3. Inactive form collapses invisibly */
+form.hidden {
+  opacity: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+
+/* 4. Active form reveals smoothly */
+form:not(.hidden) {
+  opacity: 1 !important;
+  max-height: 650px !important;
+}
+
+/* 5. Lock inner signup form width so inputs don't squish during the outer
+   panel's max-width animation — the form content is already at full size
+   while the panel slides open around it */
+@media (min-width: 481px) {
+  #signupForm {
+    width: 670px !important;
+    max-width: none !important;
+  }
+}
