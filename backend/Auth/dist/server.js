@@ -14,6 +14,10 @@ app.use((0, cors_1.default)());
 app.use(express_1.default.json());
 // Serve static HTML/CSS/JS frontend
 app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
+// Redirect naked domain to the signup portal
+app.get('/', (req, res) => {
+    res.redirect('/signup.html');
+});
 // Placeholder API Routes to power the UI
 const apiRouter = express_1.default.Router();
 apiRouter.post('/signup', (req, res) => {
