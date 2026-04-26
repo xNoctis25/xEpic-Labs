@@ -481,12 +481,35 @@ p.subtitle {
   margin: 20px 0;
 }
 
-/* ── Forcefully Hide Native Browser Password Icons ── */
+/* =========================================
+   ULTIMATE INPUT NORMALIZATION & RESET
+   ========================================= */
+/* 1. Strip all native OS/Browser styling from inputs */
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+}
+
+/* 2. Nuke Microsoft Edge Reveal & Clear Icons */
 input::-ms-reveal,
-input::-ms-clear,
+input::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* 3. Nuke WebKit (Chrome/Safari/Edge) Reveal & Clear Icons across ALL states */
 input::-webkit-reveal,
+input::-webkit-clear-button,
+input::-webkit-inner-spin-button,
+input::-webkit-outer-spin-button,
 input::-webkit-credentials-auto-fill-button {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+  opacity: 0 !important;
+  -webkit-appearance: none !important;
 }
