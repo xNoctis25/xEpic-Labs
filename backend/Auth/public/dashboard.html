@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="glass-panel" style="max-width: 500px;">
+        <h2>Dashboard</h2>
+        <p class="subtitle">Protected Route Successfully Accessed</p>
+        <div id="profileData" style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="color: var(--text-muted); margin-bottom: 10px; text-align: center;">Loading secure profile...</p>
+        </div>
+        <button id="logoutBtn" class="btn" style="background: rgba(255, 76, 76, 0.2); border: 1px solid var(--error); color: var(--error);">
+            Secure Sign Out
+        </button>
+    </div>
+    <script src="/js/api.js"></script>
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>

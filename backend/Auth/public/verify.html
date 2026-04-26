@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="glass-panel">
+        <h2>Check your Terminal</h2>
+        <p class="subtitle" id="emailDisplay">Enter the 6-digit OTP sent to your email.</p>
+        <div id="alertBox" class="alert"></div>
+        <form id="verifyForm">
+            <div class="otp-grid" id="otpGrid">
+                <input type="text" maxlength="1" pattern="[0-9]" required autocomplete="off">
+                <input type="text" maxlength="1" pattern="[0-9]" required autocomplete="off">
+                <input type="text" maxlength="1" pattern="[0-9]" required autocomplete="off">
+                <input type="text" maxlength="1" pattern="[0-9]" required autocomplete="off">
+                <input type="text" maxlength="1" pattern="[0-9]" required autocomplete="off">
+                <input type="text" maxlength="1" pattern="[0-9]" required autocomplete="off">
+            </div>
+            <button type="submit" class="btn" id="submitBtn" disabled>Verify Account</button>
+        </form>
+        <p class="text-center" style="color: var(--text-muted);">Code expires in <span id="countdown" style="color: var(--primary);">10:00</span></p>
+        <p class="text-center" style="margin-top: 10px;">
+            <button id="resendBtn" style="background:none; border:none; color:var(--text-muted); cursor:pointer; text-decoration: underline;">Resend OTP</button>
+        </p>
+    </div>
+    <script src="/js/api.js"></script>
+    <script src="/js/verify.js"></script>
+</body>
+</html>

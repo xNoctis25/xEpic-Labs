@@ -1,0 +1,53 @@
+name: Deploy Auth/Web to NewYorkCommand (Zero-Trust)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/deploy-newyork.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Copy files to NewYorkCommand
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.NYC_SERVER_IP }}
+          username: root
+          key: ${{ secrets.NYC_SSH_PRIVATE_KEY }}
+          source: "."
+          target: "~/xEpic-Labs"
+
+      - name: Execute Node/PM2 Setup for Auth Service
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.NYC_SERVER_IP }}
+          username: root
+          key: ${{ secrets.NYC_SSH_PRIVATE_KEY }}
+          script: |
+            if ! command -v node &> /dev/null || ! command -v npm &> /dev/null; then
+              echo "Node.js not found. Installing now..."
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+            if ! command -v pm2 &> /dev/null; then
+              sudo npm install -g pm2
+            fi
+            cd ~/xEpic-Labs/backend/Auth
+            npm install
+            npm run build
+            echo "🗽 [NEWYORKCOMMAND DO] Executing Auth Service Deployment..."
+            pm2 flush
+            pm2 restart auth-service --update-env || pm2 start dist/server.js --name "auth-service"
+            pm2 save
