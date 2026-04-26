@@ -41,8 +41,8 @@ signupPassword.addEventListener('input', (e) => {
     const colors = ['#ff4c4c', '#ffa502', '#f1c40f', '#4cd137'];
     const labels = ['Weak', 'Fair', 'Good', 'Strong'];
     
-    bars.forEach((bar, i) => { bar.style.background = i < score ? colors[score - 1] : 'rgba(255, 255, 255, 0.1)'; });
-    strengthText.textContent = score > 0 ? labels[score - 1] : 'Start typing...';
+    bars.forEach((bar, i) => { bar.style.background = i < score ? colors[score - 1] : 'rgba(255, 255, 255, 0.07)'; });
+    strengthText.textContent = val.length > 0 ? (score > 0 ? labels[score - 1] : '') : '';
     strengthText.style.color = score > 0 ? colors[score - 1] : 'var(--text-muted)';
     signupSubmitBtn.disabled = score < 4;
 });

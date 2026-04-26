@@ -3,56 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Platform Authentication</title>
+    <title>xEpic Labs — Sign In</title>
+    <meta name="description" content="Secure authentication portal for xEpic Labs platform.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
     <div class="glass-panel">
-        <div class="auth-tabs">
-            <button type="button" class="tab-btn active" id="tabLogin">Log In</button>
-            <button type="button" class="tab-btn" id="tabSignup">Sign Up</button>
+
+        <!-- Brand Header -->
+        <div class="brand">
+            <div class="brand-logo">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+            </div>
+            <h1>xEpic Labs</h1>
+            <p>Secure Infrastructure Platform</p>
         </div>
-        
+
+        <!-- Tabs -->
+        <div class="auth-tabs">
+            <button type="button" class="tab-btn active" id="tabLogin">Sign In</button>
+            <button type="button" class="tab-btn" id="tabSignup">Create Account</button>
+        </div>
+
+        <!-- Alert -->
         <div id="alertBox" class="alert"></div>
 
-        <form id="loginForm">
+        <!-- Login Form -->
+        <form id="loginForm" autocomplete="on">
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="loginEmail" required placeholder="you@example.com">
+                <label for="loginEmail">Email</label>
+                <input type="email" id="loginEmail" name="email" required placeholder="you@example.com" autocomplete="email">
             </div>
             <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="loginPassword" required placeholder="••••••••">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" name="password" required placeholder="••••••••" autocomplete="current-password">
             </div>
             <div class="checkbox-group">
                 <input type="checkbox" id="rememberMe" checked>
-                <label for="rememberMe" style="margin:0; text-transform:none;">Remember me for 30 days</label>
+                <label for="rememberMe">Keep me signed in</label>
             </div>
-            <button type="submit" class="btn" id="loginSubmitBtn">Log In</button>
+            <button type="submit" class="btn" id="loginSubmitBtn">Sign In</button>
         </form>
 
-        <form id="signupForm" class="hidden">
+        <!-- Signup Form -->
+        <form id="signupForm" class="hidden" autocomplete="on">
             <div class="form-group">
-                <label>Username</label>
-                <input type="text" id="signupUsername" required minlength="3" maxlength="30" placeholder="e.g. noctis25">
+                <label for="signupUsername">Username</label>
+                <input type="text" id="signupUsername" name="username" required minlength="3" maxlength="30" placeholder="e.g. noctis25" autocomplete="username">
             </div>
             <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="signupEmail" required placeholder="you@example.com">
+                <label for="signupEmail">Email</label>
+                <input type="email" id="signupEmail" name="email" required placeholder="you@example.com" autocomplete="email">
             </div>
             <div class="form-group">
-                <label>Password</label>
-                <input type="password" id="signupPassword" required placeholder="••••••••">
+                <label for="signupPassword">Password</label>
+                <input type="password" id="signupPassword" name="password" required placeholder="••••••••" autocomplete="new-password">
                 <div class="strength-meter">
                     <div class="strength-bar" id="bar-1"></div>
                     <div class="strength-bar" id="bar-2"></div>
                     <div class="strength-bar" id="bar-3"></div>
                     <div class="strength-bar" id="bar-4"></div>
                 </div>
-                <div class="strength-text" id="strengthText">Start typing...</div>
+                <div class="strength-text" id="strengthText"></div>
             </div>
             <button type="submit" class="btn" id="signupSubmitBtn" disabled>Create Account</button>
         </form>
+
     </div>
 
     <script src="/js/api.js"></script>
