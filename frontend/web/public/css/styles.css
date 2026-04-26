@@ -93,11 +93,18 @@ body::after {
   transition: max-width 0.4s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Force horizontal expansion for the 2x2 grid */
-.glass-panel.wide {
-  width: 750px !important;       /* Explicitly force the box wider */
-  max-width: 95vw !important;    /* Prevent overflow on small screens */
-  padding-inline: 48px;
+/* =========================================
+   NUCLEAR WIDTH FIX (PURE CSS STATE DETECTION)
+   ========================================= */
+/* Ensure the panel transitions width smoothly */
+.glass-panel {
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+/* When the signup form is visible → expand horizontally */
+.glass-panel:has(#signupForm:not(.hidden)) {
+  width: 750px !important;
+  max-width: 95vw !important;
 }
 
 @keyframes fadeUp {
