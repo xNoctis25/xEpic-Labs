@@ -6,6 +6,7 @@ const tabSignup   = document.getElementById('tabSignup');
 const loginForm   = document.getElementById('loginForm');
 const signupForm  = document.getElementById('signupForm');
 const alertBox    = document.getElementById('alertBox');
+const glassPanel  = document.querySelector('.glass-panel');
 
 function switchTab(isLogin) {
     alertBox.style.display = 'none';
@@ -14,11 +15,13 @@ function switchTab(isLogin) {
         tabSignup.classList.remove('active');
         loginForm.classList.remove('hidden');
         signupForm.classList.add('hidden');
+        if (glassPanel) glassPanel.classList.remove('wide');
     } else {
         tabSignup.classList.add('active');
         tabLogin.classList.remove('active');
         signupForm.classList.remove('hidden');
         loginForm.classList.add('hidden');
+        if (glassPanel) glassPanel.classList.add('wide');
     }
 }
 tabLogin.addEventListener('click', () => switchTab(true));

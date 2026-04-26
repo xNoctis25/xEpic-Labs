@@ -89,6 +89,12 @@ body::after {
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
   z-index: 1;
   overflow: hidden;
+  transition: max-width 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Dynamic width expansion for the 2x2 signup grid */
+.glass-panel.wide {
+  max-width: 650px;
 }
 
 @keyframes fadeUp {
