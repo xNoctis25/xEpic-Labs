@@ -9,6 +9,13 @@ const alertBox = document.getElementById('alertBox');
 
 function switchTab(isLogin) {
     alertBox.style.display = 'none';
+    const panel = document.querySelector('.glass-panel');
+
+    // 1. Lock the current height before switching
+    const startHeight = panel.offsetHeight;
+    panel.style.height = startHeight + 'px';
+
+    // 2. Switch the active tabs and forms
     if (isLogin) {
         tabLogin.classList.add('active');
         tabSignup.classList.remove('active');
@@ -20,6 +27,24 @@ function switchTab(isLogin) {
         signupForm.classList.remove('hidden');
         loginForm.classList.add('hidden');
     }
+
+    // 3. Measure the new natural height of the panel
+    panel.style.height = 'auto';
+    const targetHeight = panel.offsetHeight;
+
+    // 4. Reset to start height and force a browser reflow
+    panel.style.height = startHeight + 'px';
+    panel.offsetHeight;
+
+    // 5. Apply a premium cubic-bezier smooth transition
+    panel.style.transition = 'height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)';
+    panel.style.height = targetHeight + 'px';
+
+    // 6. Clean up CSS after the animation finishes
+    setTimeout(() => {
+        panel.style.transition = '';
+        panel.style.height = 'auto';
+    }, 400);
 }
 tabLogin.addEventListener('click', () => switchTab(true));
 tabSignup.addEventListener('click', () => switchTab(false));
