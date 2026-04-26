@@ -578,58 +578,52 @@ input::-webkit-credentials-auto-fill-button {
 }
 
 /* =========================================
-   PRO-LEVEL CHOREOGRAPHED ANIMATION
+   PRO-LEVEL FLIP CHOREOGRAPHY (THE ULTIMATE FIX)
    ========================================= */
 
-/* 1. Smooth Panel Expansion — Expo-Out curve */
+/* 1. Panel — JS FLIP handles height; CSS handles width + default overflow */
 .glass-panel {
-  /* Expo-Out: blazing fast start → long buttery deceleration */
-  transition: max-width 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              padding    0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  width: 100% !important;
+  max-width: 400px;
   overflow: hidden !important;
+  transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
+/* JS adds/removes .wide; :has is kept as a CSS-only fallback */
+.glass-panel.wide,
 .glass-panel:has(#signupForm:not(.hidden)) {
   max-width: 750px !important;
-  padding-inline: 48px;
 }
 
-/* 2. Base form transition (incoming state) */
-form {
-  transform-origin: top center;
-  /* Incoming form delays opacity 0.15s — panel expands BEFORE content fades in */
-  transition: opacity    0.4s ease 0.15s,
-              max-height 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              transform  0.6s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-/* 3. Outgoing form — exits FAST with no delay to clear the stage */
+/* 2. Outgoing form — instantly out of flow so FLIP height measurement is clean */
 form.hidden {
-  opacity: 0 !important;
-  max-height: 0 !important;
-  overflow: hidden !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  border: 0 !important;
-  /* Spatial depth: slides down and scales back as it vanishes */
-  transform: translateY(15px) scale(0.96) !important;
-  transition: opacity    0.2s ease 0s,
-              max-height 0.6s cubic-bezier(0.16, 1, 0.3, 1),
-              transform  0.4s ease 0s !important;
+  display: none !important;
 }
 
-/* 4. Tightly hugged max-heights for each form (prevents calculation lag) */
-#loginForm:not(.hidden) {
-  max-height: 280px !important;
-  transform: translateY(0) scale(1) !important;
+/* 3. Incoming form — spatial keyframe reveal */
+form:not(.hidden) {
+  display: block !important;
+  animation: proFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+
+  /* Override all previous max-height and transform constraints */
+  max-height: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+  transition: none !important;
 }
 
+/* Nullify old ID-specific max-height rules from previous iterations */
+#loginForm:not(.hidden),
 #signupForm:not(.hidden) {
-  max-height: 400px !important;
-  transform: translateY(0) scale(1) !important;
+  max-height: none !important;
 }
 
-/* 5. Desktop width lock — signup form stays at full width while panel slides open */
+@keyframes proFadeIn {
+  0%   { opacity: 0; transform: translateY(14px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+/* 4. Desktop width lock — form content at full size while panel slides open */
 @media (min-width: 481px) {
   #signupForm {
     width: 670px !important;

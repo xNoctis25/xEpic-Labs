@@ -8,18 +8,45 @@ const signupForm  = document.getElementById('signupForm');
 const alertBox    = document.getElementById('alertBox');
 
 function switchTab(isLogin) {
+    const glassPanel = document.querySelector('.glass-panel');
     alertBox.style.display = 'none';
+
+    // FLIP Step 1 — Record current height
+    const startHeight = glassPanel.offsetHeight;
+    glassPanel.style.height = startHeight + 'px';
+    glassPanel.style.transition = 'none'; // Freeze CSS transitions
+
+    // FLIP Step 2 — Swap forms and width class
     if (isLogin) {
         tabLogin.classList.add('active');
         tabSignup.classList.remove('active');
         loginForm.classList.remove('hidden');
         signupForm.classList.add('hidden');
+        glassPanel.classList.remove('wide');
     } else {
         tabSignup.classList.add('active');
         tabLogin.classList.remove('active');
         signupForm.classList.remove('hidden');
         loginForm.classList.add('hidden');
+        glassPanel.classList.add('wide');
     }
+
+    // FLIP Step 3 — Measure new target height
+    glassPanel.style.height = 'auto';
+    const targetHeight = glassPanel.offsetHeight;
+
+    // FLIP Step 4 — Snap back to start, force reflow, then animate to target
+    glassPanel.style.height = startHeight + 'px';
+    void glassPanel.offsetHeight; // GPU reflow trigger
+
+    glassPanel.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+    glassPanel.style.height = targetHeight + 'px';
+
+    // FLIP Step 5 — Hand control back to CSS after animation
+    setTimeout(() => {
+        glassPanel.style.height = 'auto';
+        glassPanel.style.transition = '';
+    }, 620);
 }
 tabLogin.addEventListener('click', () => switchTab(true));
 tabSignup.addEventListener('click', () => switchTab(false));
