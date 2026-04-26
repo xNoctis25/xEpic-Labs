@@ -57,7 +57,7 @@ app.post('/api/auth/signup', async (req, res) => {
             return res.status(400).json({ message: 'Username, email, and password are required.' });
         }
         // 1. Check for duplicates
-        const checkUser = await db_1.default.query('SELECT id FROM users WHERE username = $1 OR email = $2', [username, email]);
+        const checkUser = await db_1.default.query('SELECT id FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)', [username, email]);
         if (checkUser.rows.length > 0) {
             return res.status(409).json({ message: 'Username or Email already exists.' });
         }
@@ -98,7 +98,7 @@ app.post('/api/auth/verify', async (req, res) => {
         if (!username || !otp) {
             return res.status(400).json({ message: 'Username and OTP are required.' });
         }
-        const checkUser = await db_1.default.query('SELECT * FROM users WHERE username = $1 AND otp = $2 AND otpexpiry > NOW()', [username, otp]);
+        const checkUser = await db_1.default.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND otp = $2 AND otpexpiry > NOW()', [username, otp]);
         if (checkUser.rows.length === 0) {
             return res.status(401).json({ message: 'Invalid or expired OTP.' });
         }
@@ -118,7 +118,7 @@ app.post('/api/auth/verify', async (req, res) => {
 app.post('/api/auth/resend-otp', async (req, res) => {
     try {
         const { username } = req.body;
-        const userQuery = await db_1.default.query('SELECT * FROM users WHERE username = $1 AND isverified = false', [username]);
+        const userQuery = await db_1.default.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND isverified = false', [username]);
         if (userQuery.rows.length === 0) {
             return res.status(404).json({ message: 'User not found or already verified.' });
         }
@@ -153,7 +153,7 @@ app.post('/api/auth/login', async (req, res) => {
         if (!username || !password) {
             return res.status(400).json({ message: 'Username and password are required.' });
         }
-        const userQuery = await db_1.default.query('SELECT * FROM users WHERE username = $1', [username]);
+        const userQuery = await db_1.default.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
         if (userQuery.rows.length === 0) {
             return res.status(401).json({ message: 'Invalid username or password.' });
         }
@@ -207,8 +207,8 @@ app.post('/api/auth/check-exists', async (req, res) => {
             return res.status(400).json({ message: 'Invalid field parameter.' });
         }
         const query = field === 'username'
-            ? 'SELECT id FROM users WHERE username = $1'
-            : 'SELECT id FROM users WHERE email = $1';
+            ? 'SELECT id FROM users WHERE LOWER(username) = LOWER($1)'
+            : 'SELECT id FROM users WHERE LOWER(email) = LOWER($1)';
         const check = await db_1.default.query(query, [value]);
         res.status(200).json({ exists: check.rows.length > 0 });
     }
@@ -221,7 +221,7 @@ app.post('/api/auth/check-exists', async (req, res) => {
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {
         const { email } = req.body;
-        const userQuery = await db_1.default.query('SELECT id, email, username FROM users WHERE email = $1', [email]);
+        const userQuery = await db_1.default.query('SELECT id, email, username FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         // SECURE: Always return 200 to prevent user enumeration
         if (userQuery.rows.length === 0) {
             console.log(`[AUTH] Failed reset attempt (not found): ${email}`);
@@ -259,7 +259,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
         if (!email || !otp || !newPassword) {
             return res.status(400).json({ message: 'Email, OTP, and new password are required.' });
         }
-        const checkUser = await db_1.default.query('SELECT * FROM users WHERE email = $1 AND otp = $2 AND otpexpiry > NOW()', [email, otp]);
+        const checkUser = await db_1.default.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND otp = $2 AND otpexpiry > NOW()', [email, otp]);
         if (checkUser.rows.length === 0) {
             return res.status(401).json({ message: 'Invalid or expired reset code.' });
         }

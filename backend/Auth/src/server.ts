@@ -26,7 +26,7 @@ app.post('/api/auth/signup', async (req, res) => {
 
         // 1. Check for duplicates
         const checkUser = await pool.query(
-            'SELECT id FROM users WHERE username = $1 OR email = $2',
+            'SELECT id FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($2)',
             [username, email]
         );
         if (checkUser.rows.length > 0) {
@@ -80,7 +80,7 @@ app.post('/api/auth/verify', async (req, res) => {
         }
 
         const checkUser = await pool.query(
-            'SELECT * FROM users WHERE username = $1 AND otp = $2 AND otpexpiry > NOW()',
+            'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND otp = $2 AND otpexpiry > NOW()',
             [username, otp]
         );
 
@@ -117,7 +117,7 @@ app.post('/api/auth/resend-otp', async (req, res) => {
         const { username } = req.body;
 
         const userQuery = await pool.query(
-            'SELECT * FROM users WHERE username = $1 AND isverified = false',
+            'SELECT * FROM users WHERE LOWER(username) = LOWER($1) AND isverified = false',
             [username]
         );
 
@@ -166,7 +166,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         const userQuery = await pool.query(
-            'SELECT * FROM users WHERE username = $1',
+            'SELECT * FROM users WHERE LOWER(username) = LOWER($1)',
             [username]
         );
 
@@ -244,8 +244,8 @@ app.post('/api/auth/check-exists', async (req, res) => {
         }
 
         const query = field === 'username'
-            ? 'SELECT id FROM users WHERE username = $1'
-            : 'SELECT id FROM users WHERE email = $1';
+            ? 'SELECT id FROM users WHERE LOWER(username) = LOWER($1)'
+            : 'SELECT id FROM users WHERE LOWER(email) = LOWER($1)';
 
         const check = await pool.query(query, [value]);
         res.status(200).json({ exists: check.rows.length > 0 });
@@ -262,7 +262,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         const { email } = req.body;
 
         const userQuery = await pool.query(
-            'SELECT id, email, username FROM users WHERE email = $1',
+            'SELECT id, email, username FROM users WHERE LOWER(email) = LOWER($1)',
             [email]
         );
 
@@ -314,7 +314,7 @@ app.post('/api/auth/reset-password', async (req, res) => {
         }
 
         const checkUser = await pool.query(
-            'SELECT * FROM users WHERE email = $1 AND otp = $2 AND otpexpiry > NOW()',
+            'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND otp = $2 AND otpexpiry > NOW()',
             [email, otp]
         );
 

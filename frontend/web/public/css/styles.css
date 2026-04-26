@@ -480,3 +480,13 @@ p.subtitle {
   border-top: 1px solid var(--glass-border);
   margin: 20px 0;
 }
+
+/* ── Forcefully Hide Native Browser Password Icons ── */
+input::-ms-reveal,
+input::-ms-clear,
+input::-webkit-reveal,
+input::-webkit-credentials-auto-fill-button {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
