@@ -233,6 +233,90 @@ app.post('/api/auth/logout', (_req, res) => {
     res.status(200).json({ message: 'Logged out successfully.' });
 });
 
+// ── FORGOT PASSWORD (enumeration-safe) ───────────────────────────────────────
+app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+        const { email } = req.body;
+
+        const userQuery = await pool.query(
+            'SELECT id, email, username FROM users WHERE email = $1',
+            [email]
+        );
+
+        // SECURE: Always return 200 to prevent user enumeration
+        if (userQuery.rows.length === 0) {
+            console.log(`[AUTH] Failed reset attempt (not found): ${email}`);
+            return res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+        }
+
+        const user = userQuery.rows[0];
+        const otp  = Math.floor(100000 + Math.random() * 900000).toString();
+
+        await pool.query(
+            `UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes' WHERE id = $2`,
+            [otp, user.id]
+        );
+
+        await resend.emails.send({
+            from: process.env.RESEND_FROM_EMAIL || 'noreply@xepic-labs.com',
+            to: user.email,
+            subject: 'xEpic Labs — Password Reset Code',
+            html: `
+                <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0b0c10;color:#f0f4f8;border-radius:12px;">
+                    <h2 style="color:#66fcf1;margin-bottom:8px;">xEpic Labs</h2>
+                    <p>Hi <strong>${user.username}</strong>,</p>
+                    <p>We received a request to reset your password. Your reset code is:</p>
+                    <div style="font-size:2.5rem;font-weight:bold;letter-spacing:12px;color:#66fcf1;margin:24px 0;">${otp}</div>
+                    <p style="color:#6b7a8d;font-size:0.85rem;">This code expires in 15 minutes. If you did not request this, ignore this email — your account is safe.</p>
+                </div>
+            `
+        });
+
+        console.log(`[AUTH] 📧 Password reset OTP sent to: ${email}`);
+        res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+
+    } catch (error) {
+        console.error('[AUTH ERROR] /forgot-password:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+// ── RESET PASSWORD ────────────────────────────────────────────────────────────
+app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+
+        if (!email || !otp || !newPassword) {
+            return res.status(400).json({ message: 'Email, OTP, and new password are required.' });
+        }
+
+        const checkUser = await pool.query(
+            'SELECT * FROM users WHERE email = $1 AND otp = $2 AND otpexpiry > NOW()',
+            [email, otp]
+        );
+
+        if (checkUser.rows.length === 0) {
+            return res.status(401).json({ message: 'Invalid or expired reset code.' });
+        }
+
+        const user = checkUser.rows[0];
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await pool.query(
+            'UPDATE users SET password = $1, otp = NULL, otpexpiry = NULL WHERE id = $2',
+            [hashedPassword, user.id]
+        );
+
+        console.log(`[AUTH] ✅ Password reset successful for: ${email}`);
+        res.status(200).json({ message: 'Password updated successfully.' });
+
+    } catch (error) {
+        console.error('[AUTH ERROR] /reset-password:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
     res.status(200).json({ status: 'Auth API Online', timestamp: new Date().toISOString() });

@@ -141,3 +141,26 @@ signupForm.addEventListener('submit', async (e) => {
         signupSubmitBtn.textContent = 'Create Account';
     }
 });
+
+// ── Forgot Password Flow ──
+const forgotLink = document.querySelector('.forgot-link');
+if (forgotLink) {
+    forgotLink.addEventListener('click', async (e) => {
+        e.preventDefault();
+
+        const email = prompt('Enter your registered email address to receive a reset code:');
+        if (!email || !email.trim()) return;
+
+        try {
+            auth.showError('alertBox', 'Sending reset code...');
+            await auth.request('/forgot-password', {
+                method: 'POST',
+                body: JSON.stringify({ email: email.trim() })
+            });
+            sessionStorage.setItem('reset_email', email.trim());
+            window.location.href = '/reset.html';
+        } catch (err) {
+            auth.showError('alertBox', err.message || 'Error processing request.');
+        }
+    });
+}
