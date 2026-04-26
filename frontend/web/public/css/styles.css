@@ -32,13 +32,12 @@ body {
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--bg);
   color: var(--text-main);
-  min-height: 100vh;
   display: flex;
-  /* FIX: Lock to top to prevent Layout Shift when tabs change */
-  align-items: flex-start;
-  padding-top: 15vh;
   justify-content: center;
-  overflow: auto;
+  align-items: flex-start; /* STRICTLY PIN TO TOP */
+  padding-top: 12vh; /* PUSH DOWN FROM TOP */
+  min-height: 100vh;
+  overflow: hidden;
   position: relative;
 }
 
@@ -79,23 +78,17 @@ body::after {
 
 /* ── Card ── */
 .glass-panel {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 420px;
-  min-height: 580px;
-  margin: 16px;
   background: var(--glass-bg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  padding: 40px 36px 36px;
-  box-shadow:
-    0 0 0 1px rgba(255,255,255,0.03),
-    0 20px 60px rgba(0, 0, 0, 0.6),
-    0 0 80px rgba(102, 252, 241, 0.04);
-  animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  border-radius: 16px;
+  padding: 40px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  z-index: 1;
+  min-height: 600px; /* STRICTLY LOCK HEIGHT */
 }
 
 @keyframes fadeUp {
