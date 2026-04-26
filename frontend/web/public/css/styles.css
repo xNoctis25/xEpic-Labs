@@ -34,9 +34,11 @@ body {
   color: var(--text-main);
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  /* FIX: Lock to top to prevent Layout Shift when tabs change */
+  align-items: flex-start;
+  padding-top: 15vh;
   justify-content: center;
-  overflow: hidden;
+  overflow: auto;
   position: relative;
 }
 
