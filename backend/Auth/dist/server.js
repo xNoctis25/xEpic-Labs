@@ -6,18 +6,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 4000;
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
-// Serve static HTML/CSS/JS frontend
-app.use(express_1.default.static(path_1.default.join(__dirname, '../public')));
-// Redirect naked domain to the signup portal
-app.get('/', (req, res) => {
-    res.redirect('/signup.html');
-});
 // Placeholder API Routes to power the UI
 const apiRouter = express_1.default.Router();
 apiRouter.post('/signup', (req, res) => {

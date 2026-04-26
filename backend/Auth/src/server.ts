@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import path from 'path';
 
 dotenv.config();
 
@@ -10,14 +9,6 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
-
-// Serve static HTML/CSS/JS frontend
-app.use(express.static(path.join(__dirname, '../public')));
-
-// Redirect naked domain to the signup portal
-app.get('/', (req, res) => {
-    res.redirect('/signup.html');
-});
 
 // Placeholder API Routes to power the UI
 const apiRouter = express.Router();
