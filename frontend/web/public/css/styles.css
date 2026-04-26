@@ -35,7 +35,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding-top: 15vh;
+  padding-top: 25vh;
   min-height: 100vh;
   overflow: hidden;
   position: relative;
