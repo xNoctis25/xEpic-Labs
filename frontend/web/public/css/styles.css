@@ -279,7 +279,75 @@ body::after {
   padding: 0;
 }
 
-/* ── Button ── */
+/* ── Password Input with Eye Toggle ── */
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-wrapper input {
+  width: 100%;
+  padding-right: 44px; /* make room for the eye button */
+}
+
+.eye-btn {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+  line-height: 0;
+}
+
+.eye-btn:hover { color: var(--primary); }
+
+.eye-icon {
+  width: 18px;
+  height: 18px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Form Footer (Remember Me + Forgot Password row) ── */
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.form-footer .checkbox-group {
+  margin-bottom: 0;
+}
+
+.forgot-link {
+  font-size: 0.8rem;
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.forgot-link:hover { opacity: 0.75; }
+
+/* ── Password Match Feedback ── */
+.match-text {
+  font-size: 0.75rem;
+  margin-top: 6px;
+  font-weight: 500;
+  min-height: 1em;
+  transition: color 0.3s;
+}
+
+
 .btn {
   width: 100%;
   padding: 13px;
