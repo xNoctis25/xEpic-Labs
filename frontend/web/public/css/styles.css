@@ -34,8 +34,7 @@ body {
   color: var(--text-main);
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* STRICTLY PIN TO TOP */
-  padding-top: 12vh; /* PUSH DOWN FROM TOP */
+  align-items: center; /* RESTORE PERFECT VERTICAL CENTERING */
   min-height: 100vh;
   overflow: hidden;
   position: relative;
