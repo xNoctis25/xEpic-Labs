@@ -35,11 +35,9 @@
         <!-- ── Sign In Form ── -->
         <form id="loginForm" autocomplete="on">
             <div class="form-group">
-                <label for="loginUsername">Username</label>
                 <input type="text" id="loginUsername" name="username" required placeholder="Username" autocomplete="username">
             </div>
             <div class="form-group">
-                <label for="loginPassword">Password</label>
                 <div class="input-wrapper">
                     <input type="password" id="loginPassword" name="password" required placeholder="Password" autocomplete="current-password">
                     <button type="button" class="eye-btn" id="toggleLoginPassword" aria-label="Toggle password visibility">
@@ -61,15 +59,12 @@
         <!-- ── Create Account Form ── -->
         <form id="signupForm" class="hidden" autocomplete="on">
             <div class="form-group">
-                <label for="signupUsername">Username</label>
                 <input type="text" id="signupUsername" name="username" required minlength="3" maxlength="30" placeholder="Username" autocomplete="username">
             </div>
             <div class="form-group">
-                <label for="signupEmail">Email</label>
                 <input type="email" id="signupEmail" name="email" required placeholder="Email Address" autocomplete="email">
             </div>
             <div class="form-group">
-                <label for="signupPassword">Password</label>
                 <div class="input-wrapper">
                     <input type="password" id="signupPassword" name="password" required placeholder="Password" autocomplete="new-password">
                     <button type="button" class="eye-btn" id="toggleSignupPassword" aria-label="Toggle password visibility">
@@ -86,7 +81,6 @@
                 <div class="strength-text" id="strengthText"></div>
             </div>
             <div class="form-group">
-                <label for="signupConfirmPassword">Confirm Password</label>
                 <div class="input-wrapper">
                     <input type="password" id="signupConfirmPassword" name="confirmPassword" required placeholder="Confirm Password" autocomplete="new-password">
                     <button type="button" class="eye-btn" id="toggleConfirmPassword" aria-label="Toggle password visibility">
