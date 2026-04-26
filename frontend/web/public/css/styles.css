@@ -86,26 +86,22 @@ body::after {
   border-radius: 16px;
   padding: 40px;
   width: 100%;
-  max-width: 400px;
+  max-width: 400px;        /* Strict pixel base — browser can interpolate from here */
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
   z-index: 1;
   overflow: hidden;
-  transition: max-width 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Animate ONLY max-width — avoids jank from transitioning backdrop-filter etc. */
+  transition: max-width 0.5s cubic-bezier(0.25, 1, 0.5, 1),
+              padding    0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* =========================================
-   NUCLEAR WIDTH FIX (PURE CSS STATE DETECTION)
-   ========================================= */
-/* Ensure the panel transitions width smoothly */
-.glass-panel {
-  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1) !important;
-}
-
-/* When the signup form is visible → expand horizontally */
+/* When signup form is visible: glide from 400px → 750px (same unit, smooth) */
 .glass-panel:has(#signupForm:not(.hidden)) {
-  width: 750px !important;
-  max-width: 95vw !important;
+  max-width: 750px;       /* Strict pixel target — same unit as base */
+  padding-inline: 48px;
 }
+
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(24px); }
