@@ -1,12 +1,22 @@
-const inputs = document.querySelectorAll('.otp-grid input');
+const inputs    = document.querySelectorAll('.otp-grid input');
 const verifyForm = document.getElementById('verifyForm');
-const submitBtn = document.getElementById('submitBtn');
-const resendBtn = document.getElementById('resendBtn');
-const email = localStorage.getItem('verify_email');
+const submitBtn  = document.getElementById('submitBtn');
+const resendBtn  = document.getElementById('resendBtn');
 
-if (!email) window.location.href = '/signup.html';
-document.getElementById('emailDisplay').textContent = `OTP sent to ${email}`;
+// Grab username from sessionStorage (set by auth.js on signup/login-403)
+const username = sessionStorage.getItem('verify_username');
+const email    = sessionStorage.getItem('verify_email');
 
+// Guard: must have an identifier to verify
+if (!username && !email) window.location.href = '/';
+
+// Display hint text
+const displayEl = document.getElementById('emailDisplay');
+if (displayEl) {
+    displayEl.textContent = email ? `OTP sent to ${email}` : `OTP sent for @${username}`;
+}
+
+// ── OTP Grid Input Handling ──
 inputs.forEach((input, index) => {
     input.addEventListener('input', (e) => {
         if (e.target.value.length === 1 && index < inputs.length - 1) inputs[index + 1].focus();
@@ -31,25 +41,33 @@ function checkSubmit() {
     if (allFilled) setTimeout(() => verifyForm.dispatchEvent(new Event('submit')), 80);
 }
 
-let timeLeft = 600;
+// ── Countdown Timer (15 min = 900s) ──
+let timeLeft = 900;
 const countdownEl = document.getElementById('countdown');
 const timer = setInterval(() => {
     timeLeft--;
     const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
     const s = (timeLeft % 60).toString().padStart(2, '0');
-    countdownEl.textContent = `${m}:${s}`;
+    if (countdownEl) countdownEl.textContent = `${m}:${s}`;
     if (timeLeft <= 0) clearInterval(timer);
 }, 1000);
 
+// ── Verify Submit ──
 verifyForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     submitBtn.disabled = true;
     submitBtn.textContent = 'Verifying...';
     const otp = Array.from(inputs).map(i => i.value).join('');
+
     try {
-        const res = await auth.request('/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp }) });
-        auth.setToken(res.token);
-        localStorage.removeItem('verify_email');
+        // POST to /verify with username (primary identifier)
+        const res = await auth.request('/verify', {
+            method: 'POST',
+            body: JSON.stringify({ username, otp })
+        });
+        auth.setToken(res.token, false); // session-only until they sign in with "keep me signed in"
+        sessionStorage.removeItem('verify_username');
+        sessionStorage.removeItem('verify_email');
         window.location.href = '/dashboard.html';
     } catch (err) {
         auth.showError('alertBox', err.message);
@@ -60,16 +78,27 @@ verifyForm.addEventListener('submit', async (e) => {
     }
 });
 
+// ── Resend OTP ──
 resendBtn.addEventListener('click', async () => {
     resendBtn.disabled = true;
     try {
-        await auth.request('/resend-otp', { method: 'POST', body: JSON.stringify({ email }) });
-        auth.showSuccess('alertBox', 'OTP Resent! Check terminal.');
+        await auth.request('/resend-otp', {
+            method: 'POST',
+            body: JSON.stringify({ username })
+        });
+        auth.showSuccess('alertBox', 'New OTP sent! Check your email.');
         let cd = 60;
         const cdTimer = setInterval(() => {
             cd--;
             resendBtn.textContent = `Wait ${cd}s`;
-            if (cd <= 0) { clearInterval(cdTimer); resendBtn.textContent = 'Resend OTP'; resendBtn.disabled = false; }
+            if (cd <= 0) {
+                clearInterval(cdTimer);
+                resendBtn.textContent = 'Resend OTP';
+                resendBtn.disabled = false;
+            }
         }, 1000);
-    } catch (err) { auth.showError('alertBox', err.message); resendBtn.disabled = false; }
+    } catch (err) {
+        auth.showError('alertBox', err.message);
+        resendBtn.disabled = false;
+    }
 });
