@@ -53,17 +53,17 @@ loginForm.addEventListener('submit', async (e) => {
     const btn = document.getElementById('loginSubmitBtn');
     btn.disabled = true;
     btn.textContent = 'Authenticating...';
-    const email = document.getElementById('loginEmail').value;
+    const username = document.getElementById('loginUsername').value;
     const password = document.getElementById('loginPassword').value;
     const remember = document.getElementById('rememberMe').checked;
     
     try {
-        const res = await auth.request('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+        const res = await auth.request('/login', { method: 'POST', body: JSON.stringify({ username, password }) });
         auth.setToken(res.token, remember);
         window.location.href = '/dashboard.html';
     } catch (err) {
         if (err.requiresVerification || err.status === 403) {
-            sessionStorage.setItem('verify_email', email);
+            sessionStorage.setItem('verify_username', username);
             window.location.href = '/verify.html';
             return;
         }

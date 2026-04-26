@@ -28,7 +28,7 @@ apiRouter.post('/resend-otp', (req, res) => {
 });
 
 apiRouter.post('/login', (req, res) => {
-    console.log(`[AUTH] Login success for ${req.body.email}`);
+    console.log(`[AUTH] Login success for ${req.body.username}`);
     res.status(200).json({ token: 'mock-jwt-token-12345' });
 });
 
