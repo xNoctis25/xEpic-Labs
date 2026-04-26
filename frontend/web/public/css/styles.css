@@ -411,6 +411,9 @@ body::after {
 }
 
 /* ── Utilities ── */
+/* .hidden hides everything EXCEPT forms (forms use max-height accordion instead) */
+.hidden:not(form) { display: none !important; }
+
 /* ── Apple-Level Smooth Form Accordion Animation ── */
 form {
   max-height: 500px; /* Tighter fit to actual content for accurate timing */
