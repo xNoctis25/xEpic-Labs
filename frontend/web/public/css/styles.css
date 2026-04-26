@@ -93,11 +93,11 @@ body::after {
   transition: max-width 0.4s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Dynamic width expansion for the 2x2 signup grid */
+/* Force horizontal expansion for the 2x2 grid */
 .glass-panel.wide {
-  max-width: 860px !important;
-  min-width: min(700px, calc(100vw - 32px)); /* Force visibly wider than 400px Sign In panel */
-  padding-inline: 48px; /* Extra breathing room for the 2-column layout */
+  width: 750px !important;       /* Explicitly force the box wider */
+  max-width: 95vw !important;    /* Prevent overflow on small screens */
+  padding-inline: 48px;
 }
 
 @keyframes fadeUp {
