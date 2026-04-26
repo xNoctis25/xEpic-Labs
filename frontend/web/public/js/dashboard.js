@@ -1,5 +1,5 @@
 const profileData = document.getElementById('profileData');
-if (!auth.getToken()) window.location.href = '/index.html';
+if (!auth.getToken()) window.location.href = '/';
 
 async function loadProfile() {
     try {
@@ -27,14 +27,14 @@ async function loadProfile() {
         `;
     } catch (err) {
         auth.clearToken();
-        window.location.href = '/index.html';
+        window.location.href = '/';
     }
 }
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
     try { await auth.request('/logout', { method: 'POST' }); } 
     catch (e) { console.warn('Server logout failed, clearing local state.'); } 
-    finally { auth.clearToken(); window.location.href = '/index.html'; }
+    finally { auth.clearToken(); window.location.href = '/'; }
 });
 
 loadProfile();
