@@ -13,7 +13,7 @@ passwordInput.addEventListener('input', (e) => {
     const colors = ['#ff4c4c', '#ffa502', '#f1c40f', '#4cd137'];
     const labels = ['Weak', 'Fair', 'Good', 'Strong'];
     bars.forEach((bar, i) => { bar.style.background = i < score ? colors[score - 1] : 'rgba(255, 255, 255, 0.1)'; });
-    strengthText.textContent = score > 0 ? labels[score - 1] : 'Waiting...';
+    strengthText.textContent = score > 0 ? labels[score - 1] : 'Start typing...';
     strengthText.style.color = score > 0 ? colors[score - 1] : 'var(--text-muted)';
     submitBtn.disabled = score < 4;
 });
