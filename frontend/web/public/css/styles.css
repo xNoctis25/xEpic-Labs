@@ -94,7 +94,7 @@ body::after {
 
 /* Dynamic width expansion for the 2x2 signup grid */
 .glass-panel.wide {
-  max-width: 760px;
+  max-width: 800px !important;
 }
 
 @keyframes fadeUp {
@@ -540,7 +540,23 @@ input::-webkit-credentials-auto-fill-button {
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  min-width: 0; /* prevent flex children from overflowing */
+
+  /* Anti-Jitter: reserve permanent vertical space for field-level feedback */
+  position: relative;
+  padding-bottom: 24px;
+}
+
+/* Absolutely position match-text and strength-text so they
+   never wrap and never push the row down */
+.form-row .form-group > .match-text,
+.form-row .form-group > .strength-text {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  line-height: 1;
+  margin: 0 !important;
 }
 
 /* Collapse to single column on small screens */
@@ -550,6 +566,7 @@ input::-webkit-credentials-auto-fill-button {
     gap: 0;
   }
   .form-row .form-group {
-    margin-bottom: 1rem;
+    padding-bottom: 20px;
+    margin-bottom: 0.5rem;
   }
 }
