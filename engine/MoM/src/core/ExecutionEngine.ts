@@ -166,14 +166,9 @@ export class ExecutionEngine {
     // EOD KILL SWITCH — Emergency Position Flatten
     // ==========================================
     /**
-     * EOD Rolling Sweeper — Unconditionally flattens any open position.
-     * Called by MoMEngine every minute from 15:55 ET onward.
-     *
-     * Sequence:
-     *   1. Cancel all working orders (bracket legs, trailing stops)
-     *   2. Wait 2s for Tradovate to clear the order book
-     *   3. Poll exact net position from broker REST API
-     *   4. Fire a precisely-sized market order to flatten
+     * EOD Rolling Sweeper / Failsafe Flatten — Unconditionally flattens any open position.
+     * Uses a State-Reconciliation Loop ("Double-Tap Sweep") to guarantee flat state
+     * and prevent accidental reverse positions from orphaned resting stops.
      *
      * @param symbol - Tradovate contract symbol (e.g., 'MESM6')
      * @returns true if the position is confirmed flat
@@ -182,31 +177,50 @@ export class ExecutionEngine {
         console.log(`⚠️ [ExecutionEngine] - Sweeping ${symbol} for orphaned orders/positions.`);
         this.tradeExcursion = null;
 
-        try {
-            // 1. Cancel all working orders FIRST
-            await this.broker.cancelAllWorkingOrders();
+        const MAX_ATTEMPTS = 3;
 
-            // 2. Wait 2 seconds for Tradovate to clear the order book
-            await new Promise(res => setTimeout(res, 2000));
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            console.log(`🧹 [ExecutionEngine] - Flatten Sweep Attempt ${attempt}/${MAX_ATTEMPTS}...`);
 
-            // 3. Fetch EXACT net position directly from Tradovate
-            const netPos = await this.broker.getNetPositionQty(symbol);
+            // 1. Check current position to stop bleeding
+            let netPos = await this.broker.getNetPositionQty(symbol);
 
-            if (netPos === 0) {
-                console.log(`✅ [ExecutionEngine] - Position is flat (0). Account secured.`);
-                return true;
+            // 2. Liquidate if actively in a trade
+            if (netPos !== 0) {
+                const exitAction = netPos > 0 ? 'Sell' : 'Buy';
+                const qtyToClose = Math.abs(netPos);
+                console.log(`🚨 [ExecutionEngine] - Liquidating EXACT net position: ${exitAction} ${qtyToClose}x ${symbol}`);
+                await this.broker.liquidatePosition(symbol, exitAction, qtyToClose);
+                
+                // Wait for market order to fill
+                await new Promise(res => setTimeout(res, 1500));
+                
+                // 3. Verify position closed successfully
+                netPos = await this.broker.getNetPositionQty(symbol);
+                if (netPos !== 0) {
+                    console.warn(`⚠️ [ExecutionEngine] - Position still not flat after liquidation (Net: ${netPos}). Looping back.`);
+                    continue; // Loop back to the beginning to try exiting again
+                }
             }
 
-            // 4. Fire market order for exact remaining quantity
-            const exitAction = netPos > 0 ? 'Sell' : 'Buy';
-            const qtyToClose = Math.abs(netPos);
+            // 4. Position is 0. Cancel all working orders to clear orphans.
+            await this.broker.cancelAllWorkingOrders();
+            await new Promise(res => setTimeout(res, 1500)); // Wait for cancels to settle
 
-            console.log(`🚨 [ExecutionEngine] - Liquidating EXACT net position: ${exitAction} ${qtyToClose}x ${symbol}`);
-            return await this.broker.liquidatePosition(symbol, exitAction, qtyToClose);
-        } catch (error: any) {
-            console.error(`🔴 [ExecutionEngine] - SWEEP FAILED:`, error.message);
-            return false;
+            // 5. Verify position AGAIN (Catches edge case: stop triggered right before we cancelled it)
+            netPos = await this.broker.getNetPositionQty(symbol);
+            if (netPos !== 0) {
+                console.warn(`⚠️ [ExecutionEngine] - Accidental fill detected during cancellation! (Net: ${netPos}). Looping back.`);
+                continue; // Loop back to the beginning to exit the accidental reverse position
+            }
+
+            // 6. If we reach here: Position is 0, and working orders were explicitly swept.
+            console.log(`✅ [ExecutionEngine] - Position confirmed flat (0) and all orders cleared. Account secured.`);
+            return true;
         }
+
+        console.error(`🔴 [ExecutionEngine] - CRITICAL: FAILED TO FLATTEN AFTER ${MAX_ATTEMPTS} ATTEMPTS.`);
+        return false;
     }
 
     // ==========================================
