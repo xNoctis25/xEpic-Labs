@@ -20,6 +20,7 @@ pool.query(`
     ALTER TABLE users 
     ADD COLUMN IF NOT EXISTS failed_otp_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS otp_resends INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS failed_credential_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
 `).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
 
@@ -264,48 +265,59 @@ app.post('/api/auth/check-exists', async (req, res) => {
     }
 });
 
-// ── FORGOT PASSWORD (GENERATE OTP) ───────────────────────────────────────────
+// --- FORGOT PASSWORD (HONEYPOT PROTECTED) ---
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {
         const { username, email } = req.body;
-
-        // SECURE: Require BOTH username and email to match
-        const userQuery = await pool.query(
-            'SELECT id, email, username, is_flagged FROM users WHERE LOWER(username) = LOWER($1) AND LOWER(email) = LOWER($2)', 
-            [username, email]
-        );
+        
+        // 1. Query by email first to see if the target exists
+        const userQuery = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         
         if (userQuery.rows.length === 0) {
-            console.warn(`[AUTH] Failed reset attempt (credentials mismatch): ${username} / ${email}`);
-            // Throttle brute force pairing attempts
+            // Cannot track non-existent emails easily without IP bans. Delay and reject.
             await new Promise(resolve => setTimeout(resolve, 500));
             return res.status(400).json({ message: 'Credentials do not match.' });
         }
-
+        
         const user = userQuery.rows[0];
 
-        // TARPIT: If account is flagged, waste 2 seconds and silently ignore
+        // 2. If already flagged, spring the Honeypot Trap immediately!
         if (user.is_flagged) {
-            console.warn(`[SECURITY] Tarpitting forgotten password request for flagged user: ${email}`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.warn(`[SECURITY] Honeypot triggered for flagged user: ${email}`);
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Short server delay
             return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // 3. Check if Username matches
+        if (user.username.toLowerCase() !== username.toLowerCase()) {
+            let fails = (user.failed_credential_attempts || 0) + 1;
+            
+            if (fails >= 3) {
+                // HONEYPOT ACTIVATED: Flag account, pretend it worked.
+                await pool.query('UPDATE users SET is_flagged = true, failed_credential_attempts = $1 WHERE id = $2', [fails, user.id]);
+                console.warn(`[SECURITY] Account flagged for brute force credentials: ${email}`);
+                return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
+            } else {
+                // Normal failure
+                await pool.query('UPDATE users SET failed_credential_attempts = $1 WHERE id = $2', [fails, user.id]);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                return res.status(400).json({ message: 'Credentials do not match.' });
+            }
+        }
 
-        await pool.query(
-            `UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes' WHERE id = $2`,
-            [otp, user.id]
-        );
+        // 4. Perfect Match: Reset tracking and generate OTP
+        await pool.query('UPDATE users SET failed_credential_attempts = 0 WHERE id = $1', [user.id]);
+        
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        await pool.query(`UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes' WHERE id = $2`, [otp, user.id]);
 
         await resend.emails.send({
             from: process.env.RESEND_FROM_EMAIL || 'noreply@xepic-labs.com',
             to: user.email,
             subject: 'Password Reset Request',
-            html: `<p>Hi ${user.username},</p><p>We received a request to reset your password.</p><p>Your reset code is: <strong>${otp}</strong></p><p>This code expires in 15 minutes. If you did not request this, please ignore this email.</p>`
+            html: `<p>Hi ${user.username},</p><p>We received a request to reset your password.</p><p>Your reset code is: <strong>${otp}</strong></p><p>This code expires in 15 minutes.</p>`
         });
 
-        console.log(`[AUTH] Password reset OTP sent to: ${email}`);
         res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
     } catch (error) {
         console.error('[AUTH ERROR]', error);
@@ -325,10 +337,11 @@ app.post('/api/auth/verify-otp', async (req, res) => {
         
         const user = userQuery.rows[0];
 
-        // TARPIT: Flagged users get stuck in a 2-second fake delay
+        // TARPIT: Flagged users get stuck in a short fake delay, then instructed to hang
         if (user.is_flagged) {
             await new Promise(resolve => setTimeout(resolve, 2000));
-            return res.status(400).json({ message: 'Invalid code' });
+            // Return special 423 code to trigger the infinite frontend hang
+            return res.status(423).json({ message: 'tarpit' });
         }
 
         const isValid = user.otp === otp && new Date(user.otpexpiry) > new Date();

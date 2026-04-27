@@ -104,6 +104,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 startResendTimer(60); // Restart the cooldown
             } catch (err) {
+                // INFINITE HANG DECEPTION: tarpit trap
+                if (err.message === 'tarpit' || err.status === 423) {
+                    return; // DO NOTHING. TRAP SPRUNG.
+                }
                 // If resend fails, just update the timer text to show the error
                 if(timerText) {
                     timerText.style.display = 'inline';
@@ -135,6 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 // OTP Validated! Slide to Step 2
                 animatePanelTo(passwordForm);
             } catch (err) {
+                // INFINITE HANG DECEPTION: If the server returns our secret tarpit code
+                // or message, we literally just return and do nothing. The button stays 
+                // stuck on "Verifying..." forever, bleeding the bot's resources!
+                if (err.message === 'tarpit' || err.status === 423) {
+                    return; // DO NOTHING. TRAP SPRUNG.
+                }
+
                 // ULTRA-MINIMALIST INLINE ERROR
                 btn.disabled = false;
                 btn.textContent = 'Verify Code';
