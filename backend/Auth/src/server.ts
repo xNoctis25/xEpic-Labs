@@ -296,6 +296,28 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 });
 
+// --- VERIFY OTP (STEP 1) ---
+app.post('/api/auth/verify-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        
+        // SECURE: Check if OTP matches and hasn't expired
+        const userQuery = await pool.query(
+            'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND otp = $2 AND otpexpiry > NOW()',
+            [email, otp]
+        );
+        
+        if (userQuery.rows.length === 0) {
+            return res.status(400).json({ message: 'Invalid or expired reset code.' });
+        }
+        
+        res.status(200).json({ message: 'Code verified successfully.' });
+    } catch (error) {
+        console.error('[AUTH ERROR]', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 // ── RESET PASSWORD ────────────────────────────────────────────────────────────
 app.post('/api/auth/reset-password', async (req, res) => {
     try {

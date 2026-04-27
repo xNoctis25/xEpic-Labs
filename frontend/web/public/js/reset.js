@@ -1,69 +1,114 @@
-const resetEmail = sessionStorage.getItem('reset_email');
-if (!resetEmail) window.location.href = '/';
-
-// ── Eye Toggle (reuses same helper pattern as auth.js) ──
-function setupEye(inputId, btnId, openId, closedId) {
-    const input  = document.getElementById(inputId);
-    const btn    = document.getElementById(btnId);
-    const open   = document.getElementById(openId);
-    const closed = document.getElementById(closedId);
-    btn.addEventListener('click', () => {
-        const show = input.type === 'password';
-        input.type = show ? 'text' : 'password';
-        open.classList.toggle('hidden', show);
-        closed.classList.toggle('hidden', !show);
-    });
-}
-setupEye('newPassword',        'toggleNewPw',      'eyeNewOpen',      'eyeNewClosed');
-setupEye('confirmNewPassword', 'toggleConfirmPw',  'eyeConfirmNOpen', 'eyeConfirmNClosed');
-
-// ── Live confirm match feedback ──
-const newPwInput  = document.getElementById('newPassword');
-const confPwInput = document.getElementById('confirmNewPassword');
-const matchText   = document.getElementById('resetMatchText');
-const resetBtn    = document.getElementById('resetBtn');
-
-function updateMatch() {
-    if (!confPwInput.value) { matchText.textContent = ''; return; }
-    const match = confPwInput.value === newPwInput.value;
-    matchText.textContent = match ? '✓ Passwords match' : '✗ Passwords do not match';
-    matchText.style.color = match ? '#34d399' : '#f87171';
-}
-newPwInput.addEventListener('input', updateMatch);
-confPwInput.addEventListener('input', updateMatch);
-
-// ── Reset Form Submit ──
-document.getElementById('resetForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const otp         = document.getElementById('resetOtp').value.trim();
-    const newPassword = newPwInput.value;
-    const confirmPw   = confPwInput.value;
-
-    if (newPassword !== confirmPw) {
-        return auth.showError('alertBox', 'Passwords do not match.');
+document.addEventListener('DOMContentLoaded', () => {
+    const email = sessionStorage.getItem('reset_email');
+    if (!email) {
+        window.location.href = '/index.html'; // Protect the route
+        return;
     }
 
-    if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
-        return auth.showError('alertBox', 'Please enter the 6-digit code from your email.');
-    }
+    const otpForm = document.getElementById('otpForm');
+    const passwordForm = document.getElementById('passwordForm');
+    const alertBoxOtp = document.getElementById('alertBoxOtp');
+    const alertBoxPwd = document.getElementById('alertBoxPwd');
 
-    resetBtn.disabled    = true;
-    resetBtn.textContent = 'Updating...';
-
-    try {
-        await auth.request('/reset-password', {
-            method: 'POST',
-            body: JSON.stringify({ email: resetEmail, otp, newPassword })
+    // Setup Eye Toggles
+    document.querySelectorAll('.eye-toggle').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const input = this.previousElementSibling;
+            if (input.type === 'password') {
+                input.type = 'text';
+                this.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+            } else {
+                input.type = 'password';
+                this.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+            }
         });
+    });
 
-        sessionStorage.removeItem('reset_email');
-        auth.showSuccess = undefined; // clear any state
-        alert('✅ Password updated! Please sign in with your new password.');
-        window.location.href = '/';
-    } catch (err) {
-        auth.showError('alertBox', err.message || 'Invalid or expired reset code.');
-        resetBtn.disabled    = false;
-        resetBtn.textContent = 'Change Password';
+    // Pro-Level FLIP Animation
+    function animatePanelTo(targetForm) {
+        const glassPanel = document.querySelector('.glass-panel');
+        const startHeight = glassPanel.offsetHeight;
+        glassPanel.style.setProperty('height', startHeight + 'px', 'important');
+        glassPanel.style.setProperty('transition', 'none', 'important');
+
+        if(otpForm) otpForm.classList.add('hidden');
+        if(passwordForm) passwordForm.classList.add('hidden');
+
+        targetForm.classList.remove('hidden');
+
+        glassPanel.style.setProperty('height', 'auto', 'important');
+        const targetHeight = glassPanel.offsetHeight;
+
+        glassPanel.style.setProperty('height', startHeight + 'px', 'important');
+        void glassPanel.offsetHeight;
+
+        glassPanel.style.setProperty('transition', 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+        glassPanel.style.setProperty('height', targetHeight + 'px', 'important');
+
+        setTimeout(() => {
+            glassPanel.style.removeProperty('height');
+            glassPanel.style.removeProperty('transition');
+        }, 600);
+    }
+
+    // STEP 1: Verify OTP
+    if (otpForm) {
+        otpForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('verifyOtpBtn');
+            const otp = document.getElementById('resetOtp').value;
+
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            alertBoxOtp.style.display = 'none';
+            
+            try {
+                await auth.request('/verify-otp', {
+                    method: 'POST',
+                    body: JSON.stringify({ email, otp })
+                });
+                // OTP Validated! Slide to Step 2
+                animatePanelTo(passwordForm);
+            } catch (err) {
+                auth.showError('alertBoxOtp', err.message || 'Invalid reset code.');
+                btn.disabled = false;
+                btn.textContent = 'Verify Code';
+            }
+        });
+    }
+
+    // STEP 2: Update Password
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('resetSubmitBtn');
+            const otp = document.getElementById('resetOtp').value; // Keep the verified OTP
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+            if (newPassword !== confirmNewPassword) {
+                auth.showError('alertBoxPwd', 'Passwords do not match.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Updating...';
+            alertBoxPwd.style.display = 'none';
+
+            try {
+                await auth.request('/reset-password', {
+                    method: 'POST',
+                    body: JSON.stringify({ email, otp, newPassword })
+                });
+
+                auth.showSuccess('alertBoxPwd', 'Password updated successfully!');
+                sessionStorage.removeItem('reset_email');
+                setTimeout(() => window.location.href = '/index.html', 2000);
+            } catch (err) {
+                auth.showError('alertBoxPwd', err.message || 'Error updating password.');
+                btn.disabled = false;
+                btn.textContent = 'Update Password';
+            }
+        });
     }
 });
