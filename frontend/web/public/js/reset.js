@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const otpForm = document.getElementById('otpForm');
     const passwordForm = document.getElementById('passwordForm');
-    const alertBoxOtp = document.getElementById('alertBoxOtp');
     const alertBoxPwd = document.getElementById('alertBoxPwd');
 
     // Setup Eye Toggles
@@ -98,26 +97,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'POST',
                     body: JSON.stringify({ username, email })
                 });
-                auth.showSuccess('alertBoxOtp', 'A new code has been sent!');
+                if(timerText) {
+                    timerText.style.display = 'inline';
+                    timerText.textContent = 'New code sent!';
+                    timerText.style.color = '#34d399';
+                }
                 startResendTimer(60); // Restart the cooldown
             } catch (err) {
-                auth.showError('alertBoxOtp', err.message || 'Error sending code.');
+                // If resend fails, just update the timer text to show the error
+                if(timerText) {
+                    timerText.style.display = 'inline';
+                    timerText.textContent = 'Error sending code';
+                    timerText.style.color = '#ff6b6b';
+                }
                 resendOtpBtn.style.display = 'inline';
-                if(timerText) timerText.style.display = 'none';
             }
         });
     }
 
 
+    // STEP 1: Verify OTP
     if (otpForm) {
         otpForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('verifyOtpBtn');
-            const otp = document.getElementById('resetOtp').value;
+            const otpInput = document.getElementById('resetOtp'); // Grab the input directly
+            const otp = otpInput.value;
 
             btn.disabled = true;
             btn.textContent = 'Verifying...';
-            alertBoxOtp.style.display = 'none';
             
             try {
                 await auth.request('/verify-otp', {
@@ -127,9 +135,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 // OTP Validated! Slide to Step 2
                 animatePanelTo(passwordForm);
             } catch (err) {
-                auth.showError('alertBoxOtp', err.message || 'Invalid reset code.');
+                // ULTRA-MINIMALIST INLINE ERROR
                 btn.disabled = false;
                 btn.textContent = 'Verify Code';
+                
+                otpInput.value = ''; // Wipe the bad code
+                otpInput.placeholder = 'INVALID CODE'; // Inject the error
+                otpInput.classList.add('input-error'); // Turn it red
+                
+                // Revert to normal the moment they try to type again
+                otpInput.addEventListener('focus', function clearError() {
+                    this.placeholder = '6-Digit Code';
+                    this.classList.remove('input-error');
+                    this.removeEventListener('focus', clearError);
+                });
             }
         });
     }

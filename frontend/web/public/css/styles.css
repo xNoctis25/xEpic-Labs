@@ -621,3 +621,16 @@ form:not(.hidden) {
     max-width: none !important;
   }
 }
+
+/* =========================================
+   ULTRA-MINIMALIST INLINE ERROR STATE
+   ========================================= */
+.input-error {
+    border-color: #ff6b6b !important;
+    color: #ff6b6b !important;
+}
+.input-error::placeholder {
+    color: #ff6b6b !important;
+    opacity: 0.9 !important;
+    letter-spacing: 3px !important;
+}
