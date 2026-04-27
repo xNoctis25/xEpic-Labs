@@ -8,76 +8,90 @@ const signupForm      = document.getElementById('signupForm');
 const forgotForm      = document.getElementById('forgotForm');
 const alertBox        = document.getElementById('alertBox');
 const triggerForgotBtn = document.getElementById('triggerForgotBtn');
-const cancelForgotBtn  = document.getElementById('cancelForgotBtn');
 
-// --- PRO-LEVEL FLIP ANIMATION CORE ---
+// --- PRO-LEVEL FLIP ANIMATION CORE (SNAP FIX) ---
 function animatePanelTo(targetForm, expandWide = false) {
     const glassPanel = document.querySelector('.glass-panel');
-    alertBox.style.display = 'none'; 
+    if (alertBox) alertBox.style.display = 'none'; 
     
+    // 1. Measure starting state and force !important to override CSS
     const startHeight = glassPanel.offsetHeight;
-    glassPanel.style.height = startHeight + 'px';
-    glassPanel.style.transition = 'none'; 
+    glassPanel.style.setProperty('height', startHeight + 'px', 'important');
+    glassPanel.style.setProperty('transition', 'none', 'important'); 
     
-    // Hide all forms
-    loginForm.classList.add('hidden');
-    signupForm.classList.add('hidden');
-    forgotForm.classList.add('hidden');
+    // 2. Hide ALL forms instantly
+    if (loginForm) loginForm.classList.add('hidden');
+    if (signupForm) signupForm.classList.add('hidden');
+    if (forgotForm) forgotForm.classList.add('hidden');
     
-    // Toggle width expansion
-    if (expandWide) glassPanel.classList.add('wide');
-    else glassPanel.classList.remove('wide');
+    // 3. Apply width modifiers
+    if (expandWide) {
+        glassPanel.classList.add('wide');
+    } else {
+        glassPanel.classList.remove('wide');
+    }
     
-    // Show target
-    targetForm.classList.remove('hidden');
+    // 4. Reveal Target Form to calculate its natural height
+    if (targetForm) targetForm.classList.remove('hidden');
     
-    glassPanel.style.height = 'auto';
+    // 5. Measure new target height
+    glassPanel.style.setProperty('height', 'auto', 'important');
     const targetHeight = glassPanel.offsetHeight;
     
-    glassPanel.style.height = startHeight + 'px';
-    void glassPanel.offsetHeight; // Reflow
+    // 6. Revert to start and force GPU reflow
+    glassPanel.style.setProperty('height', startHeight + 'px', 'important');
+    void glassPanel.offsetHeight;
     
-    glassPanel.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
-    glassPanel.style.height = targetHeight + 'px';
+    // 7. Execute smooth transition using !important flag
+    glassPanel.style.setProperty('transition', 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)', 'important');
+    glassPanel.style.setProperty('height', targetHeight + 'px', 'important');
     
+    // 8. Cleanup inline styles after animation completes
     setTimeout(() => {
-        glassPanel.style.height = 'auto';
-        glassPanel.style.transition = ''; 
+        glassPanel.style.removeProperty('height');
+        glassPanel.style.removeProperty('transition'); 
     }, 600);
 }
 
-// --- STATE TRIGGERS ---
+// --- STATE TRIGGERS & TAB MORPHING ---
 function switchTab(isLogin) {
     if (isLogin) {
         tabLogin.classList.add('active');
         tabSignup.classList.remove('active');
+        tabSignup.textContent = 'Create Account'; // Restore original tab text
         animatePanelTo(loginForm, false);
     } else {
         tabSignup.classList.add('active');
         tabLogin.classList.remove('active');
+        tabSignup.textContent = 'Create Account'; // Ensure it says Create Account
         animatePanelTo(signupForm, true);
     }
 }
 
-tabLogin.addEventListener('click', () => switchTab(true));
-tabSignup.addEventListener('click', () => switchTab(false));
+// Tab Click Listeners
+if (tabLogin) tabLogin.addEventListener('click', () => switchTab(true));
+if (tabSignup) {
+    tabSignup.addEventListener('click', () => {
+        // Only trigger the signup form if the tab text is currently "Create Account"
+        // If it says "Reset Password", it is already active, so do nothing.
+        if (tabSignup.textContent === 'Create Account') {
+            switchTab(false);
+        }
+    });
+}
 
+// Forgot Password Trigger (Morphs the Tab)
 if (triggerForgotBtn) {
     triggerForgotBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        tabLogin.classList.remove('active'); // Visually deselect tabs
-        tabSignup.classList.remove('active');
+        tabLogin.classList.remove('active');
+        tabSignup.classList.add('active');
+        tabSignup.textContent = 'Reset Password'; // Morph the tab text!
         animatePanelTo(forgotForm, false);
     });
 }
 
-if (cancelForgotBtn) {
-    cancelForgotBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        tabLogin.classList.add('active'); // Reselect login tab
-        animatePanelTo(loginForm, false);
-    });
-}
+// NOTE: cancelForgotBtn listener is DELETED since we use tabs now.
 
 // ── Eye Toggle Helper ──
 function setupEyeToggle(inputId, toggleId, openIconId, closedIconId) {
