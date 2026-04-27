@@ -256,17 +256,18 @@ signupForm.addEventListener('submit', async (e) => {
     }
 });
 
-// ── Forgot Password Submit (SPA) ──
+// --- FORGOT PASSWORD SUBMIT ---
 if (forgotForm) {
     forgotForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const btn = document.getElementById('forgotSubmitBtn');
         const username = document.getElementById('forgotUsername').value;
         const email = document.getElementById('forgotEmail').value;
+        const errorText = document.getElementById('forgotError');
 
         btn.disabled = true;
         btn.textContent = 'Sending...';
-        auth.showError('alertBox', 'Requesting reset...', true); 
+        if(errorText) errorText.style.display = 'none'; // Hide error on new attempt
 
         try {
             await auth.request('/forgot-password', {
@@ -278,7 +279,11 @@ if (forgotForm) {
             sessionStorage.setItem('reset_username', username);
             window.location.href = '/reset.html';
         } catch (err) {
-            auth.showError('alertBox', err.message || 'Error processing request.');
+            // Show the minimalist error above the button
+            if(errorText) {
+                errorText.textContent = err.message || 'Credentials do not match.';
+                errorText.style.display = 'block';
+            }
             btn.disabled = false;
             btn.textContent = 'Send Reset Code';
         }

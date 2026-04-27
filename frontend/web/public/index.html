@@ -131,12 +131,15 @@
             <div class="form-group" style="padding-bottom: 0;">
                 <input type="email" id="forgotEmail" required placeholder="Email Address">
             </div>
-            <button type="submit" class="btn" id="forgotSubmitBtn" style="margin-top: 25px;">Send Reset Code</button>
+            
+            <div id="forgotError" style="color: #ff6b6b; font-size: 0.85rem; text-align: center; padding-top: 15px; display: none;">Credentials do not match.</div>
+            
+            <button type="submit" class="btn" id="forgotSubmitBtn" style="margin-top: 15px;">Send Reset Code</button>
         </form>
 
     </div>
 
     <script src="/js/api.js"></script>
-    <script src="/js/auth.js?v=30.0"></script>
+    <script src="/js/auth.js?v=34.0"></script>
 </body>
 </html>

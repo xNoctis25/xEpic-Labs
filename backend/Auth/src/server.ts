@@ -271,14 +271,15 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
         // SECURE: Require BOTH username and email to match
         const userQuery = await pool.query(
-            'SELECT id, email, username FROM users WHERE LOWER(username) = LOWER($1) AND LOWER(email) = LOWER($2)',
+            'SELECT id, email, username, is_flagged FROM users WHERE LOWER(username) = LOWER($1) AND LOWER(email) = LOWER($2)', 
             [username, email]
         );
-
-        // SECURE: Return 200 OK regardless of existence to prevent enumeration
+        
         if (userQuery.rows.length === 0) {
-            console.log(`[AUTH] Failed reset attempt (no match): ${username} / ${email}`);
-            return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
+            console.warn(`[AUTH] Failed reset attempt (credentials mismatch): ${username} / ${email}`);
+            // Throttle brute force pairing attempts
+            await new Promise(resolve => setTimeout(resolve, 500));
+            return res.status(400).json({ message: 'Credentials do not match.' });
         }
 
         const user = userQuery.rows[0];
