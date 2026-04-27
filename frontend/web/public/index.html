@@ -72,7 +72,7 @@
                     <input type="checkbox" id="rememberMe" checked>
                     <label for="rememberMe">Keep me signed in</label>
                 </div>
-                <a href="/forgot-password.html" class="forgot-link">Forgot password?</a>
+                <a href="#" id="triggerForgotBtn" class="forgot-link">Forgot password?</a>
             </div>
             <button type="submit" class="btn" id="loginSubmitBtn">Sign In</button>
         </form>
@@ -121,6 +121,24 @@
             </div>
 
             <button type="submit" class="btn" id="signupSubmitBtn" disabled>Create Account</button>
+        </form>
+
+        <!-- ── Forgot Password Form (SPA State 3) ── -->
+        <form id="forgotForm" class="hidden">
+            <h3 style="text-align: center; margin-bottom: 10px; font-weight: 500;">Reset Password</h3>
+            <p style="text-align: center; color: var(--text-muted); font-size: 0.85rem; margin-bottom: 20px;">
+                Enter your Username and Email to receive a 6-digit code.
+            </p>
+            <div class="form-group">
+                <input type="text" id="forgotUsername" required placeholder="Username">
+            </div>
+            <div class="form-group" style="padding-bottom: 0;">
+                <input type="email" id="forgotEmail" required placeholder="Email Address">
+            </div>
+            <div style="display: flex; justify-content: flex-end; width: 100%; margin-top: 10px; margin-bottom: 15px;">
+                <a href="#" id="cancelForgotBtn" class="forgot-link">Cancel</a>
+            </div>
+            <button type="submit" class="btn" id="forgotSubmitBtn">Send Reset Code</button>
         </form>
 
     </div>

@@ -1,55 +1,83 @@
 if (auth.getToken()) window.location.href = '/dashboard.html';
 
-// ── Tab Logic ──
-const tabLogin    = document.getElementById('tabLogin');
-const tabSignup   = document.getElementById('tabSignup');
-const loginForm   = document.getElementById('loginForm');
-const signupForm  = document.getElementById('signupForm');
-const alertBox    = document.getElementById('alertBox');
+// ── Element References ──
+const tabLogin        = document.getElementById('tabLogin');
+const tabSignup       = document.getElementById('tabSignup');
+const loginForm       = document.getElementById('loginForm');
+const signupForm      = document.getElementById('signupForm');
+const forgotForm      = document.getElementById('forgotForm');
+const alertBox        = document.getElementById('alertBox');
+const triggerForgotBtn = document.getElementById('triggerForgotBtn');
+const cancelForgotBtn  = document.getElementById('cancelForgotBtn');
 
-function switchTab(isLogin) {
+// --- PRO-LEVEL FLIP ANIMATION CORE ---
+function animatePanelTo(targetForm, expandWide = false) {
     const glassPanel = document.querySelector('.glass-panel');
-    alertBox.style.display = 'none';
-
-    // FLIP Step 1 — Record current height
+    alertBox.style.display = 'none'; 
+    
     const startHeight = glassPanel.offsetHeight;
     glassPanel.style.height = startHeight + 'px';
-    glassPanel.style.transition = 'none'; // Freeze CSS transitions
+    glassPanel.style.transition = 'none'; 
+    
+    // Hide all forms
+    loginForm.classList.add('hidden');
+    signupForm.classList.add('hidden');
+    forgotForm.classList.add('hidden');
+    
+    // Toggle width expansion
+    if (expandWide) glassPanel.classList.add('wide');
+    else glassPanel.classList.remove('wide');
+    
+    // Show target
+    targetForm.classList.remove('hidden');
+    
+    glassPanel.style.height = 'auto';
+    const targetHeight = glassPanel.offsetHeight;
+    
+    glassPanel.style.height = startHeight + 'px';
+    void glassPanel.offsetHeight; // Reflow
+    
+    glassPanel.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+    glassPanel.style.height = targetHeight + 'px';
+    
+    setTimeout(() => {
+        glassPanel.style.height = 'auto';
+        glassPanel.style.transition = ''; 
+    }, 600);
+}
 
-    // FLIP Step 2 — Swap forms and width class
+// --- STATE TRIGGERS ---
+function switchTab(isLogin) {
     if (isLogin) {
         tabLogin.classList.add('active');
         tabSignup.classList.remove('active');
-        loginForm.classList.remove('hidden');
-        signupForm.classList.add('hidden');
-        glassPanel.classList.remove('wide');
+        animatePanelTo(loginForm, false);
     } else {
         tabSignup.classList.add('active');
         tabLogin.classList.remove('active');
-        signupForm.classList.remove('hidden');
-        loginForm.classList.add('hidden');
-        glassPanel.classList.add('wide');
+        animatePanelTo(signupForm, true);
     }
-
-    // FLIP Step 3 — Measure new target height
-    glassPanel.style.height = 'auto';
-    const targetHeight = glassPanel.offsetHeight;
-
-    // FLIP Step 4 — Snap back to start, force reflow, then animate to target
-    glassPanel.style.height = startHeight + 'px';
-    void glassPanel.offsetHeight; // GPU reflow trigger
-
-    glassPanel.style.transition = 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
-    glassPanel.style.height = targetHeight + 'px';
-
-    // FLIP Step 5 — Hand control back to CSS after animation
-    setTimeout(() => {
-        glassPanel.style.height = 'auto';
-        glassPanel.style.transition = '';
-    }, 620);
 }
+
 tabLogin.addEventListener('click', () => switchTab(true));
 tabSignup.addEventListener('click', () => switchTab(false));
+
+if (triggerForgotBtn) {
+    triggerForgotBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        tabLogin.classList.remove('active'); // Visually deselect tabs
+        tabSignup.classList.remove('active');
+        animatePanelTo(forgotForm, false);
+    });
+}
+
+if (cancelForgotBtn) {
+    cancelForgotBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        tabLogin.classList.add('active'); // Reselect login tab
+        animatePanelTo(loginForm, false);
+    });
+}
 
 // ── Eye Toggle Helper ──
 function setupEyeToggle(inputId, toggleId, openIconId, closedIconId) {
@@ -214,25 +242,30 @@ signupForm.addEventListener('submit', async (e) => {
     }
 });
 
-// ── Forgot Password Flow ──
-const forgotLink = document.querySelector('.forgot-link');
-if (forgotLink) {
-    forgotLink.addEventListener('click', async (e) => {
+// ── Forgot Password Submit (SPA) ──
+if (forgotForm) {
+    forgotForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const btn = document.getElementById('forgotSubmitBtn');
+        const username = document.getElementById('forgotUsername').value;
+        const email = document.getElementById('forgotEmail').value;
 
-        const email = prompt('Enter your registered email address to receive a reset code:');
-        if (!email || !email.trim()) return;
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        auth.showError('alertBox', 'Requesting reset...', true); 
 
         try {
-            auth.showError('alertBox', 'Sending reset code...');
             await auth.request('/forgot-password', {
                 method: 'POST',
-                body: JSON.stringify({ email: email.trim() })
+                body: JSON.stringify({ username, email })
             });
-            sessionStorage.setItem('reset_email', email.trim());
+            
+            sessionStorage.setItem('reset_email', email);
             window.location.href = '/reset.html';
         } catch (err) {
             auth.showError('alertBox', err.message || 'Error processing request.');
+            btn.disabled = false;
+            btn.textContent = 'Send Reset Code';
         }
     });
 }

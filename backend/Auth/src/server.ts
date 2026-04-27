@@ -256,24 +256,25 @@ app.post('/api/auth/check-exists', async (req, res) => {
     }
 });
 
-// ── FORGOT PASSWORD (enumeration-safe) ───────────────────────────────────────
+// ── FORGOT PASSWORD (GENERATE OTP) ───────────────────────────────────────────
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {
-        const { email } = req.body;
+        const { username, email } = req.body;
 
+        // SECURE: Require BOTH username and email to match
         const userQuery = await pool.query(
-            'SELECT id, email, username FROM users WHERE LOWER(email) = LOWER($1)',
-            [email]
+            'SELECT id, email, username FROM users WHERE LOWER(username) = LOWER($1) AND LOWER(email) = LOWER($2)',
+            [username, email]
         );
 
-        // SECURE: Always return 200 to prevent user enumeration
+        // SECURE: Return 200 OK regardless of existence to prevent enumeration
         if (userQuery.rows.length === 0) {
-            console.log(`[AUTH] Failed reset attempt (not found): ${email}`);
-            return res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+            console.log(`[AUTH] Failed reset attempt (no match): ${username} / ${email}`);
+            return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
         }
 
         const user = userQuery.rows[0];
-        const otp  = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
         await pool.query(
             `UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes' WHERE id = $2`,
@@ -283,23 +284,14 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         await resend.emails.send({
             from: process.env.RESEND_FROM_EMAIL || 'noreply@xepic-labs.com',
             to: user.email,
-            subject: 'xEpic Labs — Password Reset Code',
-            html: `
-                <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0b0c10;color:#f0f4f8;border-radius:12px;">
-                    <h2 style="color:#66fcf1;margin-bottom:8px;">xEpic Labs</h2>
-                    <p>Hi <strong>${user.username}</strong>,</p>
-                    <p>We received a request to reset your password. Your reset code is:</p>
-                    <div style="font-size:2.5rem;font-weight:bold;letter-spacing:12px;color:#66fcf1;margin:24px 0;">${otp}</div>
-                    <p style="color:#6b7a8d;font-size:0.85rem;">This code expires in 15 minutes. If you did not request this, ignore this email — your account is safe.</p>
-                </div>
-            `
+            subject: 'Password Reset Request',
+            html: `<p>Hi ${user.username},</p><p>We received a request to reset your password.</p><p>Your reset code is: <strong>${otp}</strong></p><p>This code expires in 15 minutes. If you did not request this, please ignore this email.</p>`
         });
 
-        console.log(`[AUTH] 📧 Password reset OTP sent to: ${email}`);
-        res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
-
+        console.log(`[AUTH] Password reset OTP sent to: ${email}`);
+        res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
     } catch (error) {
-        console.error('[AUTH ERROR] /forgot-password:', error);
+        console.error('[AUTH ERROR]', error);
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
