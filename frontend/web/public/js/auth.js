@@ -275,6 +275,7 @@ if (forgotForm) {
             });
             
             sessionStorage.setItem('reset_email', email);
+            sessionStorage.setItem('reset_username', username);
             window.location.href = '/reset.html';
         } catch (err) {
             auth.showError('alertBox', err.message || 'Error processing request.');

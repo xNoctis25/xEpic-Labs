@@ -1,7 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
     const email = sessionStorage.getItem('reset_email');
+    const username = sessionStorage.getItem('reset_username'); // Needed for resend
     if (!email) {
-        window.location.href = '/index.html'; // Protect the route
+        window.location.href = '/index.html'; 
         return;
     }
 
@@ -52,6 +53,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // STEP 1: Verify OTP
+    // --- RESEND TIMER LOGIC ---
+    const timerText = document.getElementById('timerText');
+    const resendOtpBtn = document.getElementById('resendOtpBtn');
+    let timerInterval;
+
+    function startResendTimer(seconds) {
+        if(timerText) timerText.style.display = 'inline';
+        if(resendOtpBtn) resendOtpBtn.style.display = 'none';
+        
+        let timeLeft = seconds;
+        if(timerText) timerText.textContent = `Resend in ${timeLeft}s`;
+
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            if(timerText) timerText.textContent = `Resend in ${timeLeft}s`;
+            
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                if(timerText) timerText.style.display = 'none';
+                if(resendOtpBtn) resendOtpBtn.style.display = 'inline';
+            }
+        }, 1000);
+    }
+
+    // Start initial 60-second countdown when page loads
+    if (otpForm && !otpForm.classList.contains('hidden')) {
+        startResendTimer(60);
+    }
+
+    // Handle Resend Click
+    if (resendOtpBtn) {
+        resendOtpBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            resendOtpBtn.style.display = 'none';
+            if(timerText) {
+                timerText.style.display = 'inline';
+                timerText.textContent = 'Sending...';
+            }
+
+            try {
+                // Securely hit the forgot-password route again
+                await auth.request('/forgot-password', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, email })
+                });
+                auth.showSuccess('alertBoxOtp', 'A new code has been sent!');
+                startResendTimer(60); // Restart the cooldown
+            } catch (err) {
+                auth.showError('alertBoxOtp', err.message || 'Error sending code.');
+                resendOtpBtn.style.display = 'inline';
+                if(timerText) timerText.style.display = 'none';
+            }
+        });
+    }
+
+
     if (otpForm) {
         otpForm.addEventListener('submit', async (e) => {
             e.preventDefault();

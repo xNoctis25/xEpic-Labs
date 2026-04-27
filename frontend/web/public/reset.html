@@ -8,7 +8,7 @@
     <meta name="description" content="Reset your xEpic Labs account password.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="/css/styles.css?v=15.0">
+    <link rel="stylesheet" href="/css/styles.css?v=30.0">
 </head>
 <body>
     <div class="glass-panel">
@@ -22,7 +22,11 @@
                 <input type="text" id="resetOtp" required placeholder="6-Digit Code" maxlength="6" style="text-align: center; letter-spacing: 6px; font-size: 1.2rem; font-weight: bold;">
             </div>
             <button type="submit" class="btn" id="verifyOtpBtn" style="margin-top: 10px;">Verify Code</button>
-            <p style="text-align: center; margin-top: 15px;">
+            <p style="text-align: center; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted);">
+                Didn't receive it? <span id="timerText">Resend in 60s</span>
+                <a href="#" id="resendOtpBtn" class="forgot-link" style="display: none;">Resend Code</a>
+            </p>
+            <p style="text-align: center; margin-top: 10px;">
                 <a href="/index.html" class="forgot-link">Cancel</a>
             </p>
         </form>
@@ -51,6 +55,6 @@
     </div>
 
     <script src="/js/api.js"></script>
-    <script src="/js/reset.js?v=29.0"></script>
+    <script src="/js/reset.js?v=30.0"></script>
 </body>
 </html>
