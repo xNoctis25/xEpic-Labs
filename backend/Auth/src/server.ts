@@ -12,11 +12,40 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- HELPER TO EXTRACT CLIENT IP ---
+const getClientIp = (req: any) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded ? (typeof forwarded === 'string' ? forwarded.split(',')[0] : forwarded[0]) : req.socket.remoteAddress;
+    return ip ? ip.trim() : 'unknown';
+};
+
+// --- GLOBAL IP BLACKLIST MIDDLEWARE ---
+app.use(async (req, res, next) => {
+    const ip = getClientIp(req);
+    try {
+        const banCheck = await pool.query('SELECT * FROM ip_blacklist WHERE ip_address = $1', [ip]);
+        if (banCheck.rows.length > 0) {
+            console.warn(`[SECURITY] Dropped connection from banned IP: ${ip}`);
+            // Return 403 Forbidden instantly. Request dies here.
+            return res.status(403).send('Forbidden: Your IP address has been permanently flagged for malicious activity.');
+        }
+        next();
+    } catch (err) {
+        console.error('[DB ERROR] IP Check failed', err);
+        next(); // Fail open so real users aren't blocked by a DB glitch
+    }
+});
+
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // --- DYNAMIC SECURITY MIGRATION ---
 pool.query(`
+    CREATE TABLE IF NOT EXISTS ip_blacklist (
+        ip_address VARCHAR(45) PRIMARY KEY,
+        reason VARCHAR(255),
+        banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
     ALTER TABLE users 
     ADD COLUMN IF NOT EXISTS failed_otp_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS otp_resends INT DEFAULT 0,
@@ -293,9 +322,12 @@ app.post('/api/auth/forgot-password', async (req, res) => {
             let fails = (user.failed_credential_attempts || 0) + 1;
             
             if (fails >= 3) {
-                // HONEYPOT ACTIVATED: Flag account, pretend it worked.
+                // HONEYPOT ACTIVATED: Flag account, BAN IP, pretend it worked.
                 await pool.query('UPDATE users SET is_flagged = true, failed_credential_attempts = $1 WHERE id = $2', [fails, user.id]);
-                console.warn(`[SECURITY] Account flagged for brute force credentials: ${email}`);
+                const ip = getClientIp(req);
+                await pool.query('INSERT INTO ip_blacklist (ip_address, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ip, 'Credential Brute Force Honeypot']);
+                
+                console.warn(`[SECURITY] IP BANNED & Account flagged for brute force credentials: ${email} (${ip})`);
                 return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
             } else {
                 // Normal failure
@@ -358,9 +390,12 @@ app.post('/api/auth/verify-otp', async (req, res) => {
             if (fails >= 3) {
                 resends += 1;
                 if (resends >= 3) {
-                    // MAX RESENDS HIT: Flag the account
+                    // MAX RESENDS HIT: Flag the account & BAN IP
                     await pool.query('UPDATE users SET is_flagged = true, failed_otp_attempts = $1, otp_resends = $2 WHERE id = $3', [fails, resends, user.id]);
-                    console.warn(`[SECURITY] Account heavily flagged for brute force: ${email}`);
+                    const ip = getClientIp(req);
+                    await pool.query('INSERT INTO ip_blacklist (ip_address, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ip, 'OTP Brute Force / Max Resends']);
+                    
+                    console.warn(`[SECURITY] IP BANNED & Account heavily flagged for brute force: ${email} (${ip})`);
                     return res.status(400).json({ message: 'Invalid code' });
                 } else {
                     // AUTO-RESEND OTP
