@@ -15,6 +15,14 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// --- DYNAMIC SECURITY MIGRATION ---
+pool.query(`
+    ALTER TABLE users 
+    ADD COLUMN IF NOT EXISTS failed_otp_attempts INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS otp_resends INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
+`).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
+
 // ── SIGN UP ──────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
     try {
@@ -274,6 +282,14 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         }
 
         const user = userQuery.rows[0];
+
+        // TARPIT: If account is flagged, waste 2 seconds and silently ignore
+        if (user.is_flagged) {
+            console.warn(`[SECURITY] Tarpitting forgotten password request for flagged user: ${email}`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
+        }
+
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
         await pool.query(
@@ -296,22 +312,63 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 });
 
-// --- VERIFY OTP (STEP 1) ---
+// --- VERIFY OTP (STEP 1) WITH TARPITTING & AUTO-RESEND ---
 app.post('/api/auth/verify-otp', async (req, res) => {
     try {
         const { email, otp } = req.body;
         
-        // SECURE: Check if OTP matches and hasn't expired
-        const userQuery = await pool.query(
-            'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND otp = $2 AND otpexpiry > NOW()',
-            [email, otp]
-        );
-        
+        const userQuery = await pool.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (userQuery.rows.length === 0) {
-            return res.status(400).json({ message: 'Invalid or expired reset code.' });
+            return res.status(400).json({ message: 'Invalid code' });
         }
         
-        res.status(200).json({ message: 'Code verified successfully.' });
+        const user = userQuery.rows[0];
+
+        // TARPIT: Flagged users get stuck in a 2-second fake delay
+        if (user.is_flagged) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            return res.status(400).json({ message: 'Invalid code' });
+        }
+
+        const isValid = user.otp === otp && new Date(user.otpexpiry) > new Date();
+
+        if (isValid) {
+            // Success! Reset security counters
+            await pool.query('UPDATE users SET failed_otp_attempts = 0, otp_resends = 0 WHERE id = $1', [user.id]);
+            return res.status(200).json({ message: 'Code verified successfully.' });
+        } else {
+            // Failure logic
+            let fails = (user.failed_otp_attempts || 0) + 1;
+            let resends = user.otp_resends || 0;
+
+            if (fails >= 3) {
+                resends += 1;
+                if (resends >= 3) {
+                    // MAX RESENDS HIT: Flag the account
+                    await pool.query('UPDATE users SET is_flagged = true, failed_otp_attempts = $1, otp_resends = $2 WHERE id = $3', [fails, resends, user.id]);
+                    console.warn(`[SECURITY] Account heavily flagged for brute force: ${email}`);
+                    return res.status(400).json({ message: 'Invalid code' });
+                } else {
+                    // AUTO-RESEND OTP
+                    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                    await pool.query(`UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes', failed_otp_attempts = 0, otp_resends = $2 WHERE id = $3`, [newOtp, resends, user.id]);
+                    
+                    await resend.emails.send({
+                        from: process.env.RESEND_FROM_EMAIL || 'noreply@xepic-labs.com',
+                        to: user.email,
+                        subject: 'New Password Reset Request',
+                        html: `<p>Hi ${user.username},</p><p>We noticed multiple failed attempts. Here is a new reset code: <strong>${newOtp}</strong></p>`
+                    });
+                    
+                    // Specific message frontend will catch
+                    return res.status(422).json({ message: 'New code sent' });
+                }
+            } else {
+                // Just increment fail count
+                await pool.query('UPDATE users SET failed_otp_attempts = $1 WHERE id = $2', [fails, user.id]);
+                return res.status(400).json({ message: 'Invalid code' });
+            }
+        }
     } catch (error) {
         console.error('[AUTH ERROR]', error);
         res.status(500).json({ message: 'Internal server error.' });

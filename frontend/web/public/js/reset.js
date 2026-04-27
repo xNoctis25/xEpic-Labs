@@ -139,11 +139,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.disabled = false;
                 btn.textContent = 'Verify Code';
                 
-                otpInput.value = ''; // Wipe the bad code
-                otpInput.placeholder = 'INVALID CODE'; // Inject the error
-                otpInput.classList.add('input-error'); // Turn it red
+                otpInput.value = ''; 
+                otpInput.classList.add('input-error'); 
                 
-                // Revert to normal the moment they try to type again
+                // Catch the auto-resend trigger
+                if (err.message && err.message.includes('New code sent')) {
+                    otpInput.placeholder = 'New code sent';
+                    startResendTimer(60); // Restart the timer UI!
+                } else {
+                    otpInput.placeholder = 'Invalid code'; // Softened capitalization
+                }
+                
                 otpInput.addEventListener('focus', function clearError() {
                     this.placeholder = '6-Digit Code';
                     this.classList.remove('input-error');
