@@ -8,6 +8,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@google/genai": "^1.0.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.6",
