@@ -25,9 +25,10 @@ async function loadProfile() {
                 </div>
             </div>
         `;
-        if (user.role === 'admin') {
-            const modelSelect = document.getElementById('novaModelSelect');
-            if (modelSelect) modelSelect.disabled = false;
+        const userRole = user.user?.role || user.role;
+        if (userRole === 'admin') {
+            const ms = document.getElementById('novaModelSelect');
+            if (ms) ms.disabled = false;
         }
     } catch (err) {
         auth.clearToken();
