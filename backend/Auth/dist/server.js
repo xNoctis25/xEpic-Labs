@@ -43,12 +43,53 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("./db"));
 const resend_1 = require("resend");
 const dotenv = __importStar(require("dotenv"));
+const genai_1 = require("@google/genai");
 dotenv.config();
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+// --- HELPER TO EXTRACT CLIENT IP ---
+const getClientIp = (req) => {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded ? (typeof forwarded === 'string' ? forwarded.split(',')[0] : forwarded[0]) : req.socket.remoteAddress;
+    return ip ? ip.trim() : 'unknown';
+};
+// --- GLOBAL IP BLACKLIST MIDDLEWARE ---
+app.use(async (req, res, next) => {
+    const ip = getClientIp(req);
+    try {
+        const banCheck = await db_1.default.query('SELECT * FROM ip_blacklist WHERE ip_address = $1', [ip]);
+        if (banCheck.rows.length > 0) {
+            console.warn(`[SECURITY] Dropped connection from banned IP: ${ip}`);
+            // Return 403 Forbidden instantly. Request dies here.
+            return res.status(403).send('Forbidden: Your IP address has been permanently flagged for malicious activity.');
+        }
+        next();
+    }
+    catch (err) {
+        console.error('[DB ERROR] IP Check failed', err);
+        next(); // Fail open so real users aren't blocked by a DB glitch
+    }
+});
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    console.error('[FATAL] JWT_SECRET is not set in environment variables. Refusing to start.');
+    process.exit(1);
+}
 const resend = new resend_1.Resend(process.env.RESEND_API_KEY);
+// --- DYNAMIC SECURITY MIGRATION ---
+db_1.default.query(`
+    CREATE TABLE IF NOT EXISTS ip_blacklist (
+        ip_address VARCHAR(45) PRIMARY KEY,
+        reason VARCHAR(255),
+        banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ALTER TABLE users 
+    ADD COLUMN IF NOT EXISTS failed_otp_attempts INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS otp_resends INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS failed_credential_attempts INT DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
+`).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
 // ── SIGN UP ──────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
     try {
@@ -190,6 +231,7 @@ app.get('/api/auth/me', async (req, res) => {
         res.status(200).json(userQuery.rows[0]);
     }
     catch (error) {
+        console.error('[AUTH ERROR] /me token verification failed:', error?.message || error);
         res.status(401).json({ message: 'Invalid or expired token.' });
     }
 });
@@ -217,38 +259,117 @@ app.post('/api/auth/check-exists', async (req, res) => {
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
-// ── FORGOT PASSWORD (enumeration-safe) ───────────────────────────────────────
+// --- FORGOT PASSWORD (HONEYPOT PROTECTED) ---
 app.post('/api/auth/forgot-password', async (req, res) => {
     try {
-        const { email } = req.body;
-        const userQuery = await db_1.default.query('SELECT id, email, username FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        // SECURE: Always return 200 to prevent user enumeration
+        const { username, email } = req.body;
+        // 1. Query by email first to see if the target exists
+        const userQuery = await db_1.default.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (userQuery.rows.length === 0) {
-            console.log(`[AUTH] Failed reset attempt (not found): ${email}`);
-            return res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+            // Cannot track non-existent emails easily without IP bans. Delay and reject.
+            await new Promise(resolve => setTimeout(resolve, 500));
+            return res.status(400).json({ message: 'Credentials do not match.' });
         }
         const user = userQuery.rows[0];
+        // 2. If already flagged, spring the Honeypot Trap immediately!
+        if (user.is_flagged) {
+            console.warn(`[SECURITY] Honeypot triggered for flagged user: ${email}`);
+            await new Promise(resolve => setTimeout(resolve, 1500)); // Short server delay
+            return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
+        }
+        // 3. Check if Username matches
+        if (user.username.toLowerCase() !== username.toLowerCase()) {
+            let fails = (user.failed_credential_attempts || 0) + 1;
+            if (fails >= 3) {
+                // HONEYPOT ACTIVATED: Flag account, BAN IP, pretend it worked.
+                await db_1.default.query('UPDATE users SET is_flagged = true, failed_credential_attempts = $1 WHERE id = $2', [fails, user.id]);
+                const ip = getClientIp(req);
+                await db_1.default.query('INSERT INTO ip_blacklist (ip_address, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ip, 'Credential Brute Force Honeypot']);
+                console.warn(`[SECURITY] IP BANNED & Account flagged for brute force credentials: ${email} (${ip})`);
+                return res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
+            }
+            else {
+                // Normal failure
+                await db_1.default.query('UPDATE users SET failed_credential_attempts = $1 WHERE id = $2', [fails, user.id]);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                return res.status(400).json({ message: 'Credentials do not match.' });
+            }
+        }
+        // 4. Perfect Match: Reset tracking and generate OTP
+        await db_1.default.query('UPDATE users SET failed_credential_attempts = 0 WHERE id = $1', [user.id]);
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         await db_1.default.query(`UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes' WHERE id = $2`, [otp, user.id]);
         await resend.emails.send({
             from: process.env.RESEND_FROM_EMAIL || 'noreply@xepic-labs.com',
             to: user.email,
-            subject: 'xEpic Labs — Password Reset Code',
-            html: `
-                <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#0b0c10;color:#f0f4f8;border-radius:12px;">
-                    <h2 style="color:#66fcf1;margin-bottom:8px;">xEpic Labs</h2>
-                    <p>Hi <strong>${user.username}</strong>,</p>
-                    <p>We received a request to reset your password. Your reset code is:</p>
-                    <div style="font-size:2.5rem;font-weight:bold;letter-spacing:12px;color:#66fcf1;margin:24px 0;">${otp}</div>
-                    <p style="color:#6b7a8d;font-size:0.85rem;">This code expires in 15 minutes. If you did not request this, ignore this email — your account is safe.</p>
-                </div>
-            `
+            subject: 'Password Reset Request',
+            html: `<p>Hi ${user.username},</p><p>We received a request to reset your password.</p><p>Your reset code is: <strong>${otp}</strong></p><p>This code expires in 15 minutes.</p>`
         });
-        console.log(`[AUTH] 📧 Password reset OTP sent to: ${email}`);
-        res.status(200).json({ message: 'If an account exists, a reset code has been sent.' });
+        res.status(200).json({ message: 'If the account exists, a reset code has been sent.' });
     }
     catch (error) {
-        console.error('[AUTH ERROR] /forgot-password:', error);
+        console.error('[AUTH ERROR]', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+// --- VERIFY OTP (STEP 1) WITH TARPITTING & AUTO-RESEND ---
+app.post('/api/auth/verify-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const userQuery = await db_1.default.query('SELECT * FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        if (userQuery.rows.length === 0) {
+            return res.status(400).json({ message: 'Invalid code' });
+        }
+        const user = userQuery.rows[0];
+        // TARPIT: Flagged users get stuck in a short fake delay, then instructed to hang
+        if (user.is_flagged) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Return special 423 code to trigger the infinite frontend hang
+            return res.status(423).json({ message: 'tarpit' });
+        }
+        const isValid = user.otp === otp && new Date(user.otpexpiry) > new Date();
+        if (isValid) {
+            // Success! Reset security counters
+            await db_1.default.query('UPDATE users SET failed_otp_attempts = 0, otp_resends = 0 WHERE id = $1', [user.id]);
+            return res.status(200).json({ message: 'Code verified successfully.' });
+        }
+        else {
+            // Failure logic
+            let fails = (user.failed_otp_attempts || 0) + 1;
+            let resends = user.otp_resends || 0;
+            if (fails >= 3) {
+                resends += 1;
+                if (resends >= 3) {
+                    // MAX RESENDS HIT: Flag the account & BAN IP
+                    await db_1.default.query('UPDATE users SET is_flagged = true, failed_otp_attempts = $1, otp_resends = $2 WHERE id = $3', [fails, resends, user.id]);
+                    const ip = getClientIp(req);
+                    await db_1.default.query('INSERT INTO ip_blacklist (ip_address, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING', [ip, 'OTP Brute Force / Max Resends']);
+                    console.warn(`[SECURITY] IP BANNED & Account heavily flagged for brute force: ${email} (${ip})`);
+                    return res.status(400).json({ message: 'Invalid code' });
+                }
+                else {
+                    // AUTO-RESEND OTP
+                    const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                    await db_1.default.query(`UPDATE users SET otp = $1, otpexpiry = NOW() + INTERVAL '15 minutes', failed_otp_attempts = 0, otp_resends = $2 WHERE id = $3`, [newOtp, resends, user.id]);
+                    await resend.emails.send({
+                        from: process.env.RESEND_FROM_EMAIL || 'noreply@xepic-labs.com',
+                        to: user.email,
+                        subject: 'New Password Reset Request',
+                        html: `<p>Hi ${user.username},</p><p>We noticed multiple failed attempts. Here is a new reset code: <strong>${newOtp}</strong></p>`
+                    });
+                    // Specific message frontend will catch
+                    return res.status(422).json({ message: 'New code sent' });
+                }
+            }
+            else {
+                // Just increment fail count
+                await db_1.default.query('UPDATE users SET failed_otp_attempts = $1 WHERE id = $2', [fails, user.id]);
+                return res.status(400).json({ message: 'Invalid code' });
+            }
+        }
+    }
+    catch (error) {
+        console.error('[AUTH ERROR]', error);
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
@@ -273,6 +394,38 @@ app.post('/api/auth/reset-password', async (req, res) => {
     catch (error) {
         console.error('[AUTH ERROR] /reset-password:', error);
         res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+// ── N.O.V.A. (AI COMMAND NODE) ────────────────────────────────────────────────
+app.post('/api/auth/chat', async (req, res) => {
+    try {
+        // Protect the route using the existing JWT logic
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        const token = authHeader.split(' ')[1];
+        jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const { message } = req.body;
+        if (!message)
+            return res.status(400).json({ message: 'Message is required.' });
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
+        }
+        const ai = new genai_1.GoogleGenAI({ apiKey: apiKey });
+        const response = await ai.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: message,
+            config: {
+                systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant."
+            }
+        });
+        res.status(200).json({ reply: response.text });
+    }
+    catch (error) {
+        console.error('[NOVA ERROR]', error);
+        res.status(500).json({ reply: 'Error communicating with N.O.V.A. core.' });
     }
 });
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
