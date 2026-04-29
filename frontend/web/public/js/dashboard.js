@@ -77,6 +77,7 @@ if (novaForm) {
 
         appendMessage(text, true);
         novaInput.value = '';
+        novaInput.style.height = 'auto';
         novaInput.disabled = true;
         novaSubmit.disabled = true;
 
@@ -285,7 +286,7 @@ function updateMarketClock() {
 
     // -- 4. Classify Active Session & Killzone -------------------------
     let sessionText = "Session: Asia";
-    let sessionColor = "gray";
+    let sessionColor = "green";
     let kzText  = "Killzone: Inactive";
     let kzColor = "gray";
 
@@ -334,3 +335,20 @@ function updateMarketClock() {
 // Boot immediately, then refresh every 10 seconds
 updateMarketClock();
 setInterval(updateMarketClock, 10000);
+
+// --- N.O.V.A. Textarea Auto-Grow & Submit ---
+const novaTextArea = document.getElementById('novaInput');
+if (novaTextArea) {
+    novaTextArea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+    novaTextArea.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (this.value.trim() !== '') {
+                document.getElementById('novaForm').dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }
+        }
+    });
+}

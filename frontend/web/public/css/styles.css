@@ -750,7 +750,7 @@ body { padding-top: 0 !important; align-items: center !important; }
 }
 .nav-item.active svg { fill: rgba(102, 252, 241, 0.15); filter: drop-shadow(0 0 4px rgba(102, 252, 241, 0.8)); }
 
-/* Logout icon — red tint */
+/* Logout icon ï¿½ red tint */
 #logoutBtn { color: var(--error); }
 #logoutBtn:hover { background: rgba(255, 76, 76, 0.1); color: #ff6b6b; }
 
@@ -788,7 +788,7 @@ body { padding-top: 0 !important; align-items: center !important; }
 .alert.success { background: rgba(102,252,241,0.08); border-color: var(--primary); color: var(--primary); }
 
 /* =========================================
-   COMMAND CENTER — MASTER LAYOUT v9
+   COMMAND CENTER ï¿½ MASTER LAYOUT v9
    ========================================= */
 body { padding-top: 0 !important; align-items: center !important; }
 .app-layout { display: flex; width: 100%; max-width: 1400px; height: 90vh; margin: 0 auto; gap: 30px; padding: 0 20px; align-items: stretch; }
@@ -933,19 +933,19 @@ body {
     overflow: hidden;
 }
 
-/* Brand/pills now live in the global header — hide any lingering home-header */
+/* Brand/pills now live in the global header ï¿½ hide any lingering home-header */
 .home-header { display: none !important; }
 
 /* =========================================
    STRICT TOP-DOWN LAYOUT (FIX CARDBOARDING)
    ========================================= */
-body { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; align-items: stretch !important; height: 100vh !important; padding-top: 0 !important; margin: 0 !important; overflow: hidden !important; }
+body.dashboard-body { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; align-items: stretch !important; height: 100vh !important; padding-top: 0 !important; margin: 0 !important; overflow: hidden !important; }
 
 .global-top-header { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 20px 40px !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; flex-shrink: 0 !important; z-index: 50 !important; background: var(--bg) !important; }
 
 .app-layout { display: flex !important; flex: 1 !important; width: 100% !important; max-width: 100% !important; padding: 30px 40px !important; margin: 0 !important; gap: 30px !important; height: auto !important; overflow: hidden !important; }
 
-.glass-panel.main-content { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+body.dashboard-body .glass-panel.main-content { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
 
 .home-header { display: none !important; }
 .system-control-panel { display: none !important; }
@@ -974,15 +974,16 @@ body { display: flex !important; flex-direction: column !important; justify-cont
    ========================================= */
 .dot.yellow { background: #ffd600; box-shadow: 0 0 10px #ffd600; }
 
+
+
 /* =========================================
-   RESTORE AUTH PAGES (LOGIN/RESET/VERIFY)
+   N.O.V.A. GEMINI UI OVERHAUL
    ========================================= */
-body:not(:has(.app-layout)) {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: center !important;
-    align-items: flex-start !important;
-    padding-top: 25vh !important;
-    height: auto !important;
-    min-height: 100vh !important;
-}
+#novaView { max-width: 1000px !important; margin: 0 auto; width: 100%; display: flex; flex-direction: column; padding: 20px 0; }
+.nova-header { text-align: center; padding: 10px 0 20px 0; font-weight: 600; font-size: 1.1rem; color: #e3e3e3; opacity: 0.9; }
+.nova-messages.borderless { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 20px 20px 20px !important; }
+.nova-input-wrapper { padding: 0 20px; display: flex; flex-direction: column; align-items: center; width: 100%; margin-top: auto; }
+.gemini-input-pill { background: #1e1f22; border-radius: 26px; padding: 10px 16px; display: flex; align-items: flex-end; width: 100%; border: 1px solid rgba(255,255,255,0.08); transition: background 0.3s; overflow: visible; }
+.gemini-input-pill:focus-within { background: #26282c; border-color: rgba(102,252,241,0.3); }
+.gemini-input-pill textarea { background: transparent; border: none; color: #e3e3e3; font-size: 1rem; outline: none; width: 100%; resize: none; overflow-y: hidden; min-height: 24px; max-height: 200px; padding: 4px 0; font-family: inherit; line-height: 1.5; margin-right: 15px; }
+.nova-disclaimer { font-size: 0.75rem; color: #888; margin-top: 12px; text-align: center; }
