@@ -4,7 +4,8 @@ if (!auth.getToken()) window.location.href = '/';
 async function loadProfile() {
     try {
         const user = await auth.request('/me', { method: 'GET' });
-        const dateStr = user.created_at ? new Date(parseInt(user.created_at) * 1000).toLocaleDateString() : 'Active Member';
+        const ts = user.created_at || user.createdat;
+        const dateStr = ts ? new Date(Number(ts) * (String(ts).length <= 10 ? 1000 : 1)).toLocaleDateString() : 'Active Member';
         profileData.innerHTML = `
             <div style="margin-bottom: 15px; text-align: center;">
                 <div style="width: 60px; height: 60px; background: var(--primary); border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; color: #000;">
@@ -58,7 +59,7 @@ function appendMessage(text, isUser = false) {
         // Parse simple markdown-like bold/breaks for cleaner UI
         let formatted = text.replace(/\n/g, '<br>');
         formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-        div.innerHTML = `<strong>N.O.V.A.</strong>${formatted}`;
+        div.innerHTML = `<strong>N.O.V.A. AI agent for xEpic Labs</strong><br>${formatted}`;
     } else {
         div.textContent = text;
     }
@@ -88,7 +89,7 @@ if (novaForm) {
             });
             let formatted = res.reply.replace(/\n/g, '<br>');
             formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-            typingMsg.innerHTML = `<strong>N.O.V.A.</strong>${formatted}`;
+            typingMsg.innerHTML = `<strong>N.O.V.A. AI agent for xEpic Labs</strong><br>${formatted}`;
         } catch (err) {
             typingMsg.innerHTML = `<strong>N.O.V.A. ERROR</strong><span style="color:var(--error)">${err.message || 'Connection lost to core.'}</span>`;
         } finally {
