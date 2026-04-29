@@ -633,3 +633,95 @@ form:not(.hidden) {
     color: #ff6b6b !important;
     opacity: 0.9 !important;
 }
+
+/* =========================================
+   N.O.V.A. TERMINAL STYLES
+   ========================================= */
+.nova-container {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+.nova-header {
+    background: rgba(102, 252, 241, 0.08);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 10px 15px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.nova-icon {
+    width: 16px; height: 16px;
+}
+.nova-messages {
+    height: 280px;
+    overflow-y: auto;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.nova-msg {
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    max-width: 85%;
+    word-wrap: break-word;
+}
+.user-msg {
+    background: var(--input-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    align-self: flex-end;
+    border-bottom-right-radius: 2px;
+}
+.ai-msg {
+    background: rgba(102, 252, 241, 0.05);
+    border: 1px solid rgba(102, 252, 241, 0.15);
+    color: var(--primary);
+    align-self: flex-start;
+    border-bottom-left-radius: 2px;
+}
+.ai-msg strong {
+    color: #fff; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; opacity: 0.8;
+}
+.nova-input-area {
+    display: flex;
+    border-top: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.02);
+    margin: 0 !important; padding: 0 !important;
+    max-height: none !important; opacity: 1 !important; transform: none !important;
+}
+.nova-input-area input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 14px 15px;
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+.nova-input-area input:focus { outline: none; box-shadow: none; border: none; background: transparent; }
+.nova-input-area button {
+    background: transparent;
+    border: none;
+    padding: 0 15px;
+    color: var(--primary);
+    cursor: pointer;
+    transition: opacity 0.2s;
+    display: flex; align-items: center; justify-content: center;
+}
+.nova-input-area button:hover { opacity: 0.7; }
+.nova-input-area button svg { width: 18px; height: 18px; }
+.nova-typing { font-style: italic; opacity: 0.6; }

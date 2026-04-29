@@ -38,3 +38,58 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 });
 
 loadProfile();
+
+// ── N.O.V.A. TERMINAL LOGIC ──
+const novaForm = document.getElementById('novaForm');
+const novaInput = document.getElementById('novaInput');
+const novaMessages = document.getElementById('novaMessages');
+const novaSubmit = document.getElementById('novaSubmit');
+
+function appendMessage(text, isUser = false) {
+    const div = document.createElement('div');
+    div.className = `nova-msg ${isUser ? 'user-msg' : 'ai-msg'}`;
+
+    if (!isUser) {
+        // Parse simple markdown-like bold/breaks for cleaner UI
+        let formatted = text.replace(/\n/g, '<br>');
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
+        div.innerHTML = `<strong>N.O.V.A.</strong>${formatted}`;
+    } else {
+        div.textContent = text;
+    }
+
+    novaMessages.appendChild(div);
+    novaMessages.scrollTop = novaMessages.scrollHeight;
+    return div;
+}
+
+if (novaForm) {
+    novaForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = novaInput.value.trim();
+        if (!text) return;
+
+        appendMessage(text, true);
+        novaInput.value = '';
+        novaInput.disabled = true;
+        novaSubmit.disabled = true;
+
+        const typingMsg = appendMessage('<span class="nova-typing">Processing...</span>', false);
+
+        try {
+            const res = await auth.request('/chat', {
+                method: 'POST',
+                body: JSON.stringify({ message: text })
+            });
+            let formatted = res.reply.replace(/\n/g, '<br>');
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
+            typingMsg.innerHTML = `<strong>N.O.V.A.</strong>${formatted}`;
+        } catch (err) {
+            typingMsg.innerHTML = `<strong>N.O.V.A. ERROR</strong><span style="color:var(--error)">${err.message || 'Connection lost to core.'}</span>`;
+        } finally {
+            novaInput.disabled = false;
+            novaSubmit.disabled = false;
+            novaInput.focus();
+        }
+    });
+}

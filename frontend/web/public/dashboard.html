@@ -13,6 +13,21 @@
         <div id="profileData" style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
             <p style="color: var(--text-muted); margin-bottom: 10px; text-align: center;">Loading secure profile...</p>
         </div>
+        <div class="nova-container">
+            <div class="nova-header">
+                <svg class="nova-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                <span>N.O.V.A. Terminal</span>
+            </div>
+            <div class="nova-messages" id="novaMessages">
+                <div class="nova-msg ai-msg"><strong>N.O.V.A.</strong><br>Online. Standing by for command.</div>
+            </div>
+            <form id="novaForm" class="nova-input-area">
+                <input type="text" id="novaInput" placeholder="Command N.O.V.A..." autocomplete="off" required>
+                <button type="submit" id="novaSubmit" aria-label="Send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </form>
+        </div>
         <button id="logoutBtn" class="btn" style="background: rgba(255, 76, 76, 0.2); border: 1px solid var(--error); color: var(--error);">
             Secure Sign Out
         </button>

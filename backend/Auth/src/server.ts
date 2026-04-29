@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import pool from './db';
 import { Resend } from 'resend';
 import * as dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
 
 dotenv.config();
 
@@ -457,6 +458,41 @@ app.post('/api/auth/reset-password', async (req, res) => {
     } catch (error) {
         console.error('[AUTH ERROR] /reset-password:', error);
         res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+// ── N.O.V.A. (AI COMMAND NODE) ────────────────────────────────────────────────
+app.post('/api/auth/chat', async (req, res) => {
+    try {
+        // Protect the route using the existing JWT logic
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        const token = authHeader.split(' ')[1];
+        jwt.verify(token, JWT_SECRET);
+
+        const { message } = req.body;
+        if (!message) return res.status(400).json({ message: 'Message is required.' });
+
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
+        }
+
+        const ai = new GoogleGenAI({ apiKey: apiKey });
+        const response = await ai.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: message,
+            config: {
+                systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant."
+            }
+        });
+
+        res.status(200).json({ reply: response.text });
+    } catch (error: any) {
+        console.error('[NOVA ERROR]', error);
+        res.status(500).json({ reply: 'Error communicating with N.O.V.A. core.' });
     }
 });
 
