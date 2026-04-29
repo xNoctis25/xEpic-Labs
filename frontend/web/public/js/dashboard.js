@@ -221,47 +221,6 @@ if (changePwdForm) {
     });
 }
 
-// --- Custom Dropdown Interactive Logic ---
-const modelDropdown = document.getElementById('modelDropdown');
-const dropdownTrigger = document.getElementById('dropdownTrigger');
-const selectedModelText = document.getElementById('selectedModelText');
-const dropdownItems = document.querySelectorAll('.dropdown-item');
-
-let hiddenModelInput = document.getElementById('novaModelSelect');
-if (!hiddenModelInput && modelDropdown) {
-    hiddenModelInput = document.createElement('input');
-    hiddenModelInput.type = 'hidden';
-    hiddenModelInput.id = 'novaModelSelect';
-    hiddenModelInput.value = 'gemini-2.5-flash';
-    modelDropdown.parentNode.appendChild(hiddenModelInput);
-}
-
-if (dropdownTrigger && modelDropdown) {
-    dropdownTrigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (!modelDropdown.classList.contains('disabled')) {
-            modelDropdown.classList.toggle('open');
-        }
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!modelDropdown.contains(e.target)) {
-            modelDropdown.classList.remove('open');
-        }
-    });
-
-    dropdownItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dropdownItems.forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
-            const titleEl = item.querySelector('.item-title');
-            if (selectedModelText && titleEl) selectedModelText.textContent = titleEl.textContent;
-            if (hiddenModelInput) hiddenModelInput.value = item.getAttribute('data-value') || 'gemini-2.5-flash';
-            modelDropdown.classList.remove('open');
-        });
-    });
-}
 
 // --- Live Market Clock Logic ---
 function updateMarketClock() {
@@ -281,7 +240,7 @@ function updateMarketClock() {
     const dd      = String(now.getDate()).padStart(2, '0');
     const dateStr = `${yyyy}-${mm}-${dd}`;
 
-    const day          = now.getDay();           // 0=Sun … 6=Sat
+    const day          = now.getDay();           // 0=Sun ï¿½ 6=Sat
     const h            = now.getHours();
     const min          = now.getMinutes();
     const totalMinutes = h * 60 + min;
@@ -315,7 +274,7 @@ function updateMarketClock() {
         return;
     }
 
-    // -- 3. CME Daily Maintenance (Mon-Thu 17:00–18:00 ET) ------------
+    // -- 3. CME Daily Maintenance (Mon-Thu 17:00ï¿½18:00 ET) ------------
     if (totalMinutes >= 1020 && totalMinutes < 1080) {
         uiSessionLabel.textContent  = "Closed: CME Maint";
         uiSessionDot.className      = "dot red";
@@ -331,7 +290,7 @@ function updateMarketClock() {
     let kzColor = "gray";
 
     if (totalMinutes >= 120 && totalMinutes < 300) {
-        // London session 02:00–05:00 ET
+        // London session 02:00ï¿½05:00 ET
         sessionText  = "Session: London";
         sessionColor = "green";
         if (totalMinutes >= 135) {
@@ -342,22 +301,22 @@ function updateMarketClock() {
             kzText = "Killzone: Pre-London";
         }
     } else if (totalMinutes >= 570 && totalMinutes < 720) {
-        // NY AM session 09:30–12:00 ET
+        // NY AM session 09:30ï¿½12:00 ET
         sessionText  = "Session: New York";
         sessionColor = "green";
         if (totalMinutes >= 585 && totalMinutes < 690) {
-            // NY AM Killzone 09:45–11:30 ET
+            // NY AM Killzone 09:45ï¿½11:30 ET
             kzText  = "Killzone: NY AM";
             kzColor = "green";
         } else {
             kzText = "Killzone: Outside";
         }
     } else if (totalMinutes >= 810 && totalMinutes < 960) {
-        // NY PM session 13:30–16:00 ET
+        // NY PM session 13:30ï¿½16:00 ET
         sessionText  = "Session: New York";
         sessionColor = "green";
         if (totalMinutes >= 810 && totalMinutes < 945) {
-            // NY PM Killzone 13:30–15:45 ET
+            // NY PM Killzone 13:30ï¿½15:45 ET
             kzText  = "Killzone: NY PM";
             kzColor = "green";
         } else {
