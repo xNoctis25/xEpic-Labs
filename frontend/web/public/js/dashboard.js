@@ -156,97 +156,31 @@ if (dropdownTrigger && modelDropdown) {
 }
 
 
+
 // --- Navigation & View Switching ---
-const navHome = document.getElementById('navHome');
-const navSettings = document.getElementById('navSettings');
-const terminalView = document.getElementById('terminalView');
-const profileView = document.getElementById('profileView');
-
-function switchView(viewName) {
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-    if (terminalView) terminalView.classList.add('hidden');
-    if (profileView) profileView.classList.add('hidden');
-
-    if (viewName === 'home') {
-        if (navHome) navHome.classList.add('active');
-        if (terminalView) terminalView.classList.remove('hidden');
-    } else if (viewName === 'settings') {
-        if (navSettings) navSettings.classList.add('active');
-        if (profileView) profileView.classList.remove('hidden');
-    }
-}
-
-if (navHome) navHome.addEventListener('click', (e) => { e.preventDefault(); switchView('home'); });
-if (navSettings) navSettings.addEventListener('click', (e) => { e.preventDefault(); switchView('settings'); });
-
-// --- Change Password Logic ---
-const changePwdForm = document.getElementById('changePasswordForm');
-if (changePwdForm) {
-    changePwdForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const currentPassword = document.getElementById('currentPassword').value;
-        const newPassword = document.getElementById('newProfilePassword').value;
-        const confirmPassword = document.getElementById('confirmNewProfilePassword').value;
-        const btn = document.getElementById('changePwdBtn');
-        const alertBox = document.getElementById('pwdAlertBox');
-
-        alertBox.style.display = 'none';
-        alertBox.className = 'alert';
-
-        if (newPassword !== confirmPassword) {
-            alertBox.className = 'alert error';
-            alertBox.textContent = 'New passwords do not match.';
-            alertBox.style.display = 'block';
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Updating...';
-
-        try {
-            await auth.request('/change-password', {
-                method: 'POST',
-                body: JSON.stringify({ currentPassword, newPassword })
-            });
-            alertBox.className = 'alert success';
-            alertBox.textContent = 'Password updated successfully.';
-            alertBox.style.display = 'block';
-            changePwdForm.reset();
-        } catch(err) {
-            alertBox.className = 'alert error';
-            alertBox.textContent = err.message || 'Failed to update password.';
-            alertBox.style.display = 'block';
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Update Password';
-        }
-    });
-}
-
-// -- COMMAND CENTER NAVIGATION v9 ----------------------------------------------
-const views = {
-    home: document.getElementById('homeView'),
-    nova: document.getElementById('novaView'),
-    settings: document.getElementById('profileView')
-};
 const navs = {
     home: document.getElementById('navHome'),
     nova: document.getElementById('navNova'),
     settings: document.getElementById('navSettings')
 };
+const views = {
+    home: document.getElementById('homeView'),
+    nova: document.getElementById('novaView'),
+    settings: document.getElementById('profileView')
+};
 
-function switchView(viewName) {
+window.switchView = function(viewName) {
     Object.values(navs).forEach(nav => nav && nav.classList.remove('active'));
     Object.values(views).forEach(view => view && view.classList.add('hidden'));
     if (navs[viewName]) navs[viewName].classList.add('active');
     if (views[viewName]) views[viewName].classList.remove('hidden');
-}
+};
 
-if (navs.home) navs.home.addEventListener('click', (e) => { e.preventDefault(); switchView('home'); });
-if (navs.nova) navs.nova.addEventListener('click', (e) => { e.preventDefault(); switchView('nova'); });
-if (navs.settings) navs.settings.addEventListener('click', (e) => { e.preventDefault(); switchView('settings'); });
+if (navs.home) navs.home.addEventListener('click', (e) => { e.preventDefault(); window.switchView('home'); });
+if (navs.nova) navs.nova.addEventListener('click', (e) => { e.preventDefault(); window.switchView('nova'); });
+if (navs.settings) navs.settings.addEventListener('click', (e) => { e.preventDefault(); window.switchView('settings'); });
 
-// -- CHANGE PASSWORD ------------------------------------------------------------
+// --- Change Password Logic ---
 const changePwdForm = document.getElementById('changePasswordForm');
 if (changePwdForm) {
     changePwdForm.addEventListener('submit', async (e) => {
@@ -267,9 +201,7 @@ if (changePwdForm) {
             return;
         }
 
-        btn.disabled = true;
-        btn.textContent = 'Updating...';
-
+        btn.disabled = true; btn.textContent = 'Updating...';
         try {
             await auth.request('/change-password', {
                 method: 'POST',
@@ -284,8 +216,49 @@ if (changePwdForm) {
             alertBox.textContent = err.message || 'Failed to update password.';
             alertBox.style.display = 'block';
         } finally {
-            btn.disabled = false;
-            btn.textContent = 'Update Password';
+            btn.disabled = false; btn.textContent = 'Update Password';
         }
+    });
+}
+
+// --- Custom Dropdown Interactive Logic ---
+const modelDropdown = document.getElementById('modelDropdown');
+const dropdownTrigger = document.getElementById('dropdownTrigger');
+const selectedModelText = document.getElementById('selectedModelText');
+const dropdownItems = document.querySelectorAll('.dropdown-item');
+
+let hiddenModelInput = document.getElementById('novaModelSelect');
+if (!hiddenModelInput && modelDropdown) {
+    hiddenModelInput = document.createElement('input');
+    hiddenModelInput.type = 'hidden';
+    hiddenModelInput.id = 'novaModelSelect';
+    hiddenModelInput.value = 'gemini-2.5-flash';
+    modelDropdown.parentNode.appendChild(hiddenModelInput);
+}
+
+if (dropdownTrigger && modelDropdown) {
+    dropdownTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!modelDropdown.classList.contains('disabled')) {
+            modelDropdown.classList.toggle('open');
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!modelDropdown.contains(e.target)) {
+            modelDropdown.classList.remove('open');
+        }
+    });
+
+    dropdownItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdownItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            const titleEl = item.querySelector('.item-title');
+            if (selectedModelText && titleEl) selectedModelText.textContent = titleEl.textContent;
+            if (hiddenModelInput) hiddenModelInput.value = item.getAttribute('data-value') || 'gemini-2.5-flash';
+            modelDropdown.classList.remove('open');
+        });
     });
 }

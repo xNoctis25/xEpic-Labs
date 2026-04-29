@@ -41,11 +41,29 @@
                 <div class="home-header">
                     <div class="brand-area">
                         <div class="logo-mark">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon><line x1="12" y1="22" x2="12" y2="12"></line><line x1="22" y1="8.5" x2="12" y2="12"></line><line x1="2" y1="8.5" x2="12" y2="12"></line></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" style="width:40px; height:40px;">
+                              <defs>
+                                <linearGradient id="epicMetalDash" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stop-color="#ffffff" />
+                                  <stop offset="40%" stop-color="#d1d8e0" />
+                                  <stop offset="100%" stop-color="#7a8594" />
+                                </linearGradient>
+                                <filter id="neonGlowDash" x="-50%" y="-50%" width="200%" height="200%">
+                                  <feGaussianBlur stdDeviation="3" result="blur" />
+                                  <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                                </filter>
+                              </defs>
+                              <g>
+                                <path d="M 25 20 L 45 20 L 45 100 L 25 100 Z" fill="url(#epicMetalDash)" />
+                                <path d="M 45 20 L 100 20 L 85 38 L 45 38 Z" fill="url(#epicMetalDash)" />
+                                <path d="M 45 100 L 100 100 L 85 82 L 45 82 Z" fill="url(#epicMetalDash)" />
+                                <path d="M 65 42 Q 65 60 42 60 Q 65 60 65 78 Q 65 60 88 60 Q 65 60 65 42 Z" fill="#ffffff" filter="url(#neonGlowDash)" />
+                              </g>
+                            </svg>
                         </div>
                         <div class="brand-text">
                             <h1>xEpic Labs</h1>
-                            <p class="slogan">Architecting the Future of Algorithmic Execution</p>
+                            <p class="slogan">The Future of Finance</p>
                         </div>
                     </div>
                     <div class="system-control-panel">
@@ -146,7 +164,7 @@
         </div><!-- /.glass-panel.main-content -->
     </div><!-- /.app-layout -->
 
-    <script src="/js/api.js?v=9.0"></script>
-    <script src="/js/dashboard.js?v=9.0"></script>
+    <script src="/js/api.js?v=10.0"></script>
+    <script src="/js/dashboard.js?v=10.0"></script>
 </body>
 </html>
