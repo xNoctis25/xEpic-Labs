@@ -968,3 +968,8 @@ body { display: flex !important; flex-direction: column !important; justify-cont
     70%  { box-shadow: 0 0 0 8px rgba(213, 0, 249, 0);   }
     100% { box-shadow: 0 0 0 0   rgba(213, 0, 249, 0);   }
 }
+
+/* =========================================
+   NEW YELLOW STATE (ENGINE HALTED)
+   ========================================= */
+.dot.yellow { background: #ffd600; box-shadow: 0 0 10px #ffd600; }
