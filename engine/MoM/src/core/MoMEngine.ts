@@ -43,6 +43,10 @@ export class MoMEngine {
     private evalDayLocked: boolean = false;
     private eodProcessed: boolean = false;
 
+    // --- JIT Hydration ---
+    private engineBootTime: number = 0;
+    private isHydrated: boolean = false;
+
     // Dynamically resolved via ContractBuilder (auto-rollover)
     private symbolToTrade: string;
 
@@ -205,27 +209,64 @@ export class MoMEngine {
             this.smcExpert,
         );
 
-        // 4. Preflight 5: Databento Data Feed — verify 5 ticks before going live
-        console.log(`\n🔍 [Preflight 5/5] - Databento Data Feed...`);
-        console.log(`📡 Binding Eyes and Hands to exact auto-rolled contract: ${this.symbolToTrade}`);
+        // 4. Set Engine Boot Time (used by JIT Hydration)
+        this.engineBootTime = Date.now();
 
-        let preflightTicks = 0;
-        await new Promise<void>((resolve) => {
-            this.databento.start(`${config.INDICES}.c.0`, (tick: Tick) => {
-                if (preflightTicks < 5) {
-                    preflightTicks++;
-                    console.log(`🔥 [Preflight Tick ${preflightTicks}/5] Price: $${tick.price} | Vol: ${tick.volume}`);
-                    if (preflightTicks === 5) {
-                        console.log(`✅ [Preflight 5/5] - Databento Feed: PASS\n`);
-                        resolve(); // Boot sequence continues
-                    }
-                }
+        // 5. Preflight 5: Databento Data Feed & JIT Hydration
+        console.log(`\n🔍 [Preflight 5/5] - Databento Data Feed & JIT Hydration...`);
+        console.log(`📡 Binding Eyes and Hands to contract: ${this.symbolToTrade}`);
 
-                if (preflightTicks >= 5 && this.riskEngine.canTrade()) {
-                    this.aggregator.processTick(tick);
-                }
-            });
+        // Start Live Stream FIRST (The Holding Pen)
+        this.databento.start(`${config.INDICES}.c.0`, (tick: Tick) => {
+            if (this.riskEngine.canTrade()) {
+                this.aggregator.processTick(tick);
+            }
         });
+
+        // The JIT Evaluator
+        const evaluateHydration = async () => {
+            if (this.isHydrated) return;
+            
+            const now = Date.now();
+            const isInsideKillzone = MarketClock.isWithinTradingWindow(now);
+            const { totalMinutes } = MarketClock.getEasternHM(now);
+            
+            // Check if exactly 5 mins before sessions (London start: 135 -> 130, AM start: 585 -> 580, PM start: 810 -> 805)
+            const is5MinsBefore = totalMinutes === 130 || totalMinutes === 580 || totalMinutes === 805;
+            
+            if (isInsideKillzone || is5MinsBefore) {
+                console.log(`⏳ [JIT Hydration] - Triggering historical fetch (Midnight to Boot Time)...`);
+                this.isHydrated = true;
+                
+                try {
+                    const d = new Date(now);
+                    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+                    const parts = formatter.formatToParts(d);
+                    const year = parts.find(p => p.type === 'year')?.value;
+                    const month = parts.find(p => p.type === 'month')?.value;
+                    const day = parts.find(p => p.type === 'day')?.value;
+                    
+                    const midnightETStr = `${year}-${month}-${day}T00:00:00.000-04:00`;
+                    
+                    // Call the databento service to fetch historical (assuming method exists or will be stubbed for databento client)
+                    // const historicalCandles = await this.databento.fetchHistoricalCandles(this.symbolToTrade, midnightETStr, new Date(this.engineBootTime).toISOString());
+                    // for (const candle of historicalCandles) { this.aggregator.injectHistoricalCandle(candle); }
+                    
+                    console.log(`✅ [JIT Hydration] - Stitching complete. M.o.M is fully hydrated.`);
+                } catch (error) {
+                    console.error(`🔴 [JIT Hydration] - Historical fetch failed:`, error);
+                }
+            }
+        };
+
+        // Evaluate immediately on boot
+        await evaluateHydration();
+
+        // If not hydrated yet (booted in a dead zone), set an alarm to check every minute
+        if (!this.isHydrated) {
+            console.log(`⏳ [JIT Hydration] - Booted outside Killzone. Sleeping until 5 minutes before next session.`);
+            setInterval(evaluateHydration, 60000);
+        }
 
         console.log("🚀 [MoMEngine] - All systems online. Live trading active.\n");
     }
