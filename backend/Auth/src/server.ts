@@ -482,22 +482,24 @@ app.post('/api/auth/chat', async (req, res) => {
 
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
+            return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.', message: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
         }
+
+        const currentDate = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
 
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
             model: 'gemini-1.5-flash',
             contents: message,
             config: {
-                systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant."
+                systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant.\n\nCurrent Server Time: " + currentDate
             }
         });
 
         res.status(200).json({ reply: response.text });
     } catch (error: any) {
         console.error('[NOVA ERROR]', error);
-        res.status(500).json({ reply: 'Error communicating with N.O.V.A. core.' });
+        res.status(500).json({ reply: 'Error communicating with N.O.V.A. core.', message: 'Error communicating with N.O.V.A. core.' });
     }
 });
 

@@ -674,7 +674,9 @@ form.nova-input-area:not(.hidden) {
     width: 16px; height: 16px;
 }
 .nova-messages {
-    height: 280px;
+    height: auto;
+    min-height: 150px;
+    max-height: 35vh;
     overflow-y: auto;
     padding: 15px;
     display: flex;
