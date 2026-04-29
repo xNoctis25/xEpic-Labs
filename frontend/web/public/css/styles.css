@@ -663,7 +663,18 @@ form.nova-input-area:not(.hidden) {
 .icon-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
 .icon-btn svg { width: 20px; height: 20px; }
 .icon-btn.with-text { font-size: 0.9rem; gap: 6px; padding: 4px 10px; border-radius: 12px; }
-.gemini-model-select { background: transparent; color: #aaa; border: none; font-size: 0.85rem; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; font-weight: 500; }
-.gemini-model-select option { background: #1e1f22; color: #e3e3e3; }
-.gemini-model-select:disabled { opacity: 0.5; cursor: not-allowed; }
 .nova-typing { font-style: italic; opacity: 0.6; }
+
+/* CUSTOM MODEL DROPDOWN */
+.custom-model-dropdown { position: relative; font-family: inherit; }
+.dropdown-trigger { display: flex; align-items: center; gap: 6px; background: transparent; color: #aaa; font-size: 0.85rem; font-weight: 500; cursor: pointer; padding: 4px 8px; border-radius: 8px; transition: color 0.2s, background 0.2s; }
+.dropdown-trigger:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.custom-model-dropdown.disabled .dropdown-trigger { opacity: 0.5; cursor: not-allowed; }
+.custom-model-dropdown.disabled .dropdown-trigger:hover { background: transparent; color: #aaa; }
+.dropdown-menu { position: absolute; bottom: 100%; right: 0; margin-bottom: 8px; background: #2b2d31; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 6px; width: 220px; display: none; flex-direction: column; gap: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100; }
+.custom-model-dropdown.open .dropdown-menu { display: flex; }
+.dropdown-item { padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: background 0.2s; text-align: left; }
+.dropdown-item:hover { background: rgba(255,255,255,0.05); }
+.dropdown-item.active { background: rgba(102, 252, 241, 0.1); border: 1px solid rgba(102, 252, 241, 0.2); }
+.item-title { color: #fff; font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+.item-desc { color: #888; font-size: 0.75rem; line-height: 1.3; font-weight: normal; }

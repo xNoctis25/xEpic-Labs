@@ -28,8 +28,8 @@ async function loadProfile() {
         `;
         const userRole = user.user?.role || user.role;
         if (userRole === 'admin') {
-            const ms = document.getElementById('novaModelSelect');
-            if (ms) ms.disabled = false;
+            const dd = document.getElementById('modelDropdown');
+            if (dd) dd.classList.remove('disabled');
         }
     } catch (err) {
         auth.clearToken();
@@ -97,5 +97,36 @@ if (novaForm) {
             novaSubmit.disabled = false;
             novaInput.focus();
         }
+    });
+}
+
+// -- Custom Dropdown Logic ----------------------------------------------------
+const modelDropdown = document.getElementById('modelDropdown');
+const dropdownTrigger = document.getElementById('dropdownTrigger');
+const selectedModelText = document.getElementById('selectedModelText');
+const hiddenModelInput = document.getElementById('novaModelSelect');
+const dropdownItems = document.querySelectorAll('.dropdown-item');
+
+if (dropdownTrigger) {
+    dropdownTrigger.addEventListener('click', () => {
+        if (!modelDropdown.classList.contains('disabled')) {
+            modelDropdown.classList.toggle('open');
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (modelDropdown && !modelDropdown.contains(e.target)) {
+            modelDropdown.classList.remove('open');
+        }
+    });
+
+    dropdownItems.forEach(item => {
+        item.addEventListener('click', () => {
+            dropdownItems.forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            selectedModelText.textContent = item.querySelector('.item-title').textContent;
+            hiddenModelInput.value = item.getAttribute('data-value');
+            modelDropdown.classList.remove('open');
+        });
     });
 }
