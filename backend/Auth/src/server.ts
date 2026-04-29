@@ -489,7 +489,7 @@ app.post('/api/auth/chat', async (req, res) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: 'gemini-2.5-flash',
             contents: message,
             config: {
                 systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant.\n\nCurrent Server Time: " + currentDate
