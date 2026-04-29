@@ -779,3 +779,22 @@ form.nova-input-area:not(.hidden) {
 .gemini-model-select { background: #2b2d31 !important; color: #b5bac1 !important; border: none !important; border-radius: 8px !important; padding: 6px 12px !important; font-size: 0.85rem !important; cursor: pointer !important; -webkit-appearance: none !important; appearance: none !important; }
 .gemini-model-select option { background: #1e1f22 !important; color: #fff !important; }
 .gemini-model-select:disabled { cursor: not-allowed !important; opacity: 0.6 !important; }
+
+/* =========================================
+   NOVA PILL FINAL OVERRIDES
+   ========================================= */
+.nova-container { border: none !important; box-shadow: none !important; background: transparent !important; }
+.nova-header { display: none !important; }
+.nova-messages { background: #1e1f22 !important; border-radius: 16px !important; padding: 20px !important; border: 1px solid rgba(255,255,255,0.05) !important; height: auto !important; min-height: 150px !important; max-height: 40vh !important; overflow-y: auto !important; }
+.gemini-input-container { background: #1e1f22 !important; border-radius: 24px !important; padding: 12px 20px !important; margin: 15px 0 0 0 !important; display: flex !important; flex-direction: column !important; gap: 10px !important; }
+.gemini-input-container input { background: transparent !important; border: none !important; color: #e3e3e3 !important; font-size: 1rem !important; outline: none !important; width: 100% !important; }
+.gemini-input-container input::placeholder { color: #666 !important; }
+.gemini-controls { display: flex !important; justify-content: space-between !important; align-items: center !important; }
+.gemini-controls-left, .gemini-controls-right { display: flex !important; align-items: center !important; gap: 12px !important; }
+.icon-btn { background: transparent !important; border: none !important; color: #aaa !important; cursor: pointer !important; display: flex !important; align-items: center !important; justify-content: center !important; padding: 4px !important; border-radius: 50% !important; }
+.icon-btn:hover { color: #fff !important; background: rgba(255,255,255,0.08) !important; }
+.icon-btn svg { width: 20px !important; height: 20px !important; }
+.icon-btn.with-text { font-size: 0.9rem !important; gap: 6px !important; padding: 4px 10px !important; border-radius: 12px !important; }
+.gemini-model-select { background: transparent !important; color: #aaa !important; border: none !important; font-size: 0.85rem !important; cursor: pointer !important; outline: none !important; -webkit-appearance: none !important; appearance: none !important; }
+.gemini-model-select option { background: #1e1f22 !important; color: #e3e3e3 !important; }
+.gemini-model-select:disabled { opacity: 0.5 !important; cursor: not-allowed !important; }

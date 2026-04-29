@@ -500,7 +500,7 @@ app.post('/api/auth/chat', async (req, res) => {
             model: targetModel,
             contents: message,
             config: {
-                systemInstruction: "You are N.O.V.A. AI agent for xEpic Labs. Keep your responses simple, clean, and concise. Do not output server times or verbose data. If asked for a greeting, reply exactly with: 'Greetings, How may I assist you?'"
+                systemInstruction: "You are N.O.V.A. AI for xEpic Labs. Keep your responses simple, clean, and concise. Do not output server times or verbose data. If asked for a greeting, reply exactly with: 'Greetings, How may I assist you?'"
             }
         });
 
