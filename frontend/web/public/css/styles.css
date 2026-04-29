@@ -766,7 +766,7 @@ form.nova-input-area:not(.hidden) {
 
 /* N.O.V.A. terminal fills remaining vertical space */
 .nova-container { flex: 1; display: flex; flex-direction: column; margin-bottom: 0; }
-.nova-messages { flex: 1; max-height: none !important; }
+.nova-messages { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* =========================================
    APP VIEWS & PROFILE STYLING
@@ -830,7 +830,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .nova-header { text-align: center; padding: 10px 0 20px 0; font-weight: 600; font-size: 1.1rem; color: #e3e3e3; opacity: 0.9; }
 .nova-messages.borderless { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 20px 20px 20px !important; }
 .nova-input-wrapper { padding: 0 20px; display: flex; flex-direction: column; align-items: center; width: 100%; margin-top: auto; }
-.gemini-input-pill { background: #1e1f22; border-radius: 26px; padding: 10px 16px; display: flex; align-items: flex-end; width: 100%; border: 1px solid rgba(255,255,255,0.08); transition: background 0.3s; overflow: visible; }
+/* [REMOVED: old single-row gemini pill — superseded by two-row version below] */
 .gemini-input-pill:focus-within { background: #26282c; border-color: rgba(102,252,241,0.3); }
 .gemini-input-pill textarea { background: transparent; border: none; color: #e3e3e3; font-size: 1rem; outline: none; width: 100%; resize: none; overflow-y: hidden; min-height: 24px; max-height: 200px; padding: 4px 0; font-family: inherit; line-height: 1.5; margin-right: 15px; }
 .nova-disclaimer { font-size: 0.75rem; color: #888; margin-top: 12px; text-align: center; }
