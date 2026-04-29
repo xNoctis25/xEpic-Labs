@@ -1061,3 +1061,8 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     padding: 0;
     width: 100%;
 }
+
+/* Hide title bar when chat is untitled */
+.nova-title-bar:empty,
+.nova-title-bar span:empty { display: none; }
+.nova-title-bar { transition: opacity 0.2s; }

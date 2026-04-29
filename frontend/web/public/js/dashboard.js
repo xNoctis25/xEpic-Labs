@@ -51,6 +51,19 @@ const novaSubmit   = document.getElementById('novaSubmit');
 function novaGetChats()       { try { return JSON.parse(localStorage.getItem(NOVA_KEY)) || []; } catch { return []; } }
 function novaSaveChats(c)     { localStorage.setItem(NOVA_KEY, JSON.stringify(c)); }
 function novaGetActiveId()    { return localStorage.getItem(NOVA_ACTIVE); }
+
+function novaSetTitleBar(title) {
+    const el = document.getElementById('novaChatTitle');
+    const bar = el?.closest('.nova-title-bar');
+    if (!el) return;
+    if (!title || title === 'New chat') {
+        el.textContent = '';
+        if (bar) bar.style.display = 'none';
+    } else {
+        el.textContent = title;
+        if (bar) bar.style.display = '';
+    }
+}
 function novaSetActiveId(id)  { localStorage.setItem(NOVA_ACTIVE, id); }
 
 async function novaGenTitle(userMessage, aiReply) {
@@ -136,8 +149,7 @@ function novaStartRename(chatId) {
         const newTitle = input.value.trim() || chat.title;
         chat.title = newTitle;
         novaSaveChats(chats);
-        const titleEl = document.getElementById('novaChatTitle');
-        if (novaGetActiveId() === chatId && titleEl) titleEl.textContent = newTitle;
+        if (novaGetActiveId() === chatId) novaSetTitleBar(newTitle);
         novaRenderList();
     };
     input.addEventListener('blur', save);
@@ -150,7 +162,7 @@ function novaDeleteChat(chatId) {
     if (novaGetActiveId() === chatId) {
         const next = chats.find(c => c.messages.length > 0);
         if (next) { novaLoadChat(next.id); }
-        else { novaCreateSession(); novaShowGreeting(); const titleEl = document.getElementById('novaChatTitle'); if (titleEl) titleEl.textContent = 'Nova'; }
+        else { novaCreateSession(); novaShowGreeting(); novaSetTitleBar(''); }
     }
     novaRenderList();
 }
@@ -222,8 +234,8 @@ function novaLoadChat(id) {
     const chats = novaGetChats();
     const chat  = chats.find(c => c.id === id);
     if (!chat) return;
-    const titleEl = document.getElementById('novaChatTitle');
-    if (titleEl) titleEl.textContent = chat.title === 'New chat' ? 'Nova' : chat.title;
+    novaSetTitleBar(chat.title);
+    // title set above
     novaMessages.innerHTML = '';
     if (chat.messages.length === 0) {
         novaShowGreeting();
@@ -294,8 +306,8 @@ if (novaForm) {
                     if (chat3 && chat3.title === 'New chat') {
                         chat3.title = generated;
                         novaSaveChats(chats3);
-                        const titleEl = document.getElementById('novaChatTitle');
-                        if (titleEl) titleEl.textContent = generated;
+                        novaSetTitleBar(generated);
+                        // title bar updated
                         novaRenderList();
                     }
                 });
@@ -315,8 +327,8 @@ const novaNewChatBtn = document.getElementById('novaNewChat');
 if (novaNewChatBtn) {
     novaNewChatBtn.addEventListener('click', () => {
         novaCreateSession();
-        const titleEl = document.getElementById('novaChatTitle');
-        if (titleEl) titleEl.textContent = 'Nova';
+        novaSetTitleBar('');
+        // new chat — hide title
         novaShowGreeting();
         novaRenderList();
         novaInput.focus();
@@ -341,8 +353,8 @@ if (novaInput) {
     if (chats.length === 0) { novaCreateSession(); chats = novaGetChats(); }
     if (!novaGetActiveId() || !chats.find(c => c.id === novaGetActiveId())) novaSetActiveId(chats[0].id);
     const active = chats.find(c => c.id === novaGetActiveId());
-    const titleEl = document.getElementById('novaChatTitle');
-    if (titleEl && active) titleEl.textContent = active.title === 'New chat' ? 'Nova' : active.title;
+    if (active) novaSetTitleBar(active.title);
+    // init title done
     if (active && active.messages.length > 0) {
         novaMessages.innerHTML = '';
         active.messages.forEach(m => appendMessage(m.text, m.role === 'user', false));
