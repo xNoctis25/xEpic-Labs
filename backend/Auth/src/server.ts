@@ -255,7 +255,7 @@ app.get('/api/auth/me', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
 
         const userQuery = await pool.query(
-            'SELECT id, username, email, role, createdat AS created_at FROM users WHERE id = $1',
+            'SELECT id, username, email, is_verified, role, createdat AS created_at FROM users WHERE id = $1',
             [decoded.id]
         );
 
@@ -475,9 +475,9 @@ app.post('/api/auth/chat', async (req, res) => {
             return res.status(401).json({ message: 'No token provided.' });
         }
         const token = authHeader.split(' ')[1];
-        jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
 
-        const { message } = req.body;
+        const { message, model } = req.body;
         if (!message) return res.status(400).json({ message: 'Message is required.' });
 
         const apiKey = process.env.GEMINI_API_KEY;
@@ -485,14 +485,22 @@ app.post('/api/auth/chat', async (req, res) => {
             return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.', message: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
         }
 
-        const currentDate = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+        // ── RBAC Model Selection ──────────────────────────────────────────────
+        // Default to flash for all users. Pro requires admin role, verified server-side.
+        let targetModel = 'gemini-2.5-flash';
+        if (model === 'gemini-2.5-pro') {
+            const roleQuery = await pool.query('SELECT role FROM users WHERE id = $1', [decoded.id]);
+            if (roleQuery.rows.length > 0 && roleQuery.rows[0].role === 'admin') {
+                targetModel = 'gemini-2.5-pro';
+            }
+        }
 
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: targetModel,
             contents: message,
             config: {
-                systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant.\n\nCurrent Server Time: " + currentDate
+                systemInstruction: "You are N.O.V.A. your AI agent for xEpic Labs. Keep your responses simple, clean, and concise. Do not output server times or verbose data. If asked for a greeting, reply exactly with: 'Greetings. I am N.O.V.A. your AI agent for xEpic Labs.\nHow may I assist you?'"
             }
         });
 

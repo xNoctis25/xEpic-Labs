@@ -4,8 +4,7 @@ if (!auth.getToken()) window.location.href = '/';
 async function loadProfile() {
     try {
         const user = await auth.request('/me', { method: 'GET' });
-        const raw = user.created_at;
-        const date = raw ? new Date(parseInt(raw) * 1000).toLocaleDateString() || 'Active Member' : 'Active Member';
+        const dateStr = user.created_at ? new Date(parseInt(user.created_at) * 1000).toLocaleDateString() : 'Active Member';
         profileData.innerHTML = `
             <div style="margin-bottom: 15px; text-align: center;">
                 <div style="width: 60px; height: 60px; background: var(--primary); border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; color: #000;">
@@ -22,10 +21,14 @@ async function loadProfile() {
                 </div>
                 <div style="text-align: right;">
                     <label style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Member Since</label>
-                    <div style="font-size: 0.9rem;">${date}</div>
+                    <div style="font-size: 0.9rem;">${dateStr}</div>
                 </div>
             </div>
         `;
+        if (user.role === 'admin') {
+            const modelSelect = document.getElementById('novaModelSelect');
+            if (modelSelect) modelSelect.disabled = false;
+        }
     } catch (err) {
         auth.clearToken();
         window.location.href = '/';
@@ -80,7 +83,7 @@ if (novaForm) {
         try {
             const res = await auth.request('/chat', {
                 method: 'POST',
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ message: text, model: document.getElementById('novaModelSelect')?.value || 'gemini-2.5-flash' })
             });
             let formatted = res.reply.replace(/\n/g, '<br>');
             formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');

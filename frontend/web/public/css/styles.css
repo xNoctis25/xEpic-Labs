@@ -737,3 +737,9 @@ form.nova-input-area:not(.hidden) {
 .nova-input-area button:hover { opacity: 0.7; }
 .nova-input-area button svg { width: 18px; height: 18px; }
 .nova-typing { font-style: italic; opacity: 0.6; }
+
+/* =========================================
+   N.O.V.A. MODEL SELECT
+   ========================================= */
+.nova-model-select { background: rgba(0,0,0,0.5); color: var(--primary); border: 1px solid var(--glass-border); border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; outline: none; cursor: pointer; }
+.nova-model-select:disabled { opacity: 0.5; cursor: not-allowed; }
