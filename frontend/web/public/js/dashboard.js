@@ -262,3 +262,116 @@ if (dropdownTrigger && modelDropdown) {
         });
     });
 }
+
+// --- Live Market Clock Logic ---
+function updateMarketClock() {
+    const uiSessionLabel   = document.getElementById('uiSessionLabel');
+    const uiSessionDot     = document.getElementById('uiSessionDot');
+    const uiKillzoneLabel  = document.getElementById('uiKillzoneLabel');
+    const uiKillzoneDot    = document.getElementById('uiKillzoneDot');
+
+    if (!uiSessionLabel || !uiSessionDot || !uiKillzoneLabel || !uiKillzoneDot) return;
+
+    // Resolve current ET time
+    const nowStr = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+    const now    = new Date(nowStr);
+
+    const yyyy    = now.getFullYear();
+    const mm      = String(now.getMonth() + 1).padStart(2, '0');
+    const dd      = String(now.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+
+    const day          = now.getDay();           // 0=Sun … 6=Sat
+    const h            = now.getHours();
+    const min          = now.getMinutes();
+    const totalMinutes = h * 60 + min;
+
+    // -- 1. CME Holiday Calendar (2026-2027) ---------------------------
+    const cmeHolidays = [
+        "2026-01-01","2026-01-19","2026-02-16","2026-04-03",
+        "2026-05-25","2026-06-19","2026-07-03","2026-09-07",
+        "2026-11-26","2026-12-25",
+        "2027-01-01","2027-01-18","2027-02-15","2027-03-26",
+        "2027-05-31","2027-06-18","2027-07-05","2027-09-06",
+        "2027-11-25","2027-12-24"
+    ];
+    if (cmeHolidays.includes(dateStr)) {
+        uiSessionLabel.textContent  = "Closed: Holiday";
+        uiSessionDot.className      = "dot red";
+        uiKillzoneLabel.textContent = "Killzone: Inactive";
+        uiKillzoneDot.className     = "dot gray";
+        return;
+    }
+
+    // -- 2. Weekend Gate (Fri 17:00 ET ? Sun 18:00 ET) ----------------
+    const isFriAfterClose = day === 5 && totalMinutes >= 1020;
+    const isSat           = day === 6;
+    const isSunBeforeOpen = day === 0 && totalMinutes < 1080;
+    if (isFriAfterClose || isSat || isSunBeforeOpen) {
+        uiSessionLabel.textContent  = "Closed: Weekend";
+        uiSessionDot.className      = "dot red";
+        uiKillzoneLabel.textContent = "Killzone: Inactive";
+        uiKillzoneDot.className     = "dot gray";
+        return;
+    }
+
+    // -- 3. CME Daily Maintenance (Mon-Thu 17:00–18:00 ET) ------------
+    if (totalMinutes >= 1020 && totalMinutes < 1080) {
+        uiSessionLabel.textContent  = "Closed: CME Maint";
+        uiSessionDot.className      = "dot red";
+        uiKillzoneLabel.textContent = "Killzone: Inactive";
+        uiKillzoneDot.className     = "dot gray";
+        return;
+    }
+
+    // -- 4. Classify Active Session & Killzone -------------------------
+    let sessionText = "Session: Asia";
+    let sessionColor = "gray";
+    let kzText  = "Killzone: Inactive";
+    let kzColor = "gray";
+
+    if (totalMinutes >= 120 && totalMinutes < 300) {
+        // London session 02:00–05:00 ET
+        sessionText  = "Session: London";
+        sessionColor = "green";
+        if (totalMinutes >= 135) {
+            // London Killzone starts at 02:15
+            kzText  = "Killzone: London";
+            kzColor = "green";
+        } else {
+            kzText = "Killzone: Pre-London";
+        }
+    } else if (totalMinutes >= 570 && totalMinutes < 720) {
+        // NY AM session 09:30–12:00 ET
+        sessionText  = "Session: New York";
+        sessionColor = "green";
+        if (totalMinutes >= 585 && totalMinutes < 690) {
+            // NY AM Killzone 09:45–11:30 ET
+            kzText  = "Killzone: NY AM";
+            kzColor = "green";
+        } else {
+            kzText = "Killzone: Outside";
+        }
+    } else if (totalMinutes >= 810 && totalMinutes < 960) {
+        // NY PM session 13:30–16:00 ET
+        sessionText  = "Session: New York";
+        sessionColor = "green";
+        if (totalMinutes >= 810 && totalMinutes < 945) {
+            // NY PM Killzone 13:30–15:45 ET
+            kzText  = "Killzone: NY PM";
+            kzColor = "green";
+        } else {
+            kzText = "Killzone: Outside";
+        }
+    }
+
+    // -- 5. Apply to DOM -----------------------------------------------
+    uiSessionLabel.textContent  = sessionText;
+    uiSessionDot.className      = "dot " + sessionColor;
+    uiKillzoneLabel.textContent = kzText;
+    uiKillzoneDot.className     = "dot " + kzColor;
+}
+
+// Boot immediately, then refresh every 10 seconds
+updateMarketClock();
+setInterval(updateMarketClock, 10000);
