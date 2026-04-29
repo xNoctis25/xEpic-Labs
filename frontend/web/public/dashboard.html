@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xEpic Labs — Command Center</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/styles.css?v=19.0">
+    <link rel="stylesheet" href="/css/styles.css?v=24.0">
 </head>
 <body class="dashboard-body">
 
@@ -22,10 +22,7 @@
                     </linearGradient>
                     <filter id="neonGlowDash" x="-50%" y="-50%" width="200%" height="200%">
                       <feGaussianBlur stdDeviation="3" result="blur" />
-                      <feMerge>
-                        <feMergeNode in="blur" />
-                        <feMergeNode in="SourceGraphic" />
-                      </feMerge>
+                      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
                     </filter>
                   </defs>
                   <g>
@@ -43,22 +40,10 @@
         </div>
 
         <div class="system-status-pills">
-            <div class="status-pill">
-                <span class="status-label" id="uiKillzoneLabel">Killzone: NY AM</span>
-                <span class="dot green" id="uiKillzoneDot"></span>
-            </div>
-            <div class="status-pill">
-                <span class="status-label" id="uiSessionLabel">Session: New York</span>
-                <span class="dot green" id="uiSessionDot"></span>
-            </div>
-            <div class="status-pill">
-                <span class="status-label" id="uiEngineLabel">MoM Engine</span>
-                <span class="dot green" id="uiEngineDot"></span>
-            </div>
-            <div class="status-pill">
-                <span class="status-label" id="uiDbLabel">Neon DB</span>
-                <span class="dot green" id="uiDbDot"></span>
-            </div>
+            <div class="status-pill"><span class="status-label" id="uiKillzoneLabel">Killzone: NY AM</span><span class="dot green" id="uiKillzoneDot"></span></div>
+            <div class="status-pill"><span class="status-label" id="uiSessionLabel">Session: New York</span><span class="dot green" id="uiSessionDot"></span></div>
+            <div class="status-pill"><span class="status-label" id="uiEngineLabel">MoM Engine</span><span class="dot green" id="uiEngineDot"></span></div>
+            <div class="status-pill"><span class="status-label" id="uiDbLabel">Neon DB</span><span class="dot green" id="uiDbDot"></span></div>
         </div>
     </header>
 
@@ -106,24 +91,27 @@
                 <div class="nova-header">
                     <span class="nova-chat-title">xEpicLabs Agent</span>
                 </div>
-
                 <div class="nova-messages borderless" id="novaMessages">
                     <div class="nova-msg ai-msg"><strong>N.O.V.A.</strong><br>Greetings, How may I assist you?</div>
                 </div>
-
                 <div class="nova-input-wrapper">
                     <form id="novaForm" class="gemini-input-pill">
                         <textarea id="novaInput" rows="1" placeholder="Ask N.O.V.A..." required></textarea>
                         <div class="gemini-controls-right">
                             <div class="custom-model-dropdown disabled" id="modelDropdown">
-                                <div class="dropdown-trigger" id="dropdownTrigger"><span id="selectedModelText">Flash</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg></div>
+                                <div class="dropdown-trigger" id="dropdownTrigger">
+                                    <span id="selectedModelText">Flash</span>
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+                                </div>
                                 <div class="dropdown-menu" id="dropdownMenu">
                                     <div class="dropdown-item active" data-value="gemini-2.5-flash"><div class="item-title">Flash</div><div class="item-desc">Fast, everyday tasks</div></div>
                                     <div class="dropdown-item" data-value="gemini-2.5-pro"><div class="item-title">Pro</div><div class="item-desc">Deep logic &amp; reasoning</div></div>
                                 </div>
                             </div>
                             <input type="hidden" id="novaModelSelect" value="gemini-2.5-flash">
-                            <button type="submit" id="novaSubmit" class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+                            <button type="submit" id="novaSubmit" class="icon-btn" title="Send Command">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                            </button>
                         </div>
                     </form>
                     <div class="nova-disclaimer">N.O.V.A. is AI and can make mistakes. Please verify critical trading execution.</div>
@@ -144,16 +132,10 @@
                     <hr class="divider" style="margin-top: 0; margin-bottom: 20px; border-color: var(--glass-border);">
                     <div id="pwdAlertBox" class="alert" style="display: none; margin-bottom: 15px;"></div>
                     <form id="changePasswordForm" class="profile-form">
-                        <div class="form-group">
-                            <input type="password" id="currentPassword" required placeholder="Current Password">
-                        </div>
+                        <div class="form-group"><input type="password" id="currentPassword" required placeholder="Current Password"></div>
                         <div class="form-row">
-                            <div class="form-group">
-                                <input type="password" id="newProfilePassword" required placeholder="New Password">
-                            </div>
-                            <div class="form-group">
-                                <input type="password" id="confirmNewProfilePassword" required placeholder="Confirm Password">
-                            </div>
+                            <div class="form-group"><input type="password" id="newProfilePassword" required placeholder="New Password"></div>
+                            <div class="form-group"><input type="password" id="confirmNewProfilePassword" required placeholder="Confirm Password"></div>
                         </div>
                         <button type="submit" class="btn" id="changePwdBtn">Update Password</button>
                     </form>
@@ -163,7 +145,7 @@
         </div><!-- /.glass-panel.main-content -->
     </div><!-- /.app-layout -->
 
-    <script src="/js/api.js?v=22.0"></script>
-    <script src="/js/dashboard.js?v=22.0"></script>
+    <script src="/js/api.js?v=24.0"></script>
+    <script src="/js/dashboard.js?v=24.0"></script>
 </body>
 </html>
