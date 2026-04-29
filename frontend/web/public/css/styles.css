@@ -875,3 +875,88 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .brand-text { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .brand-text h1 { font-size: 1.35rem; font-weight: 700; color: #ffffff; margin: 0; line-height: 1.1; letter-spacing: -0.01em; }
 .brand-text .slogan { font-size: 0.65rem; font-weight: 600; color: #66fcf1; margin: 0; line-height: 1; letter-spacing: 0.12em; text-transform: uppercase; }
+
+/* =========================================
+   N.O.V.A. GEMINI CLONE — TWO-COLUMN LAYOUT
+   ========================================= */
+
+/* Override novaView to be a row instead of a column */
+#novaView {
+    flex-direction: row !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* -- Sidebar -------------------------------- */
+.nova-sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 8px;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    overflow-y: auto;
+    background: rgba(0,0,0,0.15);
+}
+.nova-new-chat-btn {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    border-radius: 50px;
+    border: none;
+    background: transparent;
+    color: #e3e3e3;
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: background 0.2s;
+    margin-bottom: 8px;
+}
+.nova-new-chat-btn:hover { background: rgba(255,255,255,0.08); }
+.nova-chat-section-label {
+    font-size: 0.72rem;
+    color: #777;
+    padding: 4px 16px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 4px 0;
+}
+.nova-chat-list { display: flex; flex-direction: column; gap: 2px; }
+.nova-chat-item {
+    padding: 10px 16px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #bbb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.18s;
+}
+.nova-chat-item:hover { background: rgba(255,255,255,0.07); color: #fff; }
+.nova-chat-item.active { background: rgba(66,133,244,0.18); color: #fff; }
+
+/* -- Main Area ------------------------------ */
+.nova-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+.nova-title-bar {
+    text-align: center;
+    padding: 14px 20px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #e3e3e3;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    flex-shrink: 0;
+    letter-spacing: 0.01em;
+}

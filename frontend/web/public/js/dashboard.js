@@ -26,6 +26,7 @@ async function loadProfile() {
         }
         const nameSpan = document.getElementById('novaUserName');
         if (nameSpan) nameSpan.textContent = user.username;
+        novaUsername = user.username;
     } catch (err) { auth.clearToken(); window.location.href = '/'; }
 }
 
@@ -37,24 +38,89 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 loadProfile();
 
-// ── N.O.V.A. TERMINAL LOGIC ──────────────────────────────────────────────────
+// ── N.O.V.A. CHAT SESSION ENGINE ─────────────────────────────────────────────
+const NOVA_KEY    = 'nova_chats';
+const NOVA_ACTIVE = 'nova_active_chat';
+let novaUsername  = 'User';
+
 const novaForm     = document.getElementById('novaForm');
 const novaInput    = document.getElementById('novaInput');
 const novaMessages = document.getElementById('novaMessages');
 const novaSubmit   = document.getElementById('novaSubmit');
 
-function appendMessage(text, isUser = false) {
+function novaGetChats()       { try { return JSON.parse(localStorage.getItem(NOVA_KEY)) || []; } catch { return []; } }
+function novaSaveChats(c)     { localStorage.setItem(NOVA_KEY, JSON.stringify(c)); }
+function novaGetActiveId()    { return localStorage.getItem(NOVA_ACTIVE); }
+function novaSetActiveId(id)  { localStorage.setItem(NOVA_ACTIVE, id); }
+
+function novaGenTitle(text) {
+    return text.split(/\s+/).slice(0, 6).join(' ');
+}
+
+function novaCreateSession() {
+    const chat = { id: 'chat_' + Date.now(), title: 'New chat', messages: [], createdAt: Date.now() };
+    const chats = novaGetChats();
+    chats.unshift(chat);
+    novaSaveChats(chats);
+    novaSetActiveId(chat.id);
+    return chat;
+}
+
+function novaRenderList() {
+    const list = document.getElementById('novaChatList');
+    if (!list) return;
+    const chats  = novaGetChats();
+    const active = novaGetActiveId();
+    list.innerHTML = '';
+    chats.forEach(chat => {
+        const el = document.createElement('div');
+        el.className = 'nova-chat-item' + (chat.id === active ? ' active' : '');
+        el.textContent = chat.title;
+        el.addEventListener('click', () => novaLoadChat(chat.id));
+        list.appendChild(el);
+    });
+}
+
+function novaShowGreeting() {
+    novaMessages.innerHTML = `
+        <div id="novaGreeting" class="nova-greeting">
+            <h1>Hi <span>${novaUsername}</span></h1>
+            <p>What should we try today?</p>
+        </div>`;
+}
+
+function novaLoadChat(id) {
+    novaSetActiveId(id);
+    const chats = novaGetChats();
+    const chat  = chats.find(c => c.id === id);
+    if (!chat) return;
+    const titleEl = document.getElementById('novaChatTitle');
+    if (titleEl) titleEl.textContent = chat.title === 'New chat' ? 'N.O.V.A.' : chat.title;
+    novaMessages.innerHTML = '';
+    if (chat.messages.length === 0) {
+        novaShowGreeting();
+    } else {
+        chat.messages.forEach(m => appendMessage(m.text, m.role === 'user', false));
+    }
+    novaRenderList();
+}
+
+function appendMessage(text, isUser = false, save = true) {
     const div = document.createElement('div');
     div.className = `nova-msg ${isUser ? 'user-msg' : 'ai-msg'}`;
     if (!isUser) {
-        let formatted = text.replace(/\n/g, '<br>');
-        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-        div.innerHTML = formatted;
+        let f = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
+        div.innerHTML = f;
     } else {
         div.textContent = text;
     }
     novaMessages.appendChild(div);
     novaMessages.scrollTop = novaMessages.scrollHeight;
+    if (save) {
+        const chats = novaGetChats();
+        const chat  = chats.find(c => c.id === novaGetActiveId());
+        if (chat) { chat.messages.push({ role: isUser ? 'user' : 'ai', text }); novaSaveChats(chats); }
+    }
     return div;
 }
 
@@ -64,28 +130,42 @@ if (novaForm) {
         const text = novaInput.value.trim();
         if (!text) return;
 
-        appendMessage(text, true);
+        // Hide greeting on first send
         const greeting = document.getElementById('novaGreeting');
         if (greeting) greeting.style.display = 'none';
+
+        appendMessage(text, true);
         novaInput.value = '';
         novaInput.style.height = 'auto';
         novaInput.disabled = true;
         novaSubmit.disabled = true;
 
-        const typingMsg = appendMessage('<span class="nova-typing">Processing...</span>', false);
+        // Auto-generate title from first user message
+        const chats = novaGetChats();
+        const chat  = chats.find(c => c.id === novaGetActiveId());
+        if (chat && chat.title === 'New chat') {
+            chat.title = novaGenTitle(text);
+            novaSaveChats(chats);
+            const titleEl = document.getElementById('novaChatTitle');
+            if (titleEl) titleEl.textContent = chat.title;
+        }
+        novaRenderList();
+
+        const typingMsg = appendMessage('Processing...', false, false);
 
         try {
             const res = await auth.request('/chat', {
                 method: 'POST',
-                body: JSON.stringify({
-                    message: text,
-                    model: document.getElementById('novaModelSelect')?.value || 'gemini-2.5-flash'
-                })
+                body: JSON.stringify({ message: text, model: document.getElementById('novaModelSelect')?.value || 'gemini-2.5-flash' })
             });
-            let formatted = res.reply.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-            typingMsg.innerHTML = `<strong>N.O.V.A.</strong><br>${formatted}`;
+            let f = res.reply.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
+            typingMsg.innerHTML = f;
+            // Save AI response
+            const chats2 = novaGetChats();
+            const chat2  = chats2.find(c => c.id === novaGetActiveId());
+            if (chat2) { chat2.messages.push({ role: 'ai', text: res.reply }); novaSaveChats(chats2); }
         } catch (err) {
-            typingMsg.innerHTML = `<strong>N.O.V.A. ERROR</strong><br><span style="color:var(--error)">${err.message || 'Connection lost to core.'}</span>`;
+            typingMsg.innerHTML = `<span style="color:var(--error)">${err.message || 'Connection lost to core.'}</span>`;
         } finally {
             novaInput.disabled = false;
             novaSubmit.disabled = false;
@@ -94,21 +174,44 @@ if (novaForm) {
     });
 }
 
+// New chat button
+const novaNewChatBtn = document.getElementById('novaNewChat');
+if (novaNewChatBtn) {
+    novaNewChatBtn.addEventListener('click', () => {
+        novaCreateSession();
+        const titleEl = document.getElementById('novaChatTitle');
+        if (titleEl) titleEl.textContent = 'N.O.V.A.';
+        novaShowGreeting();
+        novaRenderList();
+        novaInput.focus();
+    });
+}
+
 // Textarea auto-grow + Enter to submit
 if (novaInput) {
-    novaInput.addEventListener('input', function () {
-        this.style.height = 'auto';
-        this.style.height = this.scrollHeight + 'px';
-    });
+    novaInput.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = this.scrollHeight + 'px'; });
     novaInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            if (this.value.trim() !== '') {
-                novaForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-            }
+            if (this.value.trim()) novaForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
         }
     });
 }
+
+// ── INIT NOVA (on page load) ──────────────────────────────────────────────────
+(function initNova() {
+    let chats = novaGetChats();
+    if (chats.length === 0) { novaCreateSession(); chats = novaGetChats(); }
+    if (!novaGetActiveId() || !chats.find(c => c.id === novaGetActiveId())) novaSetActiveId(chats[0].id);
+    const active = chats.find(c => c.id === novaGetActiveId());
+    const titleEl = document.getElementById('novaChatTitle');
+    if (titleEl && active) titleEl.textContent = active.title === 'New chat' ? 'N.O.V.A.' : active.title;
+    if (active && active.messages.length > 0) {
+        novaMessages.innerHTML = '';
+        active.messages.forEach(m => appendMessage(m.text, m.role === 'user', false));
+    }
+    novaRenderList();
+})();
 
 // ── CUSTOM DROPDOWN ───────────────────────────────────────────────────────────
 const modelDropdown    = document.getElementById('modelDropdown');
