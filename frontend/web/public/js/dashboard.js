@@ -38,7 +38,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 loadProfile();
 
-// ── N.O.V.A. CHAT SESSION ENGINE ─────────────────────────────────────────────
+// ── Nova CHAT SESSION ENGINE ─────────────────────────────────────────────
 const NOVA_KEY    = 'nova_chats';
 const NOVA_ACTIVE = 'nova_active_chat';
 let novaUsername  = 'User';
@@ -71,8 +71,14 @@ function novaRenderList() {
     if (!list) return;
     const chats  = novaGetChats();
     const active = novaGetActiveId();
+    // Only show chats that have at least one message (not blank new chats)
+    const history = chats.filter(c => c.messages.length > 0);
     list.innerHTML = '';
-    chats.forEach(chat => {
+    if (history.length === 0) {
+        list.innerHTML = '<div class="nova-chat-empty">No chat history yet</div>';
+        return;
+    }
+    history.forEach(chat => {
         const el = document.createElement('div');
         el.className = 'nova-chat-item' + (chat.id === active ? ' active' : '');
         el.textContent = chat.title;
@@ -95,7 +101,7 @@ function novaLoadChat(id) {
     const chat  = chats.find(c => c.id === id);
     if (!chat) return;
     const titleEl = document.getElementById('novaChatTitle');
-    if (titleEl) titleEl.textContent = chat.title === 'New chat' ? 'N.O.V.A.' : chat.title;
+    if (titleEl) titleEl.textContent = chat.title === 'New chat' ? 'Nova' : chat.title;
     novaMessages.innerHTML = '';
     if (chat.messages.length === 0) {
         novaShowGreeting();
@@ -180,7 +186,7 @@ if (novaNewChatBtn) {
     novaNewChatBtn.addEventListener('click', () => {
         novaCreateSession();
         const titleEl = document.getElementById('novaChatTitle');
-        if (titleEl) titleEl.textContent = 'N.O.V.A.';
+        if (titleEl) titleEl.textContent = 'Nova';
         novaShowGreeting();
         novaRenderList();
         novaInput.focus();
@@ -205,7 +211,7 @@ if (novaInput) {
     if (!novaGetActiveId() || !chats.find(c => c.id === novaGetActiveId())) novaSetActiveId(chats[0].id);
     const active = chats.find(c => c.id === novaGetActiveId());
     const titleEl = document.getElementById('novaChatTitle');
-    if (titleEl && active) titleEl.textContent = active.title === 'New chat' ? 'N.O.V.A.' : active.title;
+    if (titleEl && active) titleEl.textContent = active.title === 'New chat' ? 'Nova' : active.title;
     if (active && active.messages.length > 0) {
         novaMessages.innerHTML = '';
         active.messages.forEach(m => appendMessage(m.text, m.role === 'user', false));
