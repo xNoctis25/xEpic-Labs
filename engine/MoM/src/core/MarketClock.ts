@@ -36,44 +36,44 @@ export class MarketClock {
     }
 
     /**
-     * Returns true if the given timestamp falls within the AM Killzone (Silver Bullet).
-     * AM Killzone: 09:30 – 11:00 ET (inclusive)
+     * Returns true if the given timestamp falls within the AM Killzone (Equities Open).
+     * AM Killzone: 09:45 – 11:30 ET (inclusive)
+     * Features a 15-minute "Silver Bullet" buffer to avoid the 9:30 AM opening liquidity sweep.
      *
      * @param timestampMs - UNIX epoch in milliseconds
      */
     public static isAMKillzone(timestampMs: number): boolean {
         const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
-        return totalMinutes >= 570 && totalMinutes <= 660; // 09:30 (570) – 11:00 (660)
+        return totalMinutes >= 585 && totalMinutes <= 690; // 09:45 (585) – 11:30 (690)
     }
 
     /**
      * Returns true if the given timestamp falls within the PM Killzone.
-     * PM Killzone: 13:30 – 15:30 ET (inclusive)
+     * PM Killzone: 13:30 – 15:45 ET (inclusive)
+     * Cuts off 15 minutes before the 4:00 PM close to avoid MOC (Market On Close) imbalances.
      *
      * @param timestampMs - UNIX epoch in milliseconds
      */
     public static isPMKillzone(timestampMs: number): boolean {
         const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
-        return totalMinutes >= 810 && totalMinutes <= 930; // 13:30 (810) – 15:30 (930)
+        return totalMinutes >= 810 && totalMinutes <= 945; // 13:30 (810) – 15:45 (945)
     }
 
     /**
-     * Returns true if the given timestamp falls within one of the three strict SMC Killzones:
-     * - London Killzone (02:00 - 05:00 ET)
-     * - AM Killzone (09:30 - 12:00 ET)
-     * - PM Killzone (13:30 - 15:55 ET)
+     * Returns true if the given timestamp falls within one of the three strict SMC Killzones.
+     * Features 15-minute opening buffers for London and NY AM to avoid Judas Swings.
      */
     public static isWithinTradingWindow(timestampMs: number): boolean {
         const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
 
-        // London Killzone: 02:00 ET (120) to 05:00 ET (300)
-        const isLondon = totalMinutes >= 120 && totalMinutes < 300;
+        // London Killzone: 02:15 ET (135) to 05:00 ET (300) -> 15 min buffer
+        const isLondon = totalMinutes >= 135 && totalMinutes < 300;
 
-        // AM Killzone: 09:30 ET (570) to 12:00 ET (720)
-        const isAM = totalMinutes >= 570 && totalMinutes < 720;
+        // AM Killzone: 09:45 ET (585) to 11:30 ET (690) -> 15 min buffer
+        const isAM = totalMinutes >= 585 && totalMinutes < 690;
 
-        // PM Killzone: 13:30 ET (810) to 15:55 ET (955)
-        const isPM = totalMinutes >= 810 && totalMinutes < 955;
+        // PM Killzone: 13:30 ET (810) to 15:45 ET (945) -> No buffer needed, early cutoff
+        const isPM = totalMinutes >= 810 && totalMinutes < 945;
 
         return isLondon || isAM || isPM;
     }
