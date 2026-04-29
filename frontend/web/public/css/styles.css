@@ -603,6 +603,16 @@ form:not(.hidden) {
   transition: none !important;
 }
 
+/* N.O.V.A. input row is a <form> but must stay flex — exempt it from the block override */
+form.nova-input-area,
+form.nova-input-area:not(.hidden) {
+  display: flex !important;
+  animation: none !important;
+  max-height: none !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+
 /* Nullify old ID-specific max-height rules from previous iterations */
 #loginForm:not(.hidden),
 #signupForm:not(.hidden) {

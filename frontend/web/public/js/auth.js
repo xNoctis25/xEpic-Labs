@@ -215,6 +215,12 @@ loginForm.addEventListener('submit', async (e) => {
 
     try {
         const res = await auth.request('/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+
+        // Guard: ensure a real token was returned before storing and redirecting.
+        // If token is missing the /me call on dashboard would return 401,
+        // clearToken() would fire, and we'd silently loop back to login.
+        if (!res.token) throw { message: 'Authentication failed: no token received.' };
+
         auth.setToken(res.token, remember);
         window.location.href = '/dashboard.html';
     } catch (err) {
@@ -223,7 +229,7 @@ loginForm.addEventListener('submit', async (e) => {
             window.location.href = '/verify.html';
             return;
         }
-        auth.showError('alertBox', err.message);
+        auth.showError('alertBox', err.message || 'Sign in failed. Please try again.');
         btn.disabled    = false;
         btn.textContent = 'Sign In';
     }
