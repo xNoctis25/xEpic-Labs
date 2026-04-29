@@ -793,7 +793,7 @@ form.nova-input-area:not(.hidden) {
    ========================================= */
 body.dashboard-body { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; align-items: stretch !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
 
-body.dashboard-body .global-top-header { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 20px 40px !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; flex-shrink: 0 !important; z-index: 50 !important; background: transparent !important; }
+body.dashboard-body .global-top-header { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 20px 40px !important; border-bottom: 1px solid rgba(255,255,255,0.08) !important; flex-shrink: 0 !important; z-index: 50 !important; background: var(--bg) !important; }
 
 body.dashboard-body .app-layout { display: flex !important; flex: 1 !important; width: 100% !important; max-width: 100% !important; padding: 30px 40px !important; margin: 0 !important; gap: 30px !important; height: auto !important; overflow: hidden !important; }
 
@@ -877,7 +877,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .brand-text .slogan { font-size: 0.65rem; font-weight: 600; color: #66fcf1; margin: 0; line-height: 1; letter-spacing: 0.12em; text-transform: uppercase; }
 
 /* =========================================
-   N.O.V.A. GEMINI CLONE — TWO-COLUMN LAYOUT
+   N.O.V.A. GEMINI CLONE ï¿½ TWO-COLUMN LAYOUT
    ========================================= */
 
 /* Override novaView to be a row instead of a column */
