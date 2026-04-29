@@ -59,7 +59,7 @@ function appendMessage(text, isUser = false) {
         // Parse simple markdown-like bold/breaks for cleaner UI
         let formatted = text.replace(/\n/g, '<br>');
         formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-        div.innerHTML = `<strong>N.O.V.A AI for xEpic Labs</strong><br>${formatted}`;
+        div.innerHTML = `<strong>N.O.V.A.</strong><br>${formatted}`;
     } else {
         div.textContent = text;
     }
@@ -89,7 +89,7 @@ if (novaForm) {
             });
             let formatted = res.reply.replace(/\n/g, '<br>');
             formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-            typingMsg.innerHTML = `<strong>N.O.V.A AI for xEpic Labs</strong><br>${formatted}`;
+            typingMsg.innerHTML = `<strong>N.O.V.A.</strong><br>${formatted}`;
         } catch (err) {
             typingMsg.innerHTML = `<strong>N.O.V.A. ERROR</strong><span style="color:var(--error)">${err.message || 'Connection lost to core.'}</span>`;
         } finally {
