@@ -4,7 +4,8 @@ if (!auth.getToken()) window.location.href = '/';
 async function loadProfile() {
     try {
         const user = await auth.request('/me', { method: 'GET' });
-        const date = new Date(user.createdAt).toLocaleDateString();
+        const raw = user.created_at;
+        const date = raw ? new Date(parseInt(raw) * 1000).toLocaleDateString() || 'Active Member' : 'Active Member';
         profileData.innerHTML = `
             <div style="margin-bottom: 15px; text-align: center;">
                 <div style="width: 60px; height: 60px; background: var(--primary); border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; color: #000;">

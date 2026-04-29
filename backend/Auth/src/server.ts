@@ -255,7 +255,7 @@ app.get('/api/auth/me', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
 
         const userQuery = await pool.query(
-            'SELECT id, username, email, role FROM users WHERE id = $1',
+            'SELECT id, username, email, role, createdat AS created_at FROM users WHERE id = $1',
             [decoded.id]
         );
 
@@ -489,7 +489,7 @@ app.post('/api/auth/chat', async (req, res) => {
 
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash',
             contents: message,
             config: {
                 systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant.\n\nCurrent Server Time: " + currentDate
