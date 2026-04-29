@@ -42,7 +42,7 @@ body {
   position: relative;
 }
 
-/* ── Ambient background orbs ── */
+/* â”€â”€ Ambient background orbs â”€â”€ */
 body::before,
 body::after {
   content: '';
@@ -77,7 +77,7 @@ body::after {
   to   { transform: translate(-40px, -30px) scale(1.08); }
 }
 
-/* ── Card ── */
+/* â”€â”€ Card â”€â”€ */
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
@@ -86,19 +86,19 @@ body::after {
   border-radius: 16px;
   padding: 40px;
   width: 100%;
-  max-width: 400px;        /* Strict pixel base — browser can interpolate from here */
+  max-width: 400px;        /* Strict pixel base â€” browser can interpolate from here */
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
   z-index: 1;
   overflow: hidden;
 
-  /* Animate ONLY max-width — avoids jank from transitioning backdrop-filter etc. */
+  /* Animate ONLY max-width â€” avoids jank from transitioning backdrop-filter etc. */
   transition: max-width 0.5s cubic-bezier(0.25, 1, 0.5, 1),
               padding    0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* When signup form is visible: glide from 400px → 750px (same unit, smooth) */
+/* When signup form is visible: glide from 400px â†’ 750px (same unit, smooth) */
 .glass-panel:has(#signupForm:not(.hidden)) {
-  max-width: 750px;       /* Strict pixel target — same unit as base */
+  max-width: 750px;       /* Strict pixel target â€” same unit as base */
   padding-inline: 48px;
 }
 
@@ -108,7 +108,7 @@ body::after {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Brand header ── */
+/* â”€â”€ Brand header â”€â”€ */
 .brand {
   text-align: center;
   margin-bottom: 28px;
@@ -138,7 +138,7 @@ body::after {
   font-weight: 400;
 }
 
-/* ── Tabs ── */
+/* â”€â”€ Tabs â”€â”€ */
 .auth-tabs {
   display: flex;
   background: rgba(0,0,0,0.2);
@@ -173,7 +173,7 @@ body::after {
   background: rgba(255,255,255,0.04);
 }
 
-/* ── Alert ── */
+/* â”€â”€ Alert â”€â”€ */
 .alert {
   display: none;
   padding: 11px 14px;
@@ -188,13 +188,13 @@ body::after {
 .alert.error  { display: block; background: var(--error-bg);   border: 1px solid rgba(248,113,113,0.25); color: var(--error); }
 .alert.success{ display: block; background: var(--success-bg); border: 1px solid rgba(52,211,153,0.25);  color: var(--success); }
 
-/* ── Form ── */
+/* â”€â”€ Form â”€â”€ */
 .form-group {
   margin-bottom: 18px;
 }
 
 .form-group label {
-  /* Visually hidden — labels stay in DOM for screen readers & accessibility */
+  /* Visually hidden â€” labels stay in DOM for screen readers & accessibility */
   position: absolute;
   width: 1px;
   height: 1px;
@@ -230,7 +230,7 @@ body::after {
   box-shadow: 0 0 0 3px rgba(102, 252, 241, 0.08);
 }
 
-/* ── Password strength ── */
+/* â”€â”€ Password strength â”€â”€ */
 .strength-meter {
   display: flex;
   gap: 5px;
@@ -255,7 +255,7 @@ body::after {
   transition: color 0.3s;
 }
 
-/* ── Remember me ── */
+/* â”€â”€ Remember me â”€â”€ */
 .checkbox-group {
   display: flex;
   align-items: center;
@@ -285,7 +285,7 @@ body::after {
   padding: 0;
 }
 
-/* ── Password Input with Eye Toggle ── */
+/* â”€â”€ Password Input with Eye Toggle â”€â”€ */
 .input-wrapper {
   position: relative;
   display: flex;
@@ -321,7 +321,7 @@ body::after {
   stroke-linejoin: round;
 }
 
-/* ── Form Footer (Remember Me + Forgot Password row) ── */
+/* â”€â”€ Form Footer (Remember Me + Forgot Password row) â”€â”€ */
 .form-footer {
   display: flex;
   align-items: center;
@@ -344,7 +344,7 @@ body::after {
 
 .forgot-link:hover { opacity: 0.75; }
 
-/* ── Password Match Feedback ── */
+/* â”€â”€ Password Match Feedback â”€â”€ */
 .match-text {
   font-size: 0.75rem;
   margin-top: 6px;
@@ -387,7 +387,7 @@ body::after {
   box-shadow: none;
 }
 
-/* ── OTP grid (verify page) ── */
+/* â”€â”€ OTP grid (verify page) â”€â”€ */
 .otp-grid {
   display: flex;
   gap: 10px;
@@ -416,18 +416,18 @@ body::after {
   outline: none;
 }
 
-/* ── Utilities ── */
+/* â”€â”€ Utilities â”€â”€ */
 /* .hidden hides everything EXCEPT forms (forms use max-height accordion instead) */
 .hidden:not(form) { display: none !important; }
 
-/* ── Apple-Level Smooth Form Accordion Animation ── */
+/* â”€â”€ Apple-Level Smooth Form Accordion Animation â”€â”€ */
 form {
   max-height: 500px; /* Tighter fit to actual content for accurate timing */
   opacity: 1;
   overflow: hidden;
   transform: translateY(0);
 
-  /* Scope transition to only the properties that actually change — prevents jitter */
+  /* Scope transition to only the properties that actually change â€” prevents jitter */
   transition:
     max-height 0.4s cubic-bezier(0.32, 0.72, 0, 1),
     opacity    0.35s cubic-bezier(0.32, 0.72, 0, 1),
@@ -481,7 +481,7 @@ p.subtitle {
   font-size: 0.82rem;
 }
 
-/* ── Divider ── */
+/* â”€â”€ Divider â”€â”€ */
 .divider {
   border: none;
   border-top: 1px solid var(--glass-border);
@@ -572,7 +572,7 @@ input::-webkit-credentials-auto-fill-button {
    PRO-LEVEL FLIP CHOREOGRAPHY (THE ULTIMATE FIX)
    ========================================= */
 
-/* 1. Panel — JS FLIP handles height; CSS handles width + default overflow */
+/* 1. Panel â€” JS FLIP handles height; CSS handles width + default overflow */
 .glass-panel {
   width: 100% !important;
   max-width: 400px;
@@ -586,12 +586,12 @@ input::-webkit-credentials-auto-fill-button {
   max-width: 750px !important;
 }
 
-/* 2. Outgoing form — instantly out of flow so FLIP height measurement is clean */
+/* 2. Outgoing form â€” instantly out of flow so FLIP height measurement is clean */
 form.hidden {
   display: none !important;
 }
 
-/* 3. Incoming form — spatial keyframe reveal */
+/* 3. Incoming form â€” spatial keyframe reveal */
 form:not(.hidden) {
   display: block !important;
   animation: proFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
@@ -603,7 +603,7 @@ form:not(.hidden) {
   transition: none !important;
 }
 
-/* N.O.V.A. input row is a <form> but must stay flex — exempt it from the block override */
+/* N.O.V.A. input row is a <form> but must stay flex â€” exempt it from the block override */
 form.nova-input-area,
 form.nova-input-area:not(.hidden) {
   display: flex !important;
@@ -624,7 +624,7 @@ form.nova-input-area:not(.hidden) {
   100% { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 
-/* 4. Desktop width lock — form content at full size while panel slides open */
+/* 4. Desktop width lock â€” form content at full size while panel slides open */
 @media (min-width: 481px) {
   #signupForm {
     width: 670px !important;
@@ -644,157 +644,26 @@ form.nova-input-area:not(.hidden) {
     opacity: 0.9 !important;
 }
 
-/* =========================================
-   N.O.V.A. TERMINAL STYLES
-   ========================================= */
-.nova-container {
-    background: rgba(0,0,0,0.4);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    margin-bottom: 20px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-}
-.nova-header {
-    background: rgba(102, 252, 241, 0.08);
-    border-bottom: 1px solid var(--glass-border);
-    padding: 10px 15px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--primary);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-.nova-icon {
-    width: 16px; height: 16px;
-}
-.nova-messages {
-    height: auto;
-    min-height: 150px;
-    max-height: 35vh;
-    overflow-y: auto;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    font-size: 0.85rem;
-    line-height: 1.5;
-}
-.nova-msg {
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    max-width: 85%;
-    word-wrap: break-word;
-}
-.user-msg {
-    background: var(--input-bg);
-    border: 1px solid var(--glass-border);
-    color: var(--text-main);
-    align-self: flex-end;
-    border-bottom-right-radius: 2px;
-}
-.ai-msg {
-    background: rgba(102, 252, 241, 0.05);
-    border: 1px solid rgba(102, 252, 241, 0.15);
-    color: var(--primary);
-    align-self: flex-start;
-    border-bottom-left-radius: 2px;
-}
-.ai-msg strong {
-    color: #fff; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; opacity: 0.8;
-}
-.nova-input-area {
-    display: flex;
-    border-top: 1px solid var(--glass-border);
-    background: rgba(255,255,255,0.02);
-    margin: 0 !important; padding: 0 !important;
-    max-height: none !important; opacity: 1 !important; transform: none !important;
-}
-.nova-input-area input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    padding: 14px 15px;
-    color: var(--text-main);
-    font-family: inherit;
-    font-size: 0.9rem;
-}
-.nova-input-area input:focus { outline: none; box-shadow: none; border: none; background: transparent; }
-.nova-input-area button {
-    background: transparent;
-    border: none;
-    padding: 0 15px;
-    color: var(--primary);
-    cursor: pointer;
-    transition: opacity 0.2s;
-    display: flex; align-items: center; justify-content: center;
-}
-.nova-input-area button:hover { opacity: 0.7; }
-.nova-input-area button svg { width: 18px; height: 18px; }
-.nova-typing { font-style: italic; opacity: 0.6; }
 
 /* =========================================
-   N.O.V.A. MODEL SELECT
+   GEMINI PILL UI - FINAL
    ========================================= */
-.nova-model-select { background: rgba(0,0,0,0.5); color: var(--primary); border: 1px solid var(--glass-border); border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; outline: none; cursor: pointer; }
-.nova-model-select:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* =========================================
-   GEMINI PILL INPUT COMPONENT
-   ========================================= */
-.gemini-input-container { background: #1e1e1e; border-radius: 24px; margin: 15px; display: flex !important; flex-direction: column; padding: 12px 16px; gap: 12px; }
-.gemini-input-container input { background: transparent; border: none; color: #fff; font-size: 1rem; outline: none; width: 100%; }
-.gemini-input-container input::placeholder { color: #888; }
+.nova-container { border: none; box-shadow: none; background: transparent; display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+.nova-messages { background: #1e1f22; border-radius: 16px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); height: auto; min-height: 150px; max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; font-size: 0.85rem; line-height: 1.5; }
+.nova-msg { padding: 10px 14px; border-radius: var(--radius-sm); max-width: 85%; word-wrap: break-word; }
+.user-msg { background: var(--input-bg); border: 1px solid var(--glass-border); color: var(--text-main); align-self: flex-end; border-bottom-right-radius: 2px; }
+.ai-msg { background: rgba(102, 252, 241, 0.05); border: 1px solid rgba(102, 252, 241, 0.15); color: var(--primary); align-self: flex-start; border-bottom-left-radius: 2px; }
+.ai-msg strong { color: #fff; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 4px; opacity: 0.8; }
+.gemini-input-container { background: #1e1f22; border-radius: 24px; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }
+.gemini-input-container input { background: transparent; border: none; color: #e3e3e3; font-size: 1rem; outline: none; width: 100%; }
+.gemini-input-container input::placeholder { color: #666; }
 .gemini-controls { display: flex; justify-content: space-between; align-items: center; }
 .gemini-controls-left, .gemini-controls-right { display: flex; align-items: center; gap: 12px; }
 .icon-btn { background: transparent; border: none; color: #aaa; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 50%; transition: color 0.2s, background 0.2s; }
-.icon-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.icon-btn:hover { color: #fff; background: rgba(255,255,255,0.08); }
 .icon-btn svg { width: 20px; height: 20px; }
-.icon-btn.with-text { font-size: 0.9rem; gap: 6px; padding: 4px 8px; border-radius: 12px; }
-.icon-btn.with-text svg { width: 18px; height: 18px; }
-.gemini-model-select { background: transparent; color: #aaa; border: none; font-size: 0.9rem; cursor: pointer; outline: none; appearance: none; padding-right: 15px; font-weight: 500; }
-.gemini-model-select option { background: #1e1e1e; color: #fff; }
-.gemini-model-select:disabled { cursor: not-allowed; opacity: 0.7; }
-
-/* =========================================
-   NOVA CONTAINER & PILL OVERRIDES
-   ========================================= */
-.nova-container { border: none !important; box-shadow: none !important; background: transparent !important; }
-.nova-header { border-bottom: none !important; background: transparent !important; padding: 0 0 15px 0 !important; }
-.nova-messages { background: rgba(0,0,0,0.2); border-radius: 16px; padding: 20px; border: 1px solid rgba(255,255,255,0.05); height: auto; min-height: 150px; max-height: 40vh; }
-.gemini-input-container { background: #1e1f22 !important; border-radius: 24px !important; padding: 12px 20px !important; margin: 15px 0 0 0 !important; display: flex !important; flex-direction: column !important; gap: 10px !important; }
-.gemini-input-container input { background: transparent !important; border: none !important; color: #e3e3e3 !important; font-size: 1rem !important; outline: none !important; width: 100% !important; }
-.gemini-input-container input::placeholder { color: #888 !important; }
-.gemini-controls { display: flex !important; justify-content: space-between !important; align-items: center !important; }
-.gemini-controls-left, .gemini-controls-right { display: flex !important; align-items: center !important; gap: 12px !important; }
-.icon-btn { background: transparent !important; border: none !important; color: #aaa !important; cursor: pointer !important; display: flex !important; align-items: center !important; justify-content: center !important; padding: 4px !important; border-radius: 50% !important; transition: color 0.2s, background 0.2s !important; }
-.icon-btn:hover { color: #fff !important; background: rgba(255,255,255,0.1) !important; }
-.icon-btn svg { width: 20px !important; height: 20px !important; }
-.icon-btn.with-text { font-size: 0.9rem !important; gap: 6px !important; padding: 4px 8px !important; border-radius: 12px !important; }
-.gemini-model-select { background: #2b2d31 !important; color: #b5bac1 !important; border: none !important; border-radius: 8px !important; padding: 6px 12px !important; font-size: 0.85rem !important; cursor: pointer !important; -webkit-appearance: none !important; appearance: none !important; }
-.gemini-model-select option { background: #1e1f22 !important; color: #fff !important; }
-.gemini-model-select:disabled { cursor: not-allowed !important; opacity: 0.6 !important; }
-
-/* =========================================
-   NOVA PILL FINAL OVERRIDES
-   ========================================= */
-.nova-container { border: none !important; box-shadow: none !important; background: transparent !important; }
-.nova-header { display: none !important; }
-.nova-messages { background: #1e1f22 !important; border-radius: 16px !important; padding: 20px !important; border: 1px solid rgba(255,255,255,0.05) !important; height: auto !important; min-height: 150px !important; max-height: 40vh !important; overflow-y: auto !important; }
-.gemini-input-container { background: #1e1f22 !important; border-radius: 24px !important; padding: 12px 20px !important; margin: 15px 0 0 0 !important; display: flex !important; flex-direction: column !important; gap: 10px !important; }
-.gemini-input-container input { background: transparent !important; border: none !important; color: #e3e3e3 !important; font-size: 1rem !important; outline: none !important; width: 100% !important; }
-.gemini-input-container input::placeholder { color: #666 !important; }
-.gemini-controls { display: flex !important; justify-content: space-between !important; align-items: center !important; }
-.gemini-controls-left, .gemini-controls-right { display: flex !important; align-items: center !important; gap: 12px !important; }
-.icon-btn { background: transparent !important; border: none !important; color: #aaa !important; cursor: pointer !important; display: flex !important; align-items: center !important; justify-content: center !important; padding: 4px !important; border-radius: 50% !important; }
-.icon-btn:hover { color: #fff !important; background: rgba(255,255,255,0.08) !important; }
-.icon-btn svg { width: 20px !important; height: 20px !important; }
-.icon-btn.with-text { font-size: 0.9rem !important; gap: 6px !important; padding: 4px 10px !important; border-radius: 12px !important; }
-.gemini-model-select { background: transparent !important; color: #aaa !important; border: none !important; font-size: 0.85rem !important; cursor: pointer !important; outline: none !important; -webkit-appearance: none !important; appearance: none !important; }
-.gemini-model-select option { background: #1e1f22 !important; color: #e3e3e3 !important; }
-.gemini-model-select:disabled { opacity: 0.5 !important; cursor: not-allowed !important; }
+.icon-btn.with-text { font-size: 0.9rem; gap: 6px; padding: 4px 10px; border-radius: 12px; }
+.gemini-model-select { background: transparent; color: #aaa; border: none; font-size: 0.85rem; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; font-weight: 500; }
+.gemini-model-select option { background: #1e1f22; color: #e3e3e3; }
+.gemini-model-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.nova-typing { font-style: italic; opacity: 0.6; }
