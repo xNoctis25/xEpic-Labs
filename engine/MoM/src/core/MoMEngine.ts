@@ -294,6 +294,9 @@ export class MoMEngine {
             await this.executionEngine.flattenPosition(this.symbolToTrade);
             
             if (this.activePosition) {
+                // FIX: Journal the EOD forced flatten!
+                await this.executionEngine.gradeAndJournalTrade(candle.close, 0);
+
                 // Force cleanup of local state if it was still stuck open
                 this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0); 
                 this.riskEngine.updatePnL(0, this.activePosition.riskBudget); 
@@ -543,6 +546,10 @@ export class MoMEngine {
         if (!this.activePosition) return;
 
         console.log(`🔄 [MoMEngine] - Monitor-triggered flatten: ${reason}`);
+
+        // FIX: The Amnesia Bug. Journal the early exit before wiping it!
+        // We log a baseline PnL of 0 here; the exact dollar loss is reconciled by Ghost Sync.
+        await this.executionEngine.gradeAndJournalTrade(this.activePosition.entryPrice, 0);
 
         // Release margin — P&L will be corrected by Ghost Sync
         this.ledger.releaseMarginAndApplyPnL(this.activePosition.margin, 0);
