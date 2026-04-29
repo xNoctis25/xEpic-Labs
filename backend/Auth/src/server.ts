@@ -37,7 +37,11 @@ app.use(async (req, res, next) => {
     }
 });
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret';
+const JWT_SECRET = process.env.JWT_SECRET!;
+if (!JWT_SECRET) {
+    console.error('[FATAL] JWT_SECRET is not set in environment variables. Refusing to start.');
+    process.exit(1);
+}
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // --- DYNAMIC SECURITY MIGRATION ---
@@ -261,7 +265,8 @@ app.get('/api/auth/me', async (req, res) => {
 
         res.status(200).json(userQuery.rows[0]);
 
-    } catch (error) {
+    } catch (error: any) {
+        console.error('[AUTH ERROR] /me token verification failed:', error?.message || error);
         res.status(401).json({ message: 'Invalid or expired token.' });
     }
 });
