@@ -973,3 +973,16 @@ body { display: flex !important; flex-direction: column !important; justify-cont
    NEW YELLOW STATE (ENGINE HALTED)
    ========================================= */
 .dot.yellow { background: #ffd600; box-shadow: 0 0 10px #ffd600; }
+
+/* =========================================
+   RESTORE AUTH PAGES (LOGIN/RESET/VERIFY)
+   ========================================= */
+body:not(:has(.app-layout)) {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    padding-top: 25vh !important;
+    height: auto !important;
+    min-height: 100vh !important;
+}
