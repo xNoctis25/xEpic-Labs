@@ -155,3 +155,70 @@ if (dropdownTrigger && modelDropdown) {
     });
 }
 
+
+// --- Navigation & View Switching ---
+const navHome = document.getElementById('navHome');
+const navSettings = document.getElementById('navSettings');
+const terminalView = document.getElementById('terminalView');
+const profileView = document.getElementById('profileView');
+
+function switchView(viewName) {
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    if (terminalView) terminalView.classList.add('hidden');
+    if (profileView) profileView.classList.add('hidden');
+
+    if (viewName === 'home') {
+        if (navHome) navHome.classList.add('active');
+        if (terminalView) terminalView.classList.remove('hidden');
+    } else if (viewName === 'settings') {
+        if (navSettings) navSettings.classList.add('active');
+        if (profileView) profileView.classList.remove('hidden');
+    }
+}
+
+if (navHome) navHome.addEventListener('click', (e) => { e.preventDefault(); switchView('home'); });
+if (navSettings) navSettings.addEventListener('click', (e) => { e.preventDefault(); switchView('settings'); });
+
+// --- Change Password Logic ---
+const changePwdForm = document.getElementById('changePasswordForm');
+if (changePwdForm) {
+    changePwdForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const currentPassword = document.getElementById('currentPassword').value;
+        const newPassword = document.getElementById('newProfilePassword').value;
+        const confirmPassword = document.getElementById('confirmNewProfilePassword').value;
+        const btn = document.getElementById('changePwdBtn');
+        const alertBox = document.getElementById('pwdAlertBox');
+
+        alertBox.style.display = 'none';
+        alertBox.className = 'alert';
+
+        if (newPassword !== confirmPassword) {
+            alertBox.className = 'alert error';
+            alertBox.textContent = 'New passwords do not match.';
+            alertBox.style.display = 'block';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Updating...';
+
+        try {
+            await auth.request('/change-password', {
+                method: 'POST',
+                body: JSON.stringify({ currentPassword, newPassword })
+            });
+            alertBox.className = 'alert success';
+            alertBox.textContent = 'Password updated successfully.';
+            alertBox.style.display = 'block';
+            changePwdForm.reset();
+        } catch(err) {
+            alertBox.className = 'alert error';
+            alertBox.textContent = err.message || 'Failed to update password.';
+            alertBox.style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Update Password';
+        }
+    });
+}

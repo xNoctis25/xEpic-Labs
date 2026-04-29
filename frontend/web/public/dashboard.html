@@ -11,7 +11,7 @@
     <div class="app-layout">
         <aside class="app-sidebar">
             <div class="sidebar-nav top">
-                <a href="#" class="nav-item active" title="N.O.V.A. Terminal">
+                <a href="#" class="nav-item active" id="navHome" title="N.O.V.A. Terminal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
                 </a>
                 <a href="#" class="nav-item" title="Insights">
@@ -28,7 +28,7 @@
                 </a>
             </div>
             <div class="sidebar-nav bottom">
-                <a href="#" class="nav-item" title="Settings">
+                <a href="#" class="nav-item" id="navSettings" title="Settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </a>
                 <a href="#" class="nav-item" id="logoutBtn" title="Secure Sign Out">
@@ -38,46 +38,74 @@
         </aside>
 
         <div class="glass-panel main-content">
-            <h2>Dashboard</h2>
-            <p class="subtitle">Protected Route Successfully Accessed</p>
-            <div id="profileData" style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <p style="color: var(--text-muted); margin-bottom: 10px; text-align: center;">Loading secure profile...</p>
-            </div>
-            <div class="nova-container">
-                <div class="nova-messages" id="novaMessages">
-                    <div class="nova-msg ai-msg"><strong>N.O.V.A.</strong><br>Greetings, How may I assist you?</div>
-                </div>
-                <form id="novaForm" class="gemini-input-container">
-                    <input type="text" id="novaInput" placeholder="Ask N.O.V.A..." autocomplete="off" required>
-                    <div class="gemini-controls" style="justify-content: flex-end;">
-                        <div class="gemini-controls-right">
-                            <div class="custom-model-dropdown disabled" id="modelDropdown">
-                                <div class="dropdown-trigger" id="dropdownTrigger" title="Select Model">
-                                    <span id="selectedModelText">Flash</span>
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
-                                </div>
-                                <div class="dropdown-menu" id="dropdownMenu">
-                                    <div class="dropdown-item active" data-value="gemini-2.5-flash">
-                                        <div class="item-title">Flash</div>
-                                        <div class="item-desc">Fast, everyday tasks</div>
-                                    </div>
-                                    <div class="dropdown-item" data-value="gemini-2.5-pro">
-                                        <div class="item-title">Pro</div>
-                                        <div class="item-desc">Deep logic &amp; reasoning</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <input type="hidden" id="novaModelSelect" value="gemini-2.5-flash">
-                            <button type="submit" id="novaSubmit" class="icon-btn" title="Send Command">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                            </button>
-                        </div>
+            <div id="terminalView" class="view-section">
+                <div class="nova-container" style="margin-top: 0;">
+                    <div class="nova-messages" id="novaMessages">
+                        <div class="nova-msg ai-msg"><strong>N.O.V.A.</strong><br>Greetings, How may I assist you?</div>
                     </div>
-                </form>
+                    <form id="novaForm" class="gemini-input-container">
+                        <input type="text" id="novaInput" placeholder="Command N.O.V.A..." autocomplete="off" required>
+                        <div class="gemini-controls" style="justify-content: flex-end;">
+                            <div class="gemini-controls-right">
+                                <div class="custom-model-dropdown disabled" id="modelDropdown">
+                                    <div class="dropdown-trigger" id="dropdownTrigger" title="Select Model">
+                                        <span id="selectedModelText">Flash</span>
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+                                    </div>
+                                    <div class="dropdown-menu" id="dropdownMenu">
+                                        <div class="dropdown-item active" data-value="gemini-2.5-flash">
+                                            <div class="item-title">Flash</div>
+                                            <div class="item-desc">Fast, everyday tasks</div>
+                                        </div>
+                                        <div class="dropdown-item" data-value="gemini-2.5-pro">
+                                            <div class="item-title">Pro</div>
+                                            <div class="item-desc">Deep logic &amp; reasoning</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="novaModelSelect" value="gemini-2.5-flash">
+                                <button type="submit" id="novaSubmit" class="icon-btn" title="Send Command">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div id="profileView" class="view-section hidden">
+                <div class="profile-header">
+                    <h2>Account Settings</h2>
+                    <p class="subtitle">Manage your profile and security credentials</p>
+                </div>
+
+                <div id="profileData" style="background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; margin-bottom: 30px;">
+                    <p style="color: var(--text-muted); text-align: center;">Loading secure profile...</p>
+                </div>
+
+                <div class="security-section">
+                    <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">Change Password</h3>
+                    <hr class="divider" style="margin-top: 0; margin-bottom: 20px; border-color: var(--glass-border);">
+                    <div id="pwdAlertBox" class="alert" style="display: none; margin-bottom: 15px;"></div>
+                    <form id="changePasswordForm" class="profile-form">
+                        <div class="form-group">
+                            <input type="password" id="currentPassword" required placeholder="Current Password">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <input type="password" id="newProfilePassword" required placeholder="New Password">
+                            </div>
+                            <div class="form-group">
+                                <input type="password" id="confirmNewProfilePassword" required placeholder="Confirm New Password">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" id="changePwdBtn">Update Password</button>
+                    </form>
+                </div>
             </div>
         </div>
     </div>
-    <script src="/js/api.js?v=7.0"></script>
-    <script src="/js/dashboard.js?v=7.0"></script>
+    <script src="/js/api.js?v=8.0"></script>
+    <script src="/js/dashboard.js?v=8.0"></script>
 </body>
 </html>

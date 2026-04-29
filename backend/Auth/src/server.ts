@@ -466,6 +466,40 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
 });
 
+// ── CHANGE PASSWORD (Protected) ───────────────────────────────────────────────
+app.post('/api/auth/change-password', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: number };
+
+        const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: 'Current and new passwords are required.' });
+        }
+
+        const userQuery = await pool.query('SELECT password FROM users WHERE id = $1', [decoded.id]);
+        if (userQuery.rows.length === 0) return res.status(404).json({ message: 'User not found.' });
+
+        const validPassword = await bcrypt.compare(currentPassword, userQuery.rows[0].password);
+        if (!validPassword) return res.status(401).json({ message: 'Incorrect current password.' });
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, decoded.id]);
+
+        console.log(`[AUTH] ✅ Password changed securely for user ID: ${decoded.id}`);
+        res.status(200).json({ message: 'Password updated successfully.' });
+    } catch (error: any) {
+        console.error('[AUTH ERROR] /change-password:', error?.message || error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 // ── N.O.V.A. (AI COMMAND NODE) ────────────────────────────────────────────────
 app.post('/api/auth/chat', async (req, res) => {
     try {
