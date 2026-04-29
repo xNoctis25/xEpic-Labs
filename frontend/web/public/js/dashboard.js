@@ -53,12 +53,22 @@ function novaSaveChats(c)     { localStorage.setItem(NOVA_KEY, JSON.stringify(c)
 function novaGetActiveId()    { return localStorage.getItem(NOVA_ACTIVE); }
 function novaSetActiveId(id)  { localStorage.setItem(NOVA_ACTIVE, id); }
 
-function novaGenTitle(text) {
-    return text.split(/\s+/).slice(0, 6).join(' ');
+async function novaGenTitle(userMessage, aiReply) {
+    try {
+        const prompt = `Generate a concise, professional 4-6 word title for a conversation. Reply with ONLY the title, no quotes, no punctuation at the end.\n\nUser asked: "${userMessage}"\nAssistant replied: "${aiReply.slice(0, 200)}"`;
+        const res = await auth.request('/chat', {
+            method: 'POST',
+            body: JSON.stringify({ message: prompt, model: 'gemini-2.5-flash' })
+        });
+        return res.reply.trim().replace(/^["']|["']$/g, '').slice(0, 60);
+    } catch {
+        // fallback: capitalize first words
+        return userMessage.split(/\s+/).slice(0, 5).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
 }
 
 function novaCreateSession() {
-    const chat = { id: 'chat_' + Date.now(), title: 'New chat', messages: [], createdAt: Date.now() };
+    const chat = { id: 'chat_' + Date.now(), title: 'New chat', messages: [], createdAt: Date.now(), pinned: false };
     const chats = novaGetChats();
     chats.unshift(chat);
     novaSaveChats(chats);
@@ -66,25 +76,137 @@ function novaCreateSession() {
     return chat;
 }
 
+function novaCloseAllMenus() {
+    document.querySelectorAll('.nova-ctx-menu').forEach(m => m.remove());
+}
+
+function novaShowContextMenu(chatId, anchorEl) {
+    novaCloseAllMenus();
+    const chats = novaGetChats();
+    const chat  = chats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'nova-ctx-menu';
+
+    const pinLabel = chat.pinned ? '📌 Unpin' : '📌 Pin';
+    menu.innerHTML = `
+        <div class="nova-ctx-item" data-action="pin">${pinLabel}</div>
+        <div class="nova-ctx-item" data-action="rename">✏️ Rename</div>
+        <div class="nova-ctx-item nova-ctx-danger" data-action="delete">🗑️ Delete</div>`;
+
+    menu.addEventListener('click', (e) => {
+        const action = e.target.closest('[data-action]')?.dataset.action;
+        if (!action) return;
+        novaCloseAllMenus();
+        if (action === 'pin')    novaTogglePin(chatId);
+        if (action === 'rename') novaStartRename(chatId);
+        if (action === 'delete') novaDeleteChat(chatId);
+    });
+
+    document.body.appendChild(menu);
+    const rect = anchorEl.getBoundingClientRect();
+    menu.style.top  = rect.bottom + 4 + 'px';
+    menu.style.left = rect.left + 'px';
+
+    setTimeout(() => document.addEventListener('click', novaCloseAllMenus, { once: true }), 0);
+}
+
+function novaTogglePin(chatId) {
+    const chats = novaGetChats();
+    const chat  = chats.find(c => c.id === chatId);
+    if (chat) { chat.pinned = !chat.pinned; novaSaveChats(chats); novaRenderList(); }
+}
+
+function novaStartRename(chatId) {
+    const itemEl = document.querySelector(`[data-chat-id="${chatId}"] .nova-chat-label`);
+    if (!itemEl) return;
+    const chats   = novaGetChats();
+    const chat    = chats.find(c => c.id === chatId);
+    if (!chat) return;
+
+    const input = document.createElement('input');
+    input.className = 'nova-rename-input';
+    input.value = chat.title;
+    itemEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    const save = () => {
+        const newTitle = input.value.trim() || chat.title;
+        chat.title = newTitle;
+        novaSaveChats(chats);
+        const titleEl = document.getElementById('novaChatTitle');
+        if (novaGetActiveId() === chatId && titleEl) titleEl.textContent = newTitle;
+        novaRenderList();
+    };
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } if (e.key === 'Escape') { input.value = chat.title; input.blur(); } });
+}
+
+function novaDeleteChat(chatId) {
+    let chats = novaGetChats().filter(c => c.id !== chatId);
+    novaSaveChats(chats);
+    if (novaGetActiveId() === chatId) {
+        const next = chats.find(c => c.messages.length > 0);
+        if (next) { novaLoadChat(next.id); }
+        else { novaCreateSession(); novaShowGreeting(); const titleEl = document.getElementById('novaChatTitle'); if (titleEl) titleEl.textContent = 'Nova'; }
+    }
+    novaRenderList();
+}
+
 function novaRenderList() {
     const list = document.getElementById('novaChatList');
     if (!list) return;
     const chats  = novaGetChats();
     const active = novaGetActiveId();
-    // Only show chats that have at least one message (not blank new chats)
     const history = chats.filter(c => c.messages.length > 0);
     list.innerHTML = '';
+
     if (history.length === 0) {
         list.innerHTML = '<div class="nova-chat-empty">No chat history yet</div>';
         return;
     }
-    history.forEach(chat => {
-        const el = document.createElement('div');
-        el.className = 'nova-chat-item' + (chat.id === active ? ' active' : '');
-        el.textContent = chat.title;
-        el.addEventListener('click', () => novaLoadChat(chat.id));
-        list.appendChild(el);
-    });
+
+    const pinned   = history.filter(c => c.pinned);
+    const unpinned = history.filter(c => !c.pinned);
+
+    function buildItem(chat) {
+        const wrap = document.createElement('div');
+        wrap.className = 'nova-chat-item' + (chat.id === active ? ' active' : '');
+        wrap.dataset.chatId = chat.id;
+
+        const label = document.createElement('span');
+        label.className = 'nova-chat-label';
+        label.textContent = chat.title;
+
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'nova-chat-menu-btn';
+        menuBtn.innerHTML = '&#8942;'; // ⋮
+        menuBtn.title = 'Options';
+        menuBtn.addEventListener('click', (e) => { e.stopPropagation(); novaShowContextMenu(chat.id, menuBtn); });
+
+        wrap.appendChild(label);
+        wrap.appendChild(menuBtn);
+        wrap.addEventListener('click', () => novaLoadChat(chat.id));
+        return wrap;
+    }
+
+    if (pinned.length > 0) {
+        const pinnedLabel = document.createElement('p');
+        pinnedLabel.className = 'nova-chat-section-label';
+        pinnedLabel.textContent = 'Pinned';
+        list.appendChild(pinnedLabel);
+        pinned.forEach(c => list.appendChild(buildItem(c)));
+        if (unpinned.length > 0) {
+            const recentLabel = document.createElement('p');
+            recentLabel.className = 'nova-chat-section-label';
+            recentLabel.style.marginTop = '10px';
+            recentLabel.textContent = 'Recent';
+            list.appendChild(recentLabel);
+        }
+    }
+    unpinned.forEach(c => list.appendChild(buildItem(c)));
 }
 
 function novaShowGreeting() {
@@ -146,18 +268,10 @@ if (novaForm) {
         novaInput.disabled = true;
         novaSubmit.disabled = true;
 
-        // Auto-generate title from first user message
-        const chats = novaGetChats();
-        const chat  = chats.find(c => c.id === novaGetActiveId());
-        if (chat && chat.title === 'New chat') {
-            chat.title = novaGenTitle(text);
-            novaSaveChats(chats);
-            const titleEl = document.getElementById('novaChatTitle');
-            if (titleEl) titleEl.textContent = chat.title;
-        }
         novaRenderList();
 
         const typingMsg = appendMessage('Processing...', false, false);
+        const isFirstExchange = (novaGetChats().find(c => c.id === novaGetActiveId())?.messages.length ?? 0) <= 1;
 
         try {
             const res = await auth.request('/chat', {
@@ -166,10 +280,26 @@ if (novaForm) {
             });
             let f = res.reply.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
             typingMsg.innerHTML = f;
+
             // Save AI response
             const chats2 = novaGetChats();
             const chat2  = chats2.find(c => c.id === novaGetActiveId());
             if (chat2) { chat2.messages.push({ role: 'ai', text: res.reply }); novaSaveChats(chats2); }
+
+            // AI-generated title — fires silently after first exchange, no loading state shown
+            if (isFirstExchange && chat2 && chat2.title === 'New chat') {
+                novaGenTitle(text, res.reply).then(generated => {
+                    const chats3 = novaGetChats();
+                    const chat3  = chats3.find(c => c.id === novaGetActiveId());
+                    if (chat3 && chat3.title === 'New chat') {
+                        chat3.title = generated;
+                        novaSaveChats(chats3);
+                        const titleEl = document.getElementById('novaChatTitle');
+                        if (titleEl) titleEl.textContent = generated;
+                        novaRenderList();
+                    }
+                });
+            }
         } catch (err) {
             typingMsg.innerHTML = `<span style="color:var(--error)">${err.message || 'Connection lost to core.'}</span>`;
         } finally {
@@ -191,6 +321,7 @@ if (novaNewChatBtn) {
         novaRenderList();
         novaInput.focus();
     });
+}
 }
 
 // Textarea auto-grow + Enter to submit
