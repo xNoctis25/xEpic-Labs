@@ -866,3 +866,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .gemini-input-pill textarea { background: transparent; border: none; color: #e3e3e3; font-size: 1rem; outline: none; width: 100%; resize: none; overflow-y: hidden; min-height: 24px; max-height: 200px; padding: 4px 0; font-family: inherit; line-height: 1.5; margin-bottom: 10px; }
 .gemini-pill-bottom { display: flex; justify-content: space-between; align-items: center; width: 100%; }
 .gemini-controls-left, .gemini-controls-right { display: flex; align-items: center; gap: 10px; }
+
+/* =========================================
+   BRAND AREA — 1-ROW LOGO + WORDMARK
+   ========================================= */
+.brand-area { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.logo-mark { display: flex; align-items: center; flex-shrink: 0; }
+.brand-text { display: flex; flex-direction: column; justify-content: center; }
+.brand-text h1 { font-size: 1rem; font-weight: 700; color: #ffffff; margin: 0; line-height: 1.2; }
+.brand-text .slogan { font-size: 0.72rem; color: rgba(255,255,255,0.45); margin: 0; line-height: 1; }
