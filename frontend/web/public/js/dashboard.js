@@ -24,6 +24,8 @@ async function loadProfile() {
             const dd = document.getElementById('modelDropdown');
             if (dd) dd.classList.remove('disabled');
         }
+        const nameSpan = document.getElementById('novaUserName');
+        if (nameSpan) nameSpan.textContent = user.username;
     } catch (err) { auth.clearToken(); window.location.href = '/'; }
 }
 
@@ -45,8 +47,9 @@ function appendMessage(text, isUser = false) {
     const div = document.createElement('div');
     div.className = `nova-msg ${isUser ? 'user-msg' : 'ai-msg'}`;
     if (!isUser) {
-        let formatted = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
-        div.innerHTML = `<strong>N.O.V.A.</strong><br>${formatted}`;
+        let formatted = text.replace(/\n/g, '<br>');
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
+        div.innerHTML = formatted;
     } else {
         div.textContent = text;
     }
@@ -62,6 +65,8 @@ if (novaForm) {
         if (!text) return;
 
         appendMessage(text, true);
+        const greeting = document.getElementById('novaGreeting');
+        if (greeting) greeting.style.display = 'none';
         novaInput.value = '';
         novaInput.style.height = 'auto';
         novaInput.disabled = true;

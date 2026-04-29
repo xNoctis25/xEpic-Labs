@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xEpic Labs — Command Center</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/styles.css?v=24.0">
+    <link rel="stylesheet" href="/css/styles.css?v=25.0">
 </head>
 <body class="dashboard-body">
 
@@ -88,30 +88,36 @@
 
             <!-- ── N.O.V.A. VIEW ──────────────────────────────────────── -->
             <div id="novaView" class="view-section hidden">
-                <div class="nova-header">
-                    <span class="nova-chat-title">xEpicLabs Agent</span>
+                <div class="nova-header" style="text-align: left; padding: 20px 20px 0 20px;">
+                    <span class="nova-chat-title" style="font-weight: 600; font-size: 1.2rem; color: #e3e3e3;">xEpicLabs Agent</span>
                 </div>
+
                 <div class="nova-messages borderless" id="novaMessages">
-                    <div class="nova-msg ai-msg"><strong>N.O.V.A.</strong><br>Greetings, How may I assist you?</div>
+                    <div id="novaGreeting" class="nova-greeting">
+                        <h1>Hi <span id="novaUserName">User</span></h1>
+                        <p>What should we try today?</p>
+                    </div>
                 </div>
+
                 <div class="nova-input-wrapper">
                     <form id="novaForm" class="gemini-input-pill">
                         <textarea id="novaInput" rows="1" placeholder="Ask N.O.V.A..." required></textarea>
-                        <div class="gemini-controls-right">
-                            <div class="custom-model-dropdown disabled" id="modelDropdown">
-                                <div class="dropdown-trigger" id="dropdownTrigger">
-                                    <span id="selectedModelText">Flash</span>
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
-                                </div>
-                                <div class="dropdown-menu" id="dropdownMenu">
-                                    <div class="dropdown-item active" data-value="gemini-2.5-flash"><div class="item-title">Flash</div><div class="item-desc">Fast, everyday tasks</div></div>
-                                    <div class="dropdown-item" data-value="gemini-2.5-pro"><div class="item-title">Pro</div><div class="item-desc">Deep logic &amp; reasoning</div></div>
-                                </div>
+                        <div class="gemini-pill-bottom">
+                            <div class="gemini-controls-left">
+                                <button type="button" class="icon-btn" title="Add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
                             </div>
-                            <input type="hidden" id="novaModelSelect" value="gemini-2.5-flash">
-                            <button type="submit" id="novaSubmit" class="icon-btn" title="Send Command">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                            </button>
+                            <div class="gemini-controls-right">
+                                <div class="custom-model-dropdown disabled" id="modelDropdown">
+                                    <div class="dropdown-trigger" id="dropdownTrigger"><span id="selectedModelText">Flash</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg></div>
+                                    <div class="dropdown-menu" id="dropdownMenu">
+                                        <div class="dropdown-item active" data-value="gemini-2.5-flash"><div class="item-title">Flash</div><div class="item-desc">Fast, everyday tasks</div></div>
+                                        <div class="dropdown-item" data-value="gemini-2.5-pro"><div class="item-title">Pro</div><div class="item-desc">Deep logic &amp; reasoning</div></div>
+                                    </div>
+                                </div>
+                                <input type="hidden" id="novaModelSelect" value="gemini-2.5-flash">
+                                <button type="button" class="icon-btn" title="Microphone"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg></button>
+                                <button type="submit" id="novaSubmit" class="icon-btn" title="Send Command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+                            </div>
                         </div>
                     </form>
                     <div class="nova-disclaimer">N.O.V.A. is AI and can make mistakes. Please verify critical trading execution.</div>
@@ -145,7 +151,7 @@
         </div><!-- /.glass-panel.main-content -->
     </div><!-- /.app-layout -->
 
-    <script src="/js/api.js?v=24.0"></script>
-    <script src="/js/dashboard.js?v=24.0"></script>
+    <script src="/js/api.js?v=25.0"></script>
+    <script src="/js/dashboard.js?v=25.0"></script>
 </body>
 </html>
