@@ -935,3 +935,36 @@ body {
 
 /* Brand/pills now live in the global header — hide any lingering home-header */
 .home-header { display: none !important; }
+
+/* =========================================
+   STRICT TOP-DOWN LAYOUT (FIX CARDBOARDING)
+   ========================================= */
+body { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; align-items: stretch !important; height: 100vh !important; padding-top: 0 !important; margin: 0 !important; overflow: hidden !important; }
+
+.global-top-header { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 20px 40px !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; flex-shrink: 0 !important; z-index: 50 !important; background: var(--bg) !important; }
+
+.app-layout { display: flex !important; flex: 1 !important; width: 100% !important; max-width: 100% !important; padding: 30px 40px !important; margin: 0 !important; gap: 30px !important; height: auto !important; overflow: hidden !important; }
+
+.glass-panel.main-content { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+
+.home-header { display: none !important; }
+.system-control-panel { display: none !important; }
+
+/* =========================================
+   MINIMALIST HORIZONTAL STATUS PILLS
+   ========================================= */
+.system-status-pills { display: flex; gap: 14px; align-items: center; justify-content: flex-end; }
+.status-pill { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 8px 18px; border-radius: 50px; font-size: 0.85rem; font-weight: 500; color: #e3e3e3; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: background 0.3s; }
+.status-pill:hover { background: rgba(255,255,255,0.05); }
+.status-pill .status-label { letter-spacing: 0.5px; opacity: 0.9; }
+
+/* =========================================
+   SEMANTIC DOT STATES
+   ========================================= */
+.dot.gray { background: #555; box-shadow: 0 0 10px #555; }
+.dot.pulse-purple { background: #d500f9; animation: pulsePurple 1.5s infinite; }
+@keyframes pulsePurple {
+    0%   { box-shadow: 0 0 0 0   rgba(213, 0, 249, 0.7); }
+    70%  { box-shadow: 0 0 0 8px rgba(213, 0, 249, 0);   }
+    100% { box-shadow: 0 0 0 0   rgba(213, 0, 249, 0);   }
+}
