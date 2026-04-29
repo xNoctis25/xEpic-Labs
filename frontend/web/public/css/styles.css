@@ -1066,3 +1066,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .nova-title-bar:empty,
 .nova-title-bar span:empty { display: none; }
 .nova-title-bar { transition: opacity 0.2s; }
+
+/* Title bar must not intercept clicks when empty/hidden */
+.nova-title-bar { pointer-events: none; }
+.nova-title-bar:not(:empty) { pointer-events: auto; }

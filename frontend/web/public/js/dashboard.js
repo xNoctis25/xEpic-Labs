@@ -122,7 +122,7 @@ function novaShowContextMenu(chatId, anchorEl) {
     menu.style.top  = rect.bottom + 4 + 'px';
     menu.style.left = rect.left + 'px';
 
-    setTimeout(() => document.addEventListener('click', novaCloseAllMenus, { once: true }), 0);
+    setTimeout(() => document.addEventListener('mousedown', novaCloseAllMenus, { once: true, capture: true }), 0);
 }
 
 function novaTogglePin(chatId) {
