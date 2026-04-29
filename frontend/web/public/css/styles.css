@@ -868,10 +868,10 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .gemini-controls-left, .gemini-controls-right { display: flex; align-items: center; gap: 10px; }
 
 /* =========================================
-   BRAND AREA — 1-ROW LOGO + WORDMARK
+   BRAND AREA ï¿½ 1-ROW LOGO + WORDMARK
    ========================================= */
-.brand-area { display: flex; flex-direction: row; align-items: center; gap: 12px; }
-.logo-mark { display: flex; align-items: center; flex-shrink: 0; }
-.brand-text { display: flex; flex-direction: column; justify-content: center; }
-.brand-text h1 { font-size: 1rem; font-weight: 700; color: #ffffff; margin: 0; line-height: 1.2; }
-.brand-text .slogan { font-size: 0.72rem; color: rgba(255,255,255,0.45); margin: 0; line-height: 1; }
+.brand-area { display: flex; flex-direction: row; align-items: center; gap: 14px; }
+.logo-mark { display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: #1a1b1e; border-radius: 12px; padding: 8px; border: 1px solid rgba(255,255,255,0.08); }
+.brand-text { display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.brand-text h1 { font-size: 1.35rem; font-weight: 700; color: #ffffff; margin: 0; line-height: 1.1; letter-spacing: -0.01em; }
+.brand-text .slogan { font-size: 0.65rem; font-weight: 600; color: #66fcf1; margin: 0; line-height: 1; letter-spacing: 0.12em; text-transform: uppercase; }
