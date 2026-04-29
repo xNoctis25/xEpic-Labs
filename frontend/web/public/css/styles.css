@@ -895,3 +895,43 @@ body { padding-top: 0 !important; align-items: center !important; }
 #profileView .profile-header { margin-bottom: 25px; }
 #profileData { background: rgba(0,0,0,0.3) !important; border: 1px solid rgba(255,255,255,0.05) !important; }
 .profile-form { background: transparent !important; padding: 0 !important; border: none !important; }
+
+/* =========================================
+   GLOBAL FULL-PAGE ARCHITECTURE
+   ========================================= */
+body {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    padding: 0 !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+}
+
+.global-top-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 40px;
+    flex-shrink: 0;
+    z-index: 50;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.app-layout {
+    display: flex;
+    width: 100%;
+    max-width: 100% !important;
+    flex: 1 !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 30px 40px !important;
+    gap: 30px;
+    align-items: stretch;
+    overflow: hidden;
+}
+
+/* Brand/pills now live in the global header — hide any lingering home-header */
+.home-header { display: none !important; }
