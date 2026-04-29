@@ -100,33 +100,58 @@ if (novaForm) {
     });
 }
 
-// -- Custom Dropdown Logic ----------------------------------------------------
+// --- Custom Dropdown Interactive Logic ---
 const modelDropdown = document.getElementById('modelDropdown');
 const dropdownTrigger = document.getElementById('dropdownTrigger');
 const selectedModelText = document.getElementById('selectedModelText');
-const hiddenModelInput = document.getElementById('novaModelSelect');
 const dropdownItems = document.querySelectorAll('.dropdown-item');
 
-if (dropdownTrigger) {
-    dropdownTrigger.addEventListener('click', () => {
+// Dynamically inject the hidden input if it's missing to prevent crashes
+let hiddenModelInput = document.getElementById('novaModelSelect');
+if (!hiddenModelInput && modelDropdown) {
+    hiddenModelInput = document.createElement('input');
+    hiddenModelInput.type = 'hidden';
+    hiddenModelInput.id = 'novaModelSelect';
+    hiddenModelInput.value = 'gemini-2.5-flash';
+    modelDropdown.parentNode.appendChild(hiddenModelInput);
+}
+
+if (dropdownTrigger && modelDropdown) {
+    dropdownTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
         if (!modelDropdown.classList.contains('disabled')) {
             modelDropdown.classList.toggle('open');
         }
     });
 
     document.addEventListener('click', (e) => {
-        if (modelDropdown && !modelDropdown.contains(e.target)) {
+        if (!modelDropdown.contains(e.target)) {
             modelDropdown.classList.remove('open');
         }
     });
 
     dropdownItems.forEach(item => {
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent bubbling conflicts
+
+            // Visual update
             dropdownItems.forEach(i => i.classList.remove('active'));
             item.classList.add('active');
-            selectedModelText.textContent = item.querySelector('.item-title').textContent;
-            hiddenModelInput.value = item.getAttribute('data-value');
+
+            // Safe text update
+            const titleEl = item.querySelector('.item-title');
+            if (selectedModelText && titleEl) {
+                selectedModelText.textContent = titleEl.textContent;
+            }
+
+            // Safe value update
+            if (hiddenModelInput) {
+                hiddenModelInput.value = item.getAttribute('data-value') || 'gemini-2.5-flash';
+            }
+
+            // Close menu
             modelDropdown.classList.remove('open');
         });
     });
 }
+
