@@ -255,7 +255,7 @@ app.get('/api/auth/me', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
 
         const userQuery = await pool.query(
-            'SELECT id, username, email, is_verified, role, createdat AS created_at FROM users WHERE id = $1',
+            'SELECT id, username, email, isverified, role, createdat AS created_at FROM users WHERE id = $1',
             [decoded.id]
         );
 
