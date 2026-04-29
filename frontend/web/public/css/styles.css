@@ -682,7 +682,7 @@ form.nova-input-area:not(.hidden) {
 /* =========================================
    APP DASHBOARD LAYOUT & SIDEBAR
    ========================================= */
-body { padding-top: 0 !important; align-items: center !important; }
+/* [REMOVED: rogue global body rule] */
 
 .app-layout {
     display: flex;
@@ -860,7 +860,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .nova-greeting h1 { font-size: 2.2rem; background: linear-gradient(90deg, #66fcf1, #c850c0, #ffcc70); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 500; margin-bottom: 5px; }
 .nova-greeting p { font-size: 2.2rem; color: #555; font-weight: 500; margin: 0; }
 
-/* Two-Row Pill — overrides the single-row flex */
+/* Two-Row Pill ï¿½ overrides the single-row flex */
 .gemini-input-pill { background: #1e1f22; border-radius: 26px; padding: 12px 16px; display: flex; flex-direction: column; width: 100%; border: 1px solid rgba(255,255,255,0.08); transition: background 0.3s; overflow: visible; }
 .gemini-input-pill:focus-within { background: #26282c; border-color: rgba(102,252,241,0.3); }
 .gemini-input-pill textarea { background: transparent; border: none; color: #e3e3e3; font-size: 1rem; outline: none; width: 100%; resize: none; overflow-y: hidden; min-height: 24px; max-height: 200px; padding: 4px 0; font-family: inherit; line-height: 1.5; margin-bottom: 10px; }
