@@ -58,9 +58,14 @@ let oracleWorker:    Worker;
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper — resolve compiled worker path
 // ─────────────────────────────────────────────────────────────────────────────
+const isTsNode = __filename.endsWith('.ts');
+
 function workerPath(name: string): string {
-    return path.join(__dirname, 'core', `${name}.js`);
+    const ext = isTsNode ? '.ts' : '.js';
+    return path.join(__dirname, 'core', `${name}${ext}`);
 }
+
+const workerOpts = isTsNode ? { execArgv: ['-r', 'ts-node/register'] } : {};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker Error / Exit Handlers
@@ -178,9 +183,9 @@ async function boot(): Promise<void> {
 
     // ── Spawn Workers ─────────────────────────────────────────────────────────
     console.log('[Core 4] 🚀 Spawning 3 worker cores…');
-    momWorker       = new Worker(workerPath('MomWorker'));
-    assistantWorker = new Worker(workerPath('AssistantWorker'));
-    oracleWorker    = new Worker(workerPath('OracleWorker'));
+    momWorker       = new Worker(workerPath('MomWorker'), workerOpts);
+    assistantWorker = new Worker(workerPath('AssistantWorker'), workerOpts);
+    oracleWorker    = new Worker(workerPath('OracleWorker'), workerOpts);
 
     // ── Wire Error / Exit Handlers ────────────────────────────────────────────
     momWorker      .on('error', onWorkerError('MomWorker'))      .on('exit', onWorkerExit('MomWorker'));
