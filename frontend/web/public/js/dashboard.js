@@ -63,6 +63,8 @@ function novaSetTitleBar(title) {
         el.textContent = title;
         if (bar) bar.style.display = '';
     }
+    // Re-run layout so messages reposition below the (now visible/hidden) title bar
+    setTimeout(novaApplyLayout, 0);
 }
 function novaSetActiveId(id)  { localStorage.setItem(NOVA_ACTIVE, id); }
 
