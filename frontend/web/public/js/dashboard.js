@@ -544,33 +544,38 @@ updateMarketClock();
 setInterval(updateMarketClock, 10000);
 
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
-// JS-based layout: sets inline styles that override ALL CSS cascade
-// messages fill nova-main from top to input, input anchors at bottom
 function novaApplyLayout() {
-    const main   = document.querySelector('.nova-main');
-    const msgs   = document.getElementById('novaMessages');
-    const inp    = document.querySelector('.nova-input-wrapper');
+    const main = document.querySelector('.nova-main');
+    const msgs = document.getElementById('novaMessages');
+    const inp  = document.querySelector('.nova-input-wrapper');
     if (!main || !msgs || !inp) return;
 
-    // Reset to allow natural measurement of input height
-    inp.style.position = '';
+    // Skip if Nova is hidden — offsetHeight would be 0
+    if (main.offsetHeight === 0) return;
+
+    // Reset inline positions so we get real flow measurements
     msgs.style.position = '';
+    msgs.style.top = msgs.style.left = msgs.style.right = msgs.style.bottom = '';
+    inp.style.position = '';
+    inp.style.bottom = inp.style.left = inp.style.right = '';
+    main.style.position = '';
 
-    const mainH  = main.offsetHeight;
-    const inpH   = inp.offsetHeight;
+    // Force reflow
+    void main.offsetHeight;
 
-    // Apply bulletproof inline styles
-    Object.assign(main.style, {
-        position: 'relative',
-        overflow: 'hidden'
-    });
+    const inpH = inp.offsetHeight;
+
+    // Apply layout via inline styles (override all CSS)
+    main.style.position = 'relative';
+    main.style.overflow = 'hidden';
+
     Object.assign(msgs.style, {
-        position: 'absolute',
-        top:      '0',
-        left:     '0',
-        right:    '0',
-        bottom:   inpH + 'px',
-        overflowY:'auto'
+        position:  'absolute',
+        top:       '0',
+        left:      '0',
+        right:     '0',
+        bottom:    inpH + 'px',
+        overflowY: 'auto'
     });
     Object.assign(inp.style, {
         position: 'absolute',
@@ -580,14 +585,14 @@ function novaApplyLayout() {
     });
 }
 
-// Run on load and whenever Nova view becomes visible
-window.addEventListener('load', novaApplyLayout);
-window.addEventListener('resize', novaApplyLayout);
-
-// Patch nova nav click to re-run layout when Nova opens
 document.addEventListener('DOMContentLoaded', () => {
     const navNova = document.getElementById('navNova');
-    if (navNova) navNova.addEventListener('click', () => setTimeout(novaApplyLayout, 50));
-    // Also run once DOM is ready
-    setTimeout(novaApplyLayout, 100);
+    if (navNova) {
+        // 500ms — wait for the view's fade-in animation to complete
+        navNova.addEventListener('click', () => setTimeout(novaApplyLayout, 500));
+    }
+    // Also re-apply on window resize
+    window.addEventListener('resize', () => {
+        if (document.querySelector('.nova-main')?.offsetHeight > 0) novaApplyLayout();
+    });
 });
