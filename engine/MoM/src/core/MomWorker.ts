@@ -20,6 +20,10 @@
 
 import { parentPort, MessagePort } from 'worker_threads';
 import { MarketClock }             from './MarketClock';
+import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
+import { SMCExpert }               from '../experts/SMCExpert';
+import { ContractBuilder }         from '../utils/ContractBuilder';
+import { config }                  from '../config/env';
 
 if (!parentPort) throw new Error('[MomWorker] Must be run as a worker thread.');
 
@@ -30,6 +34,10 @@ let assistPort: MessagePort | null = null;
 // ─── Engine state ────────────────────────────────────────────────────────────
 type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
+
+// ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
+const smcExpert  = new SMCExpert();
+const aggregator = new CandleAggregator(1, onCandleComplete);  // hoisted fn ref
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WILDERNESS SHORT LEASH CONSTANTS
@@ -160,24 +168,28 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             break;
         }
 
-        // ── Live tick → Short Leash monitoring ───────────────────────────────
+        // ── Live tick processing ───────────────────────────────────────────────
         case 'tick': {
-            if (!activeTrade || !activeTrade.isWilderness || activeTrade.beTriggered) break;
+            const tick = data.payload as Tick;
 
-            const tick       = data.payload as { price: number };
-            const profit     = activeTrade.direction === 'LONG'
-                ? tick.price - activeTrade.entryPrice
-                : activeTrade.entryPrice - tick.price;
+            // Always feed aggregator so SMC indicators stay aligned
+            aggregator.processTick(tick);
 
-            // Trail to breakeven on first meaningful profit
-            if (profit >= BE_TRIGGER_POINTS) {
-                activeTrade.beTriggered = true;
-                activeTrade.stopPrice   = activeTrade.entryPrice;
-                console.log(`[MomWorker] 🏔️  Short Leash: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
-                parentPort!.postMessage({
-                    type:    'trade_command',
-                    payload: { action: 'MOVE_STOP_TO_BE', symbol: activeTrade.symbol, stopPrice: activeTrade.entryPrice },
-                });
+            // Short Leash: trail to BE monitoring (Wilderness trades only)
+            if (activeTrade && activeTrade.isWilderness && !activeTrade.beTriggered) {
+                const profit = activeTrade.direction === 'LONG'
+                    ? tick.price - activeTrade.entryPrice
+                    : activeTrade.entryPrice - tick.price;
+
+                if (profit >= BE_TRIGGER_POINTS) {
+                    activeTrade.beTriggered = true;
+                    activeTrade.stopPrice   = activeTrade.entryPrice;
+                    console.log(`[MomWorker] 🏔️  Short Leash: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
+                    parentPort!.postMessage({
+                        type:    'trade_command',
+                        payload: { action: 'MOVE_STOP_TO_BE', symbol: activeTrade.symbol, stopPrice: activeTrade.entryPrice },
+                    });
+                }
             }
             break;
         }
@@ -381,4 +393,107 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 export function notifyTradeClosed(symbol: string, pnl: number): void {
     initiateTripleSweepPhase1(`CLOSED_PNL_${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SMC SIGNAL PIPELINE — onCandleComplete → processSmcSignal
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Sync callback registered with CandleAggregator.
+ * Delegates to async processSmcSignal and catches unhandled rejections.
+ * Function declaration ensures hoisting (safe for aggregator constructor reference above).
+ */
+function onCandleComplete(candle: Candle): void {
+    processSmcSignal(candle).catch((err: Error) =>
+        console.error('[MomWorker] SMC pipeline error:', err.message)
+    );
+}
+
+/**
+ * Full SMC signal evaluation + Handshake + Wilderness gate + entry dispatch.
+ * Mirrors the ORB_SETUP flow so both signal sources share the same execution path.
+ */
+async function processSmcSignal(candle: Candle): Promise<void> {
+    const signal = smcExpert.analyze(candle);
+    if (signal === 'HOLD') return;
+    if (engineState !== 'IDLE')  return;
+
+    const direction: 'LONG' | 'SHORT' = signal === 'BUY' ? 'LONG' : 'SHORT';
+    const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
+    const inWilderness = MarketClock.isWilderness(candle.timestamp);
+    const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
+
+    console.log(
+        `[MomWorker] 📊 SMC Signal | ${tradeSymbol} ${direction} | ` +
+        `Zone: ${zoneLabel} | C: ${candle.close}`
+    );
+
+    // ── ORACLE HANDSHAKE ──────────────────────────────────────────────────────
+    engineState = 'AWAITING_HANDSHAKE';
+    const light = await requestTakeoff(tradeSymbol, direction);
+
+    if (light === 'RED_LIGHT') {
+        console.warn(`[MomWorker] 🔴 RED_LIGHT — ${tradeSymbol} SMC entry BLOCKED.`);
+        engineState = 'IDLE';
+        return;
+    }
+
+    console.log(`[MomWorker] 🟢 GREEN_LIGHT — executing ${tradeSymbol} ${direction}.`);
+
+    // ── WILDERNESS SHORT LEASH ────────────────────────────────────────────────
+    let slDistance = SL_NORMAL_POINTS;
+    if (inWilderness) {
+        slDistance = Math.ceil(SL_NORMAL_POINTS * SL_WILDERNESS_PCT);
+        console.log(`[MomWorker] 🌲 Short Leash: SL → ${slDistance} pts.`);
+    }
+
+    const stopPrice = direction === 'LONG'
+        ? candle.close - slDistance
+        : candle.close + slDistance;
+
+    // ── ENTER TRADE ───────────────────────────────────────────────────────────
+    engineState = 'IN_TRADE';
+
+    activeTrade = {
+        symbol:       tradeSymbol,
+        direction,
+        entryPrice:   candle.close,
+        stopPrice,
+        entryTs:      candle.timestamp,
+        isWilderness: inWilderness,
+        beTriggered:  false,
+    };
+
+    if (inWilderness) {
+        activeTrade.scratchTimer = setTimeout(() => {
+            if (activeTrade && !activeTrade.beTriggered) {
+                console.warn('[MomWorker] 🌲 SMC Wilderness scratch — no displacement.');
+                parentPort!.postMessage({
+                    type:    'trade_command',
+                    payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
+                });
+                initiateTripleSweepPhase1('WILDERNESS_NO_DISPLACEMENT');
+            }
+        }, WILDERNESS_SCRATCH_MS);
+    }
+
+    // Notify AssistantWorker → activate Tactical Overwatch
+    assistPort?.postMessage({
+        type:    'IN_TRADE',
+        payload: { symbol: tradeSymbol, direction, entryPrice: candle.close, entryTs: candle.timestamp, stopPrice },
+    });
+
+    // Forward to Main (Core 4) → Broker
+    parentPort!.postMessage({
+        type:    'trade_command',
+        payload: {
+            action:      'ENTER',
+            symbol:      tradeSymbol,
+            direction,
+            price:       candle.close,
+            stopPrice,
+            isWilderness: inWilderness,
+            source:      'SMC',
+        },
+    });
 }
