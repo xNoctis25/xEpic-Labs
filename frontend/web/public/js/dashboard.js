@@ -596,20 +596,30 @@ function novaApplyLayout() {
     msgs.style.setProperty('right',      '0',              'important');
     msgs.style.setProperty('height',     msgsH + 'px',     'important');
     msgs.style.setProperty('max-height', 'none',           'important');
-    msgs.style.setProperty('overflow-y', 'auto',           'important');
+    msgs.style.setProperty('overflow-y', 'scroll',         'important'); // scroll not auto: stable gutter = no twitch
 
     inp.style.setProperty('position', 'absolute', 'important');
     inp.style.setProperty('bottom',   '0',        'important');
     inp.style.setProperty('left',     '0',        'important');
     inp.style.setProperty('right',    '0',        'important');
 
-    // Position the scroll-to-bottom button just above the input bar
+    // Position scroll-to-bottom button just above input
     var scrollBtn = document.getElementById('novaScrollBtn');
     if (scrollBtn) {
         scrollBtn.style.setProperty('position', 'absolute', 'important');
         scrollBtn.style.setProperty('bottom',   (inpH + 10) + 'px', 'important');
         scrollBtn.style.setProperty('left',     '50%',              'important');
         scrollBtn.style.setProperty('z-index',  '20',               'important');
+    }
+
+    // Position custom scroll track (right rail, between title bar and input)
+    var track = document.getElementById('novaScrollTrack');
+    if (track) {
+        track.style.setProperty('position', 'absolute', 'important');
+        track.style.setProperty('top',      titleH + 6 + 'px', 'important');
+        track.style.setProperty('bottom',   inpH   + 6 + 'px', 'important');
+        track.style.setProperty('right',    '3px',              'important');
+        track.style.setProperty('z-index',  '15',               'important');
     }
 }
 
@@ -637,30 +647,50 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // ── Scroll-to-bottom button: show when >100px from bottom ─────────────
-    var msgs = document.getElementById('novaMessages');
+    // ── Custom scrollbar + ↓ button: show while scrolling, hide on idle ──────
+    var msgs     = document.getElementById('novaMessages');
     var scrollBtn = document.getElementById('novaScrollBtn');
+    var track    = document.getElementById('novaScrollTrack');
+    var thumb    = document.getElementById('novaScrollThumb');
 
-    if (msgs && scrollBtn) {
-        // Click: smooth scroll to bottom
-        scrollBtn.addEventListener('click', function() {
-            msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' });
-        });
+    function updateScrollThumb() {
+        if (!track || !thumb || !msgs) return;
+        var trackH   = track.offsetHeight;
+        var contentH = msgs.scrollHeight;
+        var visibleH = msgs.clientHeight;
+        if (contentH <= visibleH) { thumb.style.height = '0'; return; }
+        var thumbH   = Math.max(24, (visibleH / contentH) * trackH);
+        var thumbTop = (msgs.scrollTop / (contentH - visibleH)) * (trackH - thumbH);
+        thumb.style.height = thumbH + 'px';
+        thumb.style.top    = thumbTop + 'px';
+    }
 
-        // Scroll listener: toggle visibility + scrollbar fade
+    if (msgs) {
+        // Scroll-to-bottom click
+        if (scrollBtn) {
+            scrollBtn.addEventListener('click', function() {
+                msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' });
+            });
+        }
+
         var scrollDebounce;
         msgs.addEventListener('scroll', function() {
             var atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60;
-            // Show down-arrow only when NOT at bottom
-            if (!atBottom) {
-                scrollBtn.classList.add('visible');
+
+            // ↓ button: show when not at bottom
+            if (scrollBtn) {
+                if (!atBottom) scrollBtn.classList.add('visible');
             }
-            // Scrollbar + down-arrow fade: add class while scrolling, remove after 1.2s idle
-            msgs.classList.add('is-scrolling');
+
+            // Custom scrollbar: show track + update thumb position
+            if (track) track.classList.add('is-scrolling');
+            updateScrollThumb();
+
+            // After 1.2s idle: hide both
             clearTimeout(scrollDebounce);
             scrollDebounce = setTimeout(function() {
-                msgs.classList.remove('is-scrolling');
-                scrollBtn.classList.remove('visible'); // hide ↓ arrow when idle too
+                if (track)     track.classList.remove('is-scrolling');
+                if (scrollBtn) scrollBtn.classList.remove('visible');
             }, 1200);
         });
     }

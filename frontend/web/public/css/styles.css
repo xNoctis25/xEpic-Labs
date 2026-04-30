@@ -1293,3 +1293,50 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 /* Intentionally NO scrollbar-button rule here:
    Chrome renders zero arrow buttons when the rule is absent */
+
+/* =========================================
+   NOVA CUSTOM SCROLLBAR v66
+   Native scrollbar COMPLETELY removed.
+   Custom div-based indicator — zero arrow buttons possible.
+   ========================================= */
+
+/* Kill native scrollbar in ALL browsers */
+#novaMessages {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    overflow-y: scroll !important;
+}
+#novaMessages::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+/* Custom scroll track (the rail) */
+.nova-scroll-track {
+    position: absolute;
+    right: 3px;
+    width: 4px;
+    border-radius: 2px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 15;
+    transition: opacity 0.35s ease;
+}
+.nova-scroll-track.is-scrolling {
+    opacity: 1;
+}
+
+/* Custom scroll thumb (the draggable indicator) */
+.nova-scroll-thumb {
+    position: absolute;
+    width: 100%;
+    min-height: 24px;
+    background: rgba(255, 255, 255, 0.22);
+    border-radius: 2px;
+    left: 0;
+    transition: background 0.2s;
+}
+.nova-scroll-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
