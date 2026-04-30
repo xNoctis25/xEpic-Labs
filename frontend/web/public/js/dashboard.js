@@ -334,7 +334,6 @@ if (novaNewChatBtn) {
         novaInput.focus();
     });
 }
-}
 
 // Textarea auto-grow + Enter to submit
 if (novaInput) {
