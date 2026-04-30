@@ -324,7 +324,11 @@ function onMomMessage(data: { type: string; [key: string]: unknown }): void {
                 reason = `DefconLevel GREEN | VIX ${lastVixPrice.toFixed(2)} | VWAP slope ${vwapSlope.toFixed(4)}`;
             }
 
-            console.log(`[OracleWorker] 🤝 Handshake ${light} | ${symbol} ${direction} | ${reason}`);
+            parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                source:  'Oracle',
+                regime:  'Oracle',
+                message: `Handshake ${light} | ${symbol} ${direction} | ${reason}`,
+            }});
 
             // Respond directly on momPort (bidirectional MessagePort)
             momPort?.postMessage({ type: light, correlationId: cid, reason });

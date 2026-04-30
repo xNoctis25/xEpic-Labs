@@ -247,7 +247,11 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
             const light = await requestTakeoff(setup.symbol, setup.direction);
 
             if (light === 'RED_LIGHT') {
-                console.warn(`[MomWorker] 🔴 RED_LIGHT from Oracle — ${setup.symbol} entry BLOCKED.`);
+                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                    source:  'MoM',
+                    regime:  inWilderness ? 'Wilderness' : 'Killzone',
+                    message: `RED_LIGHT: Oracle blocked ${setup.symbol} ${setup.direction} ORB entry. Engine reset to IDLE.`,
+                }});
                 engineState = 'IDLE';
                 return;
             }
@@ -258,10 +262,11 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
             let slDistance = SL_NORMAL_POINTS;
             if (inWilderness) {
                 slDistance = Math.ceil(SL_NORMAL_POINTS * SL_WILDERNESS_PCT);
-                console.log(
-                    `[MomWorker] 🌲 Wilderness Short Leash: SL reduced to ${slDistance} pts. ` +
-                    `Auto-scratch in ${WILDERNESS_SCRATCH_MS / 60000} min if no displacement.`
-                );
+                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                    source:  'MoM',
+                    regime:  'Wilderness',
+                    message: `Short Leash activated for ${setup.symbol} ${setup.direction}: SL → ${slDistance} pts. Auto-scratch in ${WILDERNESS_SCRATCH_MS / 60000} min.`,
+                }});
             }
 
             const stopPrice = setup.direction === 'LONG'
@@ -455,7 +460,11 @@ async function processSmcSignal(candle: Candle): Promise<void> {
     const light = await requestTakeoff(tradeSymbol, direction);
 
     if (light === 'RED_LIGHT') {
-        console.warn(`[MomWorker] 🔴 RED_LIGHT — ${tradeSymbol} SMC entry BLOCKED.`);
+        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+            source:  'MoM',
+            regime:  inWilderness ? 'Wilderness' : 'Killzone',
+            message: `RED_LIGHT: Oracle blocked ${tradeSymbol} ${direction} SMC entry. Engine reset to IDLE.`,
+        }});
         engineState = 'IDLE';
         return;
     }
@@ -466,7 +475,11 @@ async function processSmcSignal(candle: Candle): Promise<void> {
     let slDistance = SL_NORMAL_POINTS;
     if (inWilderness) {
         slDistance = Math.ceil(SL_NORMAL_POINTS * SL_WILDERNESS_PCT);
-        console.log(`[MomWorker] 🌲 Short Leash: SL → ${slDistance} pts.`);
+        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+            source:  'MoM',
+            regime:  'Wilderness',
+            message: `SMC Short Leash activated for ${tradeSymbol} ${direction}: SL → ${slDistance} pts.`,
+        }});
     }
 
     const stopPrice = direction === 'LONG'

@@ -122,6 +122,17 @@ export class NeonDatabase {
             );
         `);
 
+        // Create the mom_telemetry_logs table — async event stream from all worker cores
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS mom_telemetry_logs (
+                id        SERIAL PRIMARY KEY,
+                source    VARCHAR(50),
+                regime    VARCHAR(50),
+                message   TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         // Ensure row 1 exists (seed the initial state if the table is empty)
         const result = await this.pool.query('SELECT COUNT(*) AS cnt FROM bot_state');
         const rowCount = parseInt(result.rows[0].cnt, 10);
@@ -321,6 +332,30 @@ export class NeonDatabase {
                 await this.updateAccountStatus(id, 'PAYOUT_READY');
                 console.log(`🤑 [NeonDB] - MEGA HEIST ALERT: Account ${acc.account_name} is PAYOUT READY!`);
             }
+        }
+    }
+
+    // ==========================================
+    // Telemetry — Async Event Stream
+    // ==========================================
+    /**
+     * Fire-and-forget telemetry logger.
+     * Called from Core 4 when a worker posts a TELEMETRY IPC message.
+     * Never awaited — DB latency must never block the engine hot path.
+     *
+     * @param source  — originating worker (e.g. 'MoM', 'Oracle', 'Assistant')
+     * @param regime  — market context (e.g. 'Killzone', 'Wilderness', 'Oracle')
+     * @param message — human-readable event description
+     */
+    public async logTelemetry(source: string, regime: string, message: string): Promise<void> {
+        try {
+            await this.pool.query(
+                `INSERT INTO mom_telemetry_logs (source, regime, message) VALUES ($1, $2, $3)`,
+                [source, regime, message]
+            );
+        } catch (err: any) {
+            // Silently swallow — telemetry must never crash the engine
+            console.warn(`[NeonDB] Telemetry write failed: ${err.message}`);
         }
     }
 

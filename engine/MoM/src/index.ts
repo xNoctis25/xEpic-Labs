@@ -268,6 +268,16 @@ function wireMomHandler(): void {
                 momWorker.postMessage({ type: 'position_closed', reason: msg.reason });
                 break;
 
+            /**
+             * TELEMETRY — structured event from MomWorker.
+             * Fire-and-forget insert into mom_telemetry_logs.
+             */
+            case 'TELEMETRY': {
+                const p = msg.payload as { source: string; regime: string; message: string };
+                void db.logTelemetry(p.source, p.regime, p.message);
+                break;
+            }
+
             default:
                 console.warn('[Core 4] MomWorker unknown msg:', msg.type);
         }
@@ -298,6 +308,16 @@ function wireAssistantHandler(): void {
             case 'orb_alert':       console.log('[Core 4] 🔭 ORB Alert:', msg.payload); break;
             case 'overwatch_alert': console.log('[Core 4] ⚠️  Overwatch Alert:', msg.payload); break;
             case 'overwatch_status': /* silent */ break;
+
+            /**
+             * TELEMETRY — structured event from AssistantWorker.
+             * Fire-and-forget insert into mom_telemetry_logs.
+             */
+            case 'TELEMETRY': {
+                const p = msg.payload as { source: string; regime: string; message: string };
+                void db.logTelemetry(p.source, p.regime, p.message);
+                break;
+            }
 
             /**
              * VERIFY_FLAT (Phase 2) — AssistantWorker requests real broker flat check.
@@ -341,6 +361,16 @@ function wireOracleHandler(): void {
             case 'defcon_change':
                 console.log(`[Core 4] 🚨 DefconLevel → ${msg.level} | ${msg.reason}`);
                 break;
+
+            /**
+             * TELEMETRY — structured event from OracleWorker.
+             * Fire-and-forget insert into mom_telemetry_logs.
+             */
+            case 'TELEMETRY': {
+                const p = msg.payload as { source: string; regime: string; message: string };
+                void db.logTelemetry(p.source, p.regime, p.message);
+                break;
+            }
 
             /**
              * VERIFY_FLAT (Phase 3) — OracleWorker requests the FINAL broker flat check.
