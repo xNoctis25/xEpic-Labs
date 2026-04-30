@@ -89,47 +89,6 @@ function novaCreateSession() {
     return chat;
 }
 
-function novaCloseAllMenus() {
-    document.querySelectorAll('.nova-ctx-menu').forEach(m => m.remove());
-}
-
-function novaShowContextMenu(chatId, anchorEl) {
-    novaCloseAllMenus();
-    const chats = novaGetChats();
-    const chat  = chats.find(c => c.id === chatId);
-    if (!chat) return;
-
-    const menu = document.createElement('div');
-    menu.className = 'nova-ctx-menu';
-
-    const pinLabel = chat.pinned ? '📌 Unpin' : '📌 Pin';
-    menu.innerHTML = `
-        <div class="nova-ctx-item" data-action="pin">${pinLabel}</div>
-        <div class="nova-ctx-item" data-action="rename">✏️ Rename</div>
-        <div class="nova-ctx-item nova-ctx-danger" data-action="delete">🗑️ Delete</div>`;
-
-    menu.addEventListener('click', (e) => {
-        const action = e.target.closest('[data-action]')?.dataset.action;
-        if (!action) return;
-        novaCloseAllMenus();
-        if (action === 'pin')    novaTogglePin(chatId);
-        if (action === 'rename') novaStartRename(chatId);
-        if (action === 'delete') novaDeleteChat(chatId);
-    });
-
-    document.body.appendChild(menu);
-    const rect = anchorEl.getBoundingClientRect();
-    menu.style.top  = rect.bottom + 4 + 'px';
-    menu.style.left = rect.left + 'px';
-
-    // Only close menu when clicking OUTSIDE of it
-    function outsideClickHandler(e) {
-        if (!e.target.closest('.nova-ctx-menu')) novaCloseAllMenus();
-        else document.addEventListener('mousedown', outsideClickHandler, { once: true });
-    }
-    setTimeout(() => document.addEventListener('mousedown', outsideClickHandler, { once: true }), 0);
-}
-
 function novaTogglePin(chatId) {
     const chats = novaGetChats();
     const chat  = chats.find(c => c.id === chatId);
@@ -197,14 +156,38 @@ function novaRenderList() {
         label.className = 'nova-chat-label';
         label.textContent = chat.title;
 
-        const menuBtn = document.createElement('button');
-        menuBtn.className = 'nova-chat-menu-btn';
-        menuBtn.innerHTML = '&#8942;'; // ⋮
-        menuBtn.title = 'Options';
-        menuBtn.addEventListener('click', (e) => { e.stopPropagation(); novaShowContextMenu(chat.id, menuBtn); });
+        // Inline action buttons - direct event handlers, no floating popup
+        const actions = document.createElement('div');
+        actions.className = 'nova-chat-actions';
+
+        function makeActionBtn(svgPath, label, cls, handler) {
+            const btn = document.createElement('button');
+            btn.className = 'nova-action-btn' + (cls ? ' ' + cls : '');
+            btn.title = label;
+            btn.setAttribute('aria-label', label);
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + svgPath + '</svg>';
+            btn.addEventListener('click', (e) => { e.stopPropagation(); handler(); });
+            return btn;
+        }
+
+        actions.appendChild(makeActionBtn(
+            '<path d="M12 2l3 7h7l-6 4.5 2.5 7L12 17l-6.5 3.5 2.5-7L2 9h7z"/>',
+            chat.pinned ? 'Unpin' : 'Pin', chat.pinned ? 'active' : '',
+            () => novaTogglePin(chat.id)
+        ));
+        actions.appendChild(makeActionBtn(
+            '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+            'Rename', '',
+            () => novaStartRename(chat.id)
+        ));
+        actions.appendChild(makeActionBtn(
+            '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>',
+            'Delete', 'nova-action-danger',
+            () => novaDeleteChat(chat.id)
+        ));
 
         wrap.appendChild(label);
-        wrap.appendChild(menuBtn);
+        wrap.appendChild(actions);
         wrap.addEventListener('click', () => novaLoadChat(chat.id));
         return wrap;
     }
