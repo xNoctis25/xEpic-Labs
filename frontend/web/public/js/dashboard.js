@@ -569,12 +569,14 @@ function novaApplyLayout() {
     main.style.position = 'relative';
     main.style.overflow = 'hidden';
 
+    const msgsH = (main.offsetHeight - inpH);
     Object.assign(msgs.style, {
         position:  'absolute',
         top:       '0',
         left:      '0',
         right:     '0',
-        bottom:    inpH + 'px',
+        height:    msgsH + 'px',
+        bottom:    '',
         overflowY: 'auto'
     });
     Object.assign(inp.style, {
