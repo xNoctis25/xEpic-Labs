@@ -2,33 +2,218 @@
  * OracleWorker.ts — Core 3
  * ─────────────────────────────────────────────────────────────────────────────
  * Responsibilities:
- *   • Owns the Databento TCP socket — SOLE source of market data.
- *   • Fans candle data out to MomWorker via direct IPC port.
- *   • Fans market context (session info, news flags) to AssistantWorker.
- *   • Posts connection health status back to Main (Core 4).
+ *   • Owns the DatabentoLiveService — SOLE source of CME + CFE market data.
+ *   • Multicasts every tick to MomWorker (momPort), AssistantWorker (assistPort),
+ *     and Main/Core 4 (parentPort) with zero latency.
+ *   • Runs the Macro Radar: VWAP-slope micro-trend bias + VIX spike tracking.
+ *   • Maintains a DefconLevel (GREEN | RED) broadcast to all peers.
+ *   • Hosts a WebSocket Server on port 8080 as the NOVA Receptionist:
+ *       - HALT      → sets DefconLevel RED, blocks MomWorker signal processing
+ *       - PULL_PLUG → fires EMERGENCY_EXIT directly to MomWorker via momPort
  *
  * IPC Ports received on startup (via parentPort 'init' message):
- *   • momPort    – MessagePort shared with MomWorker    (write candles/ticks)
- *   • assistPort – MessagePort shared with AssistantWorker (write context)
+ *   • momPort    – MessagePort ↔ MomWorker    (write ticks + emergency commands)
+ *   • assistPort – MessagePort ↔ AssistantWorker (write ticks + oracle state)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { parentPort, MessagePort } from 'worker_threads';
+import { WebSocketServer, WebSocket } from 'ws';
+import { DatabentoLiveService, EnrichedTick, CFE_DATASET } from '../services/DatabentoLiveService';
 
 if (!parentPort) throw new Error('[OracleWorker] Must be run as a worker thread.');
 
-// ── Peer ports (wired by Main via MessageChannel) ───────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+const WSS_PORT        = 8080;
+const VIX_RED_THRESHOLD = 20.0;    // VIX level that triggers DefconLevel RED
+const VWAP_WINDOW     = 60;        // Rolling window size for VWAP slope (ticks)
+
+// ─── DefconLevel ─────────────────────────────────────────────────────────────
+type DefconLevel = 'GREEN' | 'RED';
+let defconLevel: DefconLevel = 'GREEN';
+
+// ─── Peer ports (wired by Main via MessageChannel) ───────────────────────────
 let momPort:    MessagePort | null = null;
 let assistPort: MessagePort | null = null;
 
-// ── Main IPC handler ─────────────────────────────────────────────────────────
+// ─── Databento service ───────────────────────────────────────────────────────
+const feed = new DatabentoLiveService();
+
+// ─── Macro Radar state ───────────────────────────────────────────────────────
+interface VwapSample { price: number; volume: number; ts: number; }
+const cmeVwapWindow: VwapSample[] = [];   // rolling window for ES/MES VWAP slope
+let   lastVwap = 0;
+let   vwapSlope = 0;          // positive = bullish bias, negative = bearish bias
+let   lastVixPrice = 0;       // latest VX tick price (proxy for VIX level)
+
+/** Calculate VWAP from a rolling window of ticks. */
+function calcVwap(window: VwapSample[]): number {
+    let sumPV = 0, sumV = 0;
+    for (const s of window) { sumPV += s.price * s.volume; sumV += s.volume; }
+    return sumV > 0 ? sumPV / sumV : 0;
+}
+
+/** Update rolling VWAP slope and emit oracle state to peers. */
+function updateMacroRadar(tick: EnrichedTick): void {
+    const isCfe = tick.dataset === CFE_DATASET;
+
+    if (isCfe) {
+        // VIX proxy: track latest VX price
+        lastVixPrice = tick.price;
+        if (lastVixPrice >= VIX_RED_THRESHOLD && defconLevel === 'GREEN') {
+            defconLevel = 'RED';
+            broadcastDefcon('RED', `VIX spike: ${lastVixPrice.toFixed(2)}`);
+        }
+        return;
+    }
+
+    // CME ticks → VWAP slope calculation
+    cmeVwapWindow.push({ price: tick.price, volume: tick.volume, ts: tick.timestamp });
+    if (cmeVwapWindow.length > VWAP_WINDOW) cmeVwapWindow.shift();
+
+    const currentVwap = calcVwap(cmeVwapWindow);
+    if (lastVwap !== 0) {
+        vwapSlope = currentVwap - lastVwap;   // positive = bullish
+    }
+    lastVwap = currentVwap;
+
+    // Emit oracle state snapshot to AssistantWorker
+    assistPort?.postMessage({
+        type:        'oracle_state',
+        defcon:      defconLevel,
+        vwapSlope,
+        vixLevel:    lastVixPrice,
+        ts:          tick.timestamp,
+    });
+}
+
+/** Broadcast DefconLevel change to all peers and Main. */
+function broadcastDefcon(level: DefconLevel, reason: string): void {
+    console.log(`🚨 [OracleWorker] DefconLevel → ${level} | Reason: ${reason}`);
+    const msg = { type: 'defcon_change', level, reason, ts: Date.now() };
+    momPort?.postMessage(msg);
+    assistPort?.postMessage(msg);
+    parentPort!.postMessage(msg);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tick Multicast Handler
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Called by DatabentoLiveService for EVERY tick from EITHER dataset.
+ * Fan-out order:
+ *   1. MomWorker   (direct peer port — lowest latency)
+ *   2. AssistantWorker (direct peer port)
+ *   3. Main/Core 4 (parentPort — for WebSocket delivery to dashboard)
+ */
+function onTick(tick: EnrichedTick): void {
+    if (defconLevel === 'RED') return;   // HALT: suppress data flow to MomWorker
+
+    // 1. Signal core — fire immediately
+    momPort?.postMessage({ type: 'tick', payload: tick });
+
+    // 2. Assistant — for context awareness
+    assistPort?.postMessage({ type: 'market_context', payload: tick });
+
+    // 3. Main — for live dashboard feed
+    parentPort!.postMessage({ type: 'tick', payload: tick });
+
+    // Update Macro Radar analytics (non-blocking; pure computation)
+    updateMacroRadar(tick);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WebSocket Server — NOVA Receptionist (port 8080)
+// ─────────────────────────────────────────────────────────────────────────────
+function startWssReceptionist(): void {
+    const wss = new WebSocketServer({ port: WSS_PORT });
+
+    wss.on('listening', () => {
+        console.log(`🛰️  [OracleWorker] WSS Receptionist listening on ws://localhost:${WSS_PORT}`);
+    });
+
+    wss.on('connection', (ws: WebSocket, req) => {
+        const clientIp = req.socket.remoteAddress ?? 'unknown';
+        console.log(`🔗 [OracleWorker] NOVA connected from ${clientIp}`);
+
+        // Send current state on connect
+        ws.send(JSON.stringify({ type: 'oracle_hello', defcon: defconLevel, vixLevel: lastVixPrice }));
+
+        ws.on('message', (raw) => {
+            const cmd = raw.toString().trim().toUpperCase();
+            console.log(`📨 [OracleWorker] NOVA command received: ${cmd}`);
+
+            switch (cmd) {
+
+                /**
+                 * HALT — set DefconLevel to RED.
+                 * Suppresses all tick flow to MomWorker until manually cleared.
+                 */
+                case 'HALT': {
+                    defconLevel = 'RED';
+                    broadcastDefcon('RED', 'NOVA HALT command');
+                    ws.send(JSON.stringify({ type: 'ack', cmd: 'HALT', defcon: 'RED' }));
+                    break;
+                }
+
+                /**
+                 * PULL_PLUG — emergency exit.
+                 * Blasts EMERGENCY_EXIT directly to MomWorker via momPort.
+                 * MomWorker must immediately flatten all positions.
+                 */
+                case 'PULL_PLUG': {
+                    console.error('🚨 [OracleWorker] PULL_PLUG — blasting EMERGENCY_EXIT to MomWorker!');
+                    defconLevel = 'RED';
+                    broadcastDefcon('RED', 'NOVA PULL_PLUG command');
+                    momPort?.postMessage({ type: 'EMERGENCY_EXIT', reason: 'NOVA PULL_PLUG', ts: Date.now() });
+                    ws.send(JSON.stringify({ type: 'ack', cmd: 'PULL_PLUG', defcon: 'RED' }));
+                    break;
+                }
+
+                /**
+                 * RESUME — clear DefconLevel back to GREEN (admin use).
+                 */
+                case 'RESUME': {
+                    defconLevel = 'GREEN';
+                    broadcastDefcon('GREEN', 'NOVA RESUME command');
+                    ws.send(JSON.stringify({ type: 'ack', cmd: 'RESUME', defcon: 'GREEN' }));
+                    break;
+                }
+
+                /**
+                 * STATUS — return current oracle snapshot.
+                 */
+                case 'STATUS': {
+                    ws.send(JSON.stringify({
+                        type:      'status',
+                        defcon:    defconLevel,
+                        vixLevel:  lastVixPrice,
+                        vwapSlope,
+                        ts:        Date.now(),
+                    }));
+                    break;
+                }
+
+                default:
+                    ws.send(JSON.stringify({ type: 'error', msg: `Unknown command: ${cmd}` }));
+            }
+        });
+
+        ws.on('close', () => console.log(`🔌 [OracleWorker] NOVA client disconnected from ${clientIp}`));
+        ws.on('error', (err) => console.error(`❌ [OracleWorker] WSS client error: ${err.message}`));
+    });
+
+    wss.on('error', (err) => {
+        console.error(`❌ [OracleWorker] WSS error: ${err.message}`);
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main IPC Handler (from Core 4 / Main Thread)
+// ─────────────────────────────────────────────────────────────────────────────
 parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
     switch (msg.type) {
 
-        /**
-         * 'init' — sent once by Main (Core 4) on startup.
-         * Carries the two direct peer MessagePorts.
-         */
         case 'init': {
             momPort    = msg.momPort    as MessagePort;
             assistPort = msg.assistPort as MessagePort;
@@ -36,27 +221,23 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             parentPort!.postMessage({ type: 'ready', worker: 'OracleWorker' });
             console.log('[OracleWorker] Core 3 online — IPC mesh wired.');
 
-            // Begin market data feed (Databento TCP)
-            startDatabentoFeed();
+            // Start WSS Receptionist FIRST, then feed
+            startWssReceptionist();
+            feed.start(onTick, (label, status) => {
+                parentPort!.postMessage({ type: 'feed_status', label, status });
+            });
             break;
         }
 
-        /**
-         * 'subscribe' — sent by Main to subscribe to a specific instrument.
-         */
         case 'subscribe': {
-            const symbol = msg.symbol as string;
-            console.log(`[OracleWorker] Subscribing to: ${symbol}`);
-            // TODO Phase 2: register symbol with Databento TCP client
+            // Future: dynamic runtime subscriptions
+            console.log(`[OracleWorker] Runtime subscribe: ${msg.symbol}`);
             break;
         }
 
-        /**
-         * 'shutdown' — graceful teardown signal from Main.
-         */
         case 'shutdown': {
-            console.log('[OracleWorker] Shutting down feed…');
-            stopDatabentoFeed();
+            console.log('[OracleWorker] Shutting down feed + WSS…');
+            feed.disconnect();
             momPort?.close();
             assistPort?.close();
             process.exit(0);
@@ -66,46 +247,3 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             console.warn(`[OracleWorker] Unknown message type: ${msg.type}`);
     }
 });
-
-// ── Databento TCP feed lifecycle ─────────────────────────────────────────────
-let feedInterval: ReturnType<typeof setInterval> | null = null;
-
-function startDatabentoFeed(): void {
-    console.log('[OracleWorker] Starting Databento TCP feed…');
-
-    // TODO Phase 2: replace stub with real DatabentoCient TCP socket
-    // Stub: emit a synthetic candle every 5 seconds for integration testing
-    feedInterval = setInterval(() => {
-        const syntheticCandle = {
-            symbol:    'ES',
-            timestamp: Date.now(),
-            open:      5200.00,
-            high:      5202.50,
-            low:       5199.25,
-            close:     5201.75,
-            volume:    1234,
-        };
-
-        // Fan out candle to MomWorker
-        momPort?.postMessage({ type: 'candle', payload: syntheticCandle });
-
-        // Fan out market context to AssistantWorker
-        assistPort?.postMessage({
-            type:    'market_context',
-            session: 'NY_AM',
-            payload: syntheticCandle,
-        });
-
-        // Notify Main of feed health
-        parentPort!.postMessage({ type: 'feed_heartbeat', ts: Date.now() });
-
-    }, 5000);
-}
-
-function stopDatabentoFeed(): void {
-    if (feedInterval) {
-        clearInterval(feedInterval);
-        feedInterval = null;
-    }
-    console.log('[OracleWorker] Feed stopped.');
-}

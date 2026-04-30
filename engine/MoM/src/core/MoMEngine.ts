@@ -217,7 +217,10 @@ export class MoMEngine {
         console.log(`📡 Binding Eyes and Hands to contract: ${this.symbolToTrade}`);
 
         // Start Live Stream FIRST (The Holding Pen)
-        this.databento.start(`${config.INDICES}.c.0`, (tick: Tick) => {
+        // New API: start(onTick, onStatus) — receives EnrichedTick from CME + CFE.
+        // MoMEngine only processes CME (ES/MES) ticks; CFE/VIX handled by OracleWorker Macro Radar.
+        this.databento.start((tick) => {
+            if (tick.dataset !== 'GLBX.MDP3') return;  // skip CFE/VIX ticks
             if (this.riskEngine.canTrade()) {
                 this.aggregator.processTick(tick);
             }
