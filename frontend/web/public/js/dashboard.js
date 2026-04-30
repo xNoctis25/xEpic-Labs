@@ -545,57 +545,58 @@ setInterval(updateMarketClock, 10000);
 
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
 function novaApplyLayout() {
-    const main = document.querySelector('.nova-main');
-    const msgs = document.getElementById('novaMessages');
-    const inp  = document.querySelector('.nova-input-wrapper');
+    var main = document.querySelector('.nova-main');
+    var msgs = document.getElementById('novaMessages');
+    var inp  = document.querySelector('.nova-input-wrapper');
     if (!main || !msgs || !inp) return;
+    if (main.offsetHeight === 0) return; // Nova is hidden, skip
 
-    // Skip if Nova is hidden — offsetHeight would be 0
-    if (main.offsetHeight === 0) return;
+    // Reset previous inline layout so we can measure naturally
+    msgs.style.cssText = msgs.style.cssText
+        .replace(/\bposition\s*:[^;]+;?/gi, '')
+        .replace(/\bheight\s*:[^;]+;?/gi, '')
+        .replace(/\bmax-height\s*:[^;]+;?/gi, '')
+        .replace(/\btop\s*:[^;]+;?/gi, '')
+        .replace(/\bbottom\s*:[^;]+;?/gi, '');
+    inp.style.cssText = inp.style.cssText
+        .replace(/\bposition\s*:[^;]+;?/gi, '')
+        .replace(/\bbottom\s*:[^;]+;?/gi, '');
 
-    // Reset inline positions so we get real flow measurements
-    msgs.style.position = '';
-    msgs.style.top = msgs.style.left = msgs.style.right = msgs.style.bottom = '';
-    inp.style.position = '';
-    inp.style.bottom = inp.style.left = inp.style.right = '';
-    main.style.position = '';
-
-    // Force reflow
+    // Force reflow to get real measurements
     void main.offsetHeight;
 
-    const inpH = inp.offsetHeight;
+    var mainH = main.offsetHeight;
+    var inpH  = inp.offsetHeight;
+    var msgsH = mainH - inpH;
 
-    // Apply layout via inline styles (override all CSS)
-    main.style.position = 'relative';
-    main.style.overflow = 'hidden';
+    // Apply via setProperty so CSSStyleDeclaration setters fire correctly
+    main.style.setProperty('position', 'relative', 'important');
+    main.style.setProperty('overflow', 'hidden', 'important');
 
-    const msgsH = (main.offsetHeight - inpH);
-    Object.assign(msgs.style, {
-        maxHeight: 'none',
-        position:  'absolute',
-        top:       '0',
-        left:      '0',
-        right:     '0',
-        height:    msgsH + 'px',
-        bottom:    '',
-        overflowY: 'auto'
-    });
-    Object.assign(inp.style, {
-        position: 'absolute',
-        bottom:   '0',
-        left:     '0',
-        right:    '0'
-    });
+    msgs.style.setProperty('position', 'absolute', 'important');
+    msgs.style.setProperty('top',      '0',        'important');
+    msgs.style.setProperty('left',     '0',        'important');
+    msgs.style.setProperty('right',    '0',        'important');
+    msgs.style.setProperty('height',   msgsH + 'px', 'important');
+    msgs.style.setProperty('max-height', 'none',   'important');
+    msgs.style.setProperty('overflow-y', 'auto',   'important');
+
+    inp.style.setProperty('position', 'absolute', 'important');
+    inp.style.setProperty('bottom',   '0',        'important');
+    inp.style.setProperty('left',     '0',        'important');
+    inp.style.setProperty('right',    '0',        'important');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    const navNova = document.getElementById('navNova');
+document.addEventListener('DOMContentLoaded', function() {
+    var navNova = document.getElementById('navNova');
     if (navNova) {
-        // 500ms — wait for the view's fade-in animation to complete
-        navNova.addEventListener('click', () => setTimeout(novaApplyLayout, 500));
+        navNova.addEventListener('click', function() {
+            setTimeout(novaApplyLayout, 500);
+        });
     }
-    // Also re-apply on window resize
-    window.addEventListener('resize', () => {
-        if (document.querySelector('.nova-main')?.offsetHeight > 0) novaApplyLayout();
+    window.addEventListener('resize', function() {
+        if (document.querySelector('.nova-main') && document.querySelector('.nova-main').offsetHeight > 0) {
+            novaApplyLayout();
+        }
     });
 });
