@@ -1121,3 +1121,35 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     padding: 6px 16px 8px;
     font-style: italic;
 }
+/* =========================================
+   SLEEK CUSTOM SCROLLBARS
+   ========================================= */
+
+/* Global thin scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 99px;
+    transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* Nova messages — fade scrollbar in only when scrolling */
+#novaMessages {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+#novaMessages:hover {
+    scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+
+/* Sidebar chat list */
+#novaChatList {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.06) transparent;
+}
+
+/* Firefox fallback for whole page */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
