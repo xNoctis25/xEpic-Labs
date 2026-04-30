@@ -571,6 +571,7 @@ function novaApplyLayout() {
 
     const msgsH = (main.offsetHeight - inpH);
     Object.assign(msgs.style, {
+        maxHeight: 'none',
         position:  'absolute',
         top:       '0',
         left:      '0',

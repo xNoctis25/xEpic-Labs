@@ -1159,3 +1159,10 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 
 
 
+
+/* Kill the 40vh cap that was capping novaMessages height */
+#novaMessages {
+    max-height: none !important;
+    min-height: 0 !important;
+    height: auto;
+}
