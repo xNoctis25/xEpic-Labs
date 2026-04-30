@@ -1159,36 +1159,3 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 
 
 
-/* =========================================
-   NOVA LAYOUT — ABSOLUTE POSITIONING
-   Bulletproof: no flex/grid fighting
-   ========================================= */
-.nova-main {
-    position: relative !important;
-    flex: 1 !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-    display: block !important;
-}
-.nova-title-bar {
-    display: none !important;
-}
-#novaMessages {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 110px !important;
-    overflow-y: auto !important;
-    padding: 16px 28px 8px !important;
-}
-.nova-input-wrapper {
-    position: absolute !important;
-    bottom: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    padding: 0 28px 16px !important;
-    margin-top: 0 !important;
-    background: linear-gradient(to bottom, transparent, #0d0e10 18px) !important;
-    z-index: 2 !important;
-}

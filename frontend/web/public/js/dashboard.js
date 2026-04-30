@@ -542,3 +542,52 @@ function updateMarketClock() {
 
 updateMarketClock();
 setInterval(updateMarketClock, 10000);
+
+// ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
+// JS-based layout: sets inline styles that override ALL CSS cascade
+// messages fill nova-main from top to input, input anchors at bottom
+function novaApplyLayout() {
+    const main   = document.querySelector('.nova-main');
+    const msgs   = document.getElementById('novaMessages');
+    const inp    = document.querySelector('.nova-input-wrapper');
+    if (!main || !msgs || !inp) return;
+
+    // Reset to allow natural measurement of input height
+    inp.style.position = '';
+    msgs.style.position = '';
+
+    const mainH  = main.offsetHeight;
+    const inpH   = inp.offsetHeight;
+
+    // Apply bulletproof inline styles
+    Object.assign(main.style, {
+        position: 'relative',
+        overflow: 'hidden'
+    });
+    Object.assign(msgs.style, {
+        position: 'absolute',
+        top:      '0',
+        left:     '0',
+        right:    '0',
+        bottom:   inpH + 'px',
+        overflowY:'auto'
+    });
+    Object.assign(inp.style, {
+        position: 'absolute',
+        bottom:   '0',
+        left:     '0',
+        right:    '0'
+    });
+}
+
+// Run on load and whenever Nova view becomes visible
+window.addEventListener('load', novaApplyLayout);
+window.addEventListener('resize', novaApplyLayout);
+
+// Patch nova nav click to re-run layout when Nova opens
+document.addEventListener('DOMContentLoaded', () => {
+    const navNova = document.getElementById('navNova');
+    if (navNova) navNova.addEventListener('click', () => setTimeout(novaApplyLayout, 50));
+    // Also run once DOM is ready
+    setTimeout(novaApplyLayout, 100);
+});
