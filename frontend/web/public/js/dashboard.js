@@ -565,21 +565,24 @@ function novaApplyLayout() {
     // Force reflow to get real measurements
     void main.offsetHeight;
 
-    var mainH = main.offsetHeight;
-    var inpH  = inp.offsetHeight;
-    var msgsH = mainH - inpH;
+    var mainH    = main.offsetHeight;
+    var inpH     = inp.offsetHeight;
+    // Account for the title bar so messages don't overlap the chat name
+    var titleBar = main.querySelector('.nova-title-bar');
+    var titleH   = (titleBar && titleBar.offsetHeight > 0) ? titleBar.offsetHeight : 0;
+    var msgsH    = mainH - inpH - titleH;
 
     // Apply via setProperty so CSSStyleDeclaration setters fire correctly
     main.style.setProperty('position', 'relative', 'important');
     main.style.setProperty('overflow', 'hidden', 'important');
 
-    msgs.style.setProperty('position', 'absolute', 'important');
-    msgs.style.setProperty('top',      '0',        'important');
-    msgs.style.setProperty('left',     '0',        'important');
-    msgs.style.setProperty('right',    '0',        'important');
-    msgs.style.setProperty('height',   msgsH + 'px', 'important');
-    msgs.style.setProperty('max-height', 'none',   'important');
-    msgs.style.setProperty('overflow-y', 'auto',   'important');
+    msgs.style.setProperty('position',   'absolute',       'important');
+    msgs.style.setProperty('top',        titleH + 'px',    'important');  // start below title bar
+    msgs.style.setProperty('left',       '0',              'important');
+    msgs.style.setProperty('right',      '0',              'important');
+    msgs.style.setProperty('height',     msgsH + 'px',     'important');
+    msgs.style.setProperty('max-height', 'none',           'important');
+    msgs.style.setProperty('overflow-y', 'auto',           'important');
 
     inp.style.setProperty('position', 'absolute', 'important');
     inp.style.setProperty('bottom',   '0',        'important');
