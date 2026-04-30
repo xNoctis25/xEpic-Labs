@@ -1071,7 +1071,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .nova-title-bar:not(:empty) { pointer-events: auto; }
 
 /* =========================================
-   NOVA CHAT ROW — INLINE ACTIONS (v2)
+   NOVA CHAT ROW ï¿½ INLINE ACTIONS (v2)
    Replaces floating popup menu
    ========================================= */
 .nova-chat-actions {
@@ -1099,5 +1099,25 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     line-height: 0;
 }
 .nova-action-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
-.nova-action-btn.active { color: #4285f4; }
+.nova-action-btn.active { color: #ff4444; }
 .nova-action-btn.nova-action-danger:hover { background: rgba(255,50,50,0.15); color: #ff5555; }
+
+/* Nova sidebar section labels */
+.nova-chat-section-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #555;
+    padding: 6px 16px 4px;
+    margin: 0;
+    user-select: none;
+}
+
+/* Sub-empty state (inside sections) */
+.nova-chat-empty-sub {
+    font-size: 0.78rem;
+    color: #3a3a3a;
+    padding: 6px 16px 8px;
+    font-style: italic;
+}

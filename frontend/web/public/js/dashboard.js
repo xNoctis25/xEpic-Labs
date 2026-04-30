@@ -139,10 +139,7 @@ function novaRenderList() {
     const history = chats.filter(c => c.messages.length > 0);
     list.innerHTML = '';
 
-    if (history.length === 0) {
-        list.innerHTML = '<div class="nova-chat-empty">No chat history yet</div>';
-        return;
-    }
+    // Sections always render (pinned placeholder shown when empty)
 
     const pinned   = history.filter(c => c.pinned);
     const unpinned = history.filter(c => !c.pinned);
@@ -192,21 +189,34 @@ function novaRenderList() {
         return wrap;
     }
 
+    // ── Pinned Section (always visible) ─────────────────────────────────
+    const pinnedLabel = document.createElement('p');
+    pinnedLabel.className = 'nova-chat-section-label';
+    pinnedLabel.textContent = 'Pinned';
+    list.appendChild(pinnedLabel);
     if (pinned.length > 0) {
-        const pinnedLabel = document.createElement('p');
-        pinnedLabel.className = 'nova-chat-section-label';
-        pinnedLabel.textContent = 'Pinned';
-        list.appendChild(pinnedLabel);
         pinned.forEach(c => list.appendChild(buildItem(c)));
-        if (unpinned.length > 0) {
-            const recentLabel = document.createElement('p');
-            recentLabel.className = 'nova-chat-section-label';
-            recentLabel.style.marginTop = '10px';
-            recentLabel.textContent = 'Recent';
-            list.appendChild(recentLabel);
-        }
+    } else {
+        const noPinned = document.createElement('div');
+        noPinned.className = 'nova-chat-empty-sub';
+        noPinned.textContent = 'No pinned chats';
+        list.appendChild(noPinned);
     }
-    unpinned.forEach(c => list.appendChild(buildItem(c)));
+
+    // ── Recent Section ────────────────────────────────────────────────────
+    const recentLabel = document.createElement('p');
+    recentLabel.className = 'nova-chat-section-label';
+    recentLabel.style.marginTop = '14px';
+    recentLabel.textContent = 'Recent';
+    list.appendChild(recentLabel);
+    if (unpinned.length > 0) {
+        unpinned.forEach(c => list.appendChild(buildItem(c)));
+    } else {
+        const noRecent = document.createElement('div');
+        noRecent.className = 'nova-chat-empty-sub';
+        noRecent.textContent = 'No recent chats';
+        list.appendChild(noRecent);
+    }
 }
 
 function novaShowGreeting() {
