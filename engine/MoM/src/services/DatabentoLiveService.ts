@@ -4,7 +4,7 @@ import { Tick }    from '../market/CandleAggregator';
 import { hydrate, HydrationPayload } from './DatabentoHistoricalService';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-const LSG_HOST   = 'glbx-mdp3.lsg.databento.com';
+
 const LSG_PORT   = 13000;
 const SCHEMA     = 'trades';
 const PRICE_SCALE = 1e-9;
@@ -21,11 +21,11 @@ export interface EnrichedTick extends Tick {
     symbol:  string;   // e.g. 'ES.c.0', 'VX.c.0'
 }
 
-/** Single feed subscription configuration */
 export interface FeedConfig {
     dataset:  string;    // Databento dataset ID
     symbols:  string[];  // Continuous-symbology symbols for this dataset
     label:    string;    // Human-readable label for logs
+    host:     string;
 }
 
 // ─── Hardcoded multicast configs ─────────────────────────────────────────────
@@ -33,12 +33,14 @@ export const CME_CONFIG: FeedConfig = {
     dataset: CME_DATASET,
     symbols: ['ES.c.0', 'MES.c.0'],
     label:   'CME (ES + MES)',
+    host:    'glbx-mdp3.lsg.databento.com',
 };
 
 export const CFE_CONFIG: FeedConfig = {
     dataset: CFE_DATASET,
     symbols: ['VX.c.0'],
     label:   'CFE (VX/VIX)',
+    host:    'xcbf-pitch.lsg.databento.com',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,10 +71,10 @@ class SingleFeedConnection {
     }
 
     public connect(): void {
-        const { dataset, symbols, label } = this.config;
-        console.log(`📡 [Databento/${label}] Connecting to ${LSG_HOST}:${LSG_PORT}…`);
+        const { dataset, symbols, label, host } = this.config;
+        console.log(`📡 [Databento/${label}] Connecting to ${host}:${LSG_PORT}…`);
 
-        this.socket = net.createConnection({ host: LSG_HOST, port: LSG_PORT });
+        this.socket = net.createConnection({ host: host, port: LSG_PORT });
 
         let state: 'GREETING' | 'CHALLENGE' | 'AUTH_RESPONSE' | 'STREAMING' = 'GREETING';
         let binaryBuffer  = Buffer.alloc(0);
