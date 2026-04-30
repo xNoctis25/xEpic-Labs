@@ -122,9 +122,12 @@ function novaShowContextMenu(chatId, anchorEl) {
     menu.style.top  = rect.bottom + 4 + 'px';
     menu.style.left = rect.left + 'px';
 
-    // Stop mousedown inside the menu from triggering the outside-click dismiss
-    menu.addEventListener('mousedown', (e) => e.stopPropagation());
-    setTimeout(() => document.addEventListener('mousedown', novaCloseAllMenus, { once: true, capture: true }), 0);
+    // Only close menu when clicking OUTSIDE of it
+    function outsideClickHandler(e) {
+        if (!e.target.closest('.nova-ctx-menu')) novaCloseAllMenus();
+        else document.addEventListener('mousedown', outsideClickHandler, { once: true });
+    }
+    setTimeout(() => document.addEventListener('mousedown', outsideClickHandler, { once: true }), 0);
 }
 
 function novaTogglePin(chatId) {
