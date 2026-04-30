@@ -651,16 +651,16 @@ document.addEventListener('DOMContentLoaded', function() {
         var scrollDebounce;
         msgs.addEventListener('scroll', function() {
             var atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60;
-            if (atBottom) {
-                scrollBtn.classList.remove('visible');
-            } else {
+            // Show down-arrow only when NOT at bottom
+            if (!atBottom) {
                 scrollBtn.classList.add('visible');
             }
-            // Scrollbar fade: add class while scrolling, remove after idle
+            // Scrollbar + down-arrow fade: add class while scrolling, remove after 1.2s idle
             msgs.classList.add('is-scrolling');
             clearTimeout(scrollDebounce);
             scrollDebounce = setTimeout(function() {
                 msgs.classList.remove('is-scrolling');
+                scrollBtn.classList.remove('visible'); // hide ↓ arrow when idle too
             }, 1200);
         });
     }

@@ -1219,3 +1219,25 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border-color: rgba(102, 252, 241, 0.3);
     color: #66fcf1;
 }
+
+/* =========================================
+   NOVA SCROLLBAR — DEFINITIVE FIX (v63)
+   Overrides old scrollbar-color rule and makes
+   the entire scrollbar invisible at rest.
+   ========================================= */
+
+/* Firefox: hidden at rest, visible while scrolling */
+#novaMessages,
+#novaMessages:hover {
+    scrollbar-color: transparent transparent !important;
+}
+#novaMessages.is-scrolling {
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent !important;
+}
+
+/* Webkit (Chrome / Edge / Safari): full custom scrollbar */
+#novaMessages::-webkit-scrollbar        { width: 4px; }
+#novaMessages::-webkit-scrollbar-track  { background: transparent !important; }
+#novaMessages::-webkit-scrollbar-button { display: none !important; height: 0 !important; width: 0 !important; }
+#novaMessages::-webkit-scrollbar-thumb  { background-color: transparent; border-radius: 4px; }
+#novaMessages.is-scrolling::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.18); }
