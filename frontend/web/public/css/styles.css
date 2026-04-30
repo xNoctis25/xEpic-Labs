@@ -1157,3 +1157,30 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
 
 
+
+/* =========================================
+   NOVA MAIN — CSS GRID LAYOUT (reliable)
+   messages fill all space, input anchored
+   ========================================= */
+.nova-main {
+    display: grid !important;
+    grid-template-rows: 1fr auto !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+}
+/* Title bar spans full width but is zero-height when empty */
+.nova-title-bar {
+    display: none !important;
+}
+#novaMessages {
+    overflow-y: auto !important;
+    min-height: 0 !important;
+    padding: 16px 28px 8px !important;
+    grid-row: 1 !important;
+}
+.nova-input-wrapper {
+    grid-row: 2 !important;
+    padding: 0 28px 16px !important;
+    margin-top: 0 !important;
+}
