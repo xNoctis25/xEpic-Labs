@@ -1,6 +1,7 @@
 import * as net    from 'net';
 import * as crypto from 'crypto';
 import { Tick }    from '../market/CandleAggregator';
+import { hydrate, HydrationPayload } from './DatabentoHistoricalService';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const LSG_HOST   = 'glbx-mdp3.lsg.databento.com';
@@ -233,28 +234,110 @@ export class DatabentoLiveService {
     private cmeConn: SingleFeedConnection | null = null;
     private cfeConn: SingleFeedConnection | null = null;
 
+    private isHydrating: boolean = true;
+    private hydrationStarted: boolean = false;
+    private liveBuffer: EnrichedTick[] = [];
+    private firstTickTimestamp: number | null = null;
+
+    private broadcastTick: ((tick: EnrichedTick) => void) | null = null;
+    private onHydrationCallback: ((payload: HydrationPayload) => void) | null = null;
+
     /**
      * Starts both CME and CFE feeds simultaneously.
      *
-     * @param onTick   Called for every trade tick from either dataset.
-     * @param onStatus Optional status callback (label, status string).
+     * @param onTick      Called for every trade tick from either dataset.
+     * @param onHydration Called once with historical zero-gap stitched data.
+     * @param onStatus    Optional status callback (label, status string).
      */
     public start(
-        onTick:    (tick: EnrichedTick) => void,
-        onStatus?: (label: string, status: string) => void,
+        onTick:      (tick: EnrichedTick) => void,
+        onHydration: (payload: HydrationPayload) => void,
+        onStatus?:   (label: string, status: string) => void,
     ): void {
         const apiKey = (process.env.DATABENTO_API_KEY || '').trim();
         if (!apiKey) throw new Error('DATABENTO_API_KEY not set in .env');
 
+        this.broadcastTick = onTick;
+        this.onHydrationCallback = onHydration;
+
         const statusCb = onStatus ?? ((label, s) => console.log(`[Databento/${label}] ${s}`));
 
-        this.cmeConn = new SingleFeedConnection(CME_CONFIG, apiKey, onTick, statusCb);
-        this.cfeConn = new SingleFeedConnection(CFE_CONFIG, apiKey, onTick, statusCb);
+        this.cmeConn = new SingleFeedConnection(CME_CONFIG, apiKey, this.handleTick.bind(this), statusCb);
+        this.cfeConn = new SingleFeedConnection(CFE_CONFIG, apiKey, this.handleTick.bind(this), statusCb);
 
         this.cmeConn.connect();
         this.cfeConn.connect();
 
         console.log('🌐 [DatabentoLiveService] CME + CFE feeds starting simultaneously…');
+    }
+
+    private handleTick(tick: EnrichedTick): void {
+        if (this.isHydrating) {
+            this.liveBuffer.push(tick);
+            
+            // Trigger the fetch exactly ONCE on the very first tick
+            if (!this.hydrationStarted) {
+                this.hydrationStarted = true;
+                this.firstTickTimestamp = tick.timestamp; // Use exact nanosecond/ms timestamp
+                this.fetchAndStitchGap(this.firstTickTimestamp);
+            }
+            return; // Do not broadcast live ticks yet
+        }
+        
+        // If not hydrating, broadcast normally
+        if (this.broadcastTick) {
+            this.broadcastTick(tick);
+        }
+    }
+
+    private async fetchAndStitchGap(endTime: number) {
+        try {
+            const startTime = endTime - (60 * 60 * 1000); // 60 mins before endTime
+            console.log(`[DatabentoLiveService] 💧 Starting Zero-Gap Stitching Hydration...`);
+            console.log(`[DatabentoLiveService] Fetching historical data from ${new Date(startTime).toISOString()} to ${new Date(endTime).toISOString()}`);
+            
+            const [cmeCandles, cfeCandles] = await Promise.all([
+                hydrate(CME_DATASET, CME_CONFIG.symbols, 60, endTime),
+                hydrate(CFE_DATASET, CFE_CONFIG.symbols, 60, endTime),
+            ]);
+
+            // Parse and sort the historical data by timestamp.
+            cmeCandles.sort((a, b) => a.timestamp - b.timestamp);
+            cfeCandles.sort((a, b) => a.timestamp - b.timestamp);
+
+            const payload: HydrationPayload = { cmeCandles, cfeCandles };
+
+            // Broadcast the historical array
+            if (this.onHydrationCallback) {
+                this.onHydrationCallback(payload);
+            }
+
+            // Wait for a brief tick to ensure workers process the history.
+            await new Promise(r => setTimeout(r, 100));
+
+            // The Flush: Loop through this.liveBuffer and broadcast every trapped live tick natively.
+            console.log(`[DatabentoLiveService] 💧 Flushing ${this.liveBuffer.length} trapped live ticks from buffer.`);
+            for (const trapped of this.liveBuffer) {
+                if (this.broadcastTick) {
+                    this.broadcastTick(trapped);
+                }
+            }
+
+            this.isHydrating = false;
+            this.liveBuffer = [];
+            console.log(`[DatabentoLiveService] ✅ Zero-Gap Stitching Complete. Now streaming live.`);
+
+        } catch (error) {
+            console.error('[DatabentoLiveService] ❌ Hydration failed:', error);
+            // Fallback: just flush what we have and proceed
+            this.isHydrating = false;
+            for (const trapped of this.liveBuffer) {
+                if (this.broadcastTick) {
+                    this.broadcastTick(trapped);
+                }
+            }
+            this.liveBuffer = [];
+        }
     }
 
     /** Gracefully tears down both TCP connections. */

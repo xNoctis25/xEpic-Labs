@@ -27,8 +27,6 @@ import { NeonDatabase }                     from './services/NeonDatabase';
 import { ExecutionEngine }                  from './core/ExecutionEngine';
 import { SessionLedger }                    from './services/SessionLedger';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './core/PositionSizer';
-import { hydrate, HydrationPayload }        from './services/DatabentoHistoricalService';
-import { CME_DATASET, CFE_DATASET, CME_CONFIG, CFE_CONFIG } from './services/DatabentoLiveService';
 import { config }                           from './config/env';
 
 dotenv.config();
@@ -189,19 +187,6 @@ async function boot(): Promise<void> {
     assistantWorker.on('error', onWorkerError('AssistantWorker')).on('exit', onWorkerExit('AssistantWorker'));
     oracleWorker   .on('error', onWorkerError('OracleWorker'))   .on('exit', onWorkerExit('OracleWorker'));
 
-    // ── PRE-FLIGHT HYDRATION ──────────────────────────────────────────────────
-    // Fetch last 30 min of 1m OHLCV for CME (ES/MES) + CFE (VX) concurrently
-    // before the live TCP feeds start so workers boot with primed state.
-    console.log('[Core 4] 💧 Pre-flight hydration — fetching 30m historical data…');
-    const [cmeCandles, cfeCandles] = await Promise.all([
-        hydrate(CME_DATASET, CME_CONFIG.symbols, 30),
-        hydrate(CFE_DATASET, CFE_CONFIG.symbols, 30),
-    ]);
-    const hydrationPayload: HydrationPayload = { cmeCandles, cfeCandles };
-    console.log(
-        `[Core 4] 💧 Hydration complete — ` +
-        `CME: ${cmeCandles.length} candles | CFE: ${cfeCandles.length} candles`
-    );
 
     // ── Build Zero-Latency IPC Mesh via MessageChannel ────────────────────────
     //   Channel A: OracleWorker ←→ MomWorker       (ticks / emergency)
@@ -229,13 +214,6 @@ async function boot(): Promise<void> {
         [channelOracleMom.port2, channelOracleAssist.port2],
     );
 
-    // ── Dispatch Hydration Payload to all workers ─────────────────────────────
-    // Workers will process this before the first live tick arrives.
-    const hydrationMsg = { type: 'hydration_payload', payload: hydrationPayload };
-    momWorker      .postMessage(hydrationMsg);
-    assistantWorker.postMessage(hydrationMsg);
-    oracleWorker   .postMessage(hydrationMsg);
-    console.log('[Core 4] 💧 Hydration payload dispatched to all 3 workers.');
 
     // ── Wire Message Handlers ─────────────────────────────────────────────────
     wireMomHandler();

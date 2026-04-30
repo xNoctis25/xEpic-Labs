@@ -41,6 +41,7 @@ export async function hydrate(
     dataset: string,
     symbols: string[],
     minutes: number,
+    endTimeMs?: number,
 ): Promise<HydrationCandle[]> {
     const apiKey = (process.env.DATABENTO_API_KEY || '').trim();
     if (!apiKey) {
@@ -48,7 +49,7 @@ export async function hydrate(
         return [];
     }
 
-    const endTime   = new Date();
+    const endTime   = endTimeMs ? new Date(endTimeMs) : new Date();
     const startTime = new Date(endTime.getTime() - minutes * 60_000);
 
     try {

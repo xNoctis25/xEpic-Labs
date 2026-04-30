@@ -230,40 +230,38 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             console.log('[OracleWorker] Core 3 online — Handshake + Triple-Sweep wired.');
 
             startWssReceptionist();
-            feed.start(onTick, (label, status) => {
-                parentPort!.postMessage({ type: 'feed_status', label, status });
-            });
-            break;
-        }
+            feed.start(
+                onTick,
+                (payload) => {
+                    const msg = { type: 'HYDRATION', payload };
+                    momPort?.postMessage(msg);
+                    assistPort?.postMessage(msg);
+                    parentPort!.postMessage(msg);
 
-        /**
-         * hydration_payload — sent by Core 4 before live feeds start.
-         * Pre-fills the 15-min VWAP window + VIX state from historical REST data.
-         */
-        case 'hydration_payload': {
-            const payload = msg.payload as {
-                cmeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number; dataset: string; symbol: string }>;
-                cfeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number; dataset: string; symbol: string }>;
-            };
-
-            let cmeFed = 0, cfeFed = 0;
-
-            for (const c of payload.cmeCandles) {
-                updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol });
-                cmeFed++;
-            }
-            for (const c of payload.cfeCandles) {
-                updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol });
-                cfeFed++;
-            }
-
-            console.log(
-                `[OracleWorker] 💧 Hydrated: ${cmeFed} CME candles (VWAP primed) | ` +
-                `${cfeFed} CFE candles (VIX: ${lastVixPrice.toFixed(2)}) | ` +
-                `15m VWAP slope: ${vwapSlope.toFixed(4)}`
+                    // Self-process for Macro Radar
+                    let cmeFed = 0, cfeFed = 0;
+                    for (const c of payload.cmeCandles) {
+                        updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
+                        cmeFed++;
+                    }
+                    for (const c of payload.cfeCandles) {
+                        updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
+                        cfeFed++;
+                    }
+                    console.log(
+                        `[OracleWorker] 💧 Hydrated: ${cmeFed} CME candles (VWAP primed) | ` +
+                        `${cfeFed} CFE candles (VIX: ${lastVixPrice.toFixed(2)}) | ` +
+                        `15m VWAP slope: ${vwapSlope.toFixed(4)}`
+                    );
+                },
+                (label, status) => {
+                    parentPort!.postMessage({ type: 'feed_status', label, status });
+                }
             );
             break;
         }
+
+
 
         case 'subscribe': {
             // Future: dynamic runtime subscriptions
