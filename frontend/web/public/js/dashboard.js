@@ -558,6 +558,17 @@ updateMarketClock();
 setInterval(updateMarketClock, 10000);
 
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
+
+// Measure the real native scrollbar width once (0 on macOS overlay, ~17px on Windows)
+var _nativeScrollbarW = (function() {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:absolute;overflow:scroll;width:60px;height:60px;visibility:hidden;top:-999px';
+    document.body.appendChild(d);
+    var w = d.offsetWidth - d.clientWidth;
+    document.body.removeChild(d);
+    return w || 0;
+}());
+
 function novaApplyLayout() {
     var main = document.querySelector('.nova-main');
     var msgs = document.getElementById('novaMessages');
@@ -590,13 +601,14 @@ function novaApplyLayout() {
     main.style.setProperty('position', 'relative', 'important');
     main.style.setProperty('overflow', 'hidden', 'important');
 
-    msgs.style.setProperty('position',   'absolute',       'important');
-    msgs.style.setProperty('top',        titleH + 'px',    'important');  // start below title bar
-    msgs.style.setProperty('left',       '0',              'important');
-    msgs.style.setProperty('right',      '0',              'important');
-    msgs.style.setProperty('height',     msgsH + 'px',     'important');
-    msgs.style.setProperty('max-height', 'none',           'important');
-    msgs.style.setProperty('overflow-y', 'scroll',         'important'); // scroll not auto: stable gutter = no twitch
+    msgs.style.setProperty('position',   'absolute',                           'important');
+    msgs.style.setProperty('top',        titleH + 'px',                        'important');
+    msgs.style.setProperty('left',       '0',                                  'important');
+    // Push msgs right edge past parent so native scrollbar is clipped by overflow:hidden
+    msgs.style.setProperty('right',      '-' + _nativeScrollbarW + 'px',      'important');
+    msgs.style.setProperty('height',     msgsH + 'px',                        'important');
+    msgs.style.setProperty('max-height', 'none',                               'important');
+    msgs.style.setProperty('overflow-y', 'scroll',                             'important');
 
     inp.style.setProperty('position', 'absolute', 'important');
     inp.style.setProperty('bottom',   '0',        'important');
