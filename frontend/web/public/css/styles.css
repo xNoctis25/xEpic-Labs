@@ -1258,3 +1258,38 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 #novaMessages.is-scrolling::-webkit-scrollbar-track  { background: transparent !important; }
 #novaMessages.is-scrolling::-webkit-scrollbar-button { display: none !important; height: 0 !important; width: 0 !important; }
 #novaMessages.is-scrolling::-webkit-scrollbar-thumb  { background-color: rgba(255,255,255,0.18) !important; border-radius: 4px !important; }
+
+/* =========================================
+   NOVA SCROLLBAR — FINAL DEFINITIVE (v65)
+   display:none on ::-webkit-scrollbar itself
+   at rest = zero scrollbar, zero arrows.
+   No scrollbar-button rule = Chrome skips arrows entirely.
+   ========================================= */
+#novaMessages,
+#novaMessages:hover {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+#novaMessages::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+}
+
+/* While scrolling: thin bar, no button defined so no arrows */
+#novaMessages.is-scrolling {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255,255,255,0.18) transparent !important;
+}
+#novaMessages.is-scrolling::-webkit-scrollbar {
+    display: block !important;
+    width: 4px !important;
+}
+#novaMessages.is-scrolling::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+#novaMessages.is-scrolling::-webkit-scrollbar-thumb {
+    background-color: rgba(255,255,255,0.18) !important;
+    border-radius: 4px !important;
+}
+/* Intentionally NO scrollbar-button rule here:
+   Chrome renders zero arrow buttons when the rule is absent */
