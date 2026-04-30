@@ -11,7 +11,7 @@ const PRICE_SCALE = 1e-9;
 
 // ─── Datasets ────────────────────────────────────────────────────────────────
 export const CME_DATASET = 'GLBX.MDP3';   // ES / MES (CME)
-export const CFE_DATASET = 'XCBT.MDP3';   // VX  (CBOE Futures Exchange / CFE)
+export const CFE_DATASET = 'XCBF.PITCH';   // VX  (CBOE Futures Exchange / CFE)
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

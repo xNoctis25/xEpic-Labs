@@ -58,13 +58,12 @@ export async function hydrate(
             `[${symbols.join(', ')}] from ${startTime.toISOString()}…`
         );
 
-        const response = await axios.get(`${HIST_BASE_URL}/timeseries/get_range`, {
+        const response = await axios.get(`${HIST_BASE_URL}/timeseries/get_range?stype_in=continuous`, {
             auth:         { username: apiKey, password: '' },
             params: {
                 dataset,
                 symbols:  symbols.join(','),
                 schema:   'ohlcv-1m',
-                stype_in: 'continuous',
                 start:    startTime.toISOString(),
                 end:      endTime.toISOString(),
                 encoding: 'json',

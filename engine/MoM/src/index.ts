@@ -375,6 +375,12 @@ function wireOracleHandler(): void {
                 console.log(`[Core 4] 🔭 SYSTEM_RESET confirmed — ${msg.symbol} cycle complete.`);
                 break;
 
+            case 'tick':
+                break; // Silent pass-through (forwarded to dashboard later)
+
+            case 'HYDRATION':
+                break; // Handled locally by workers, ignored by Main
+
             default:
                 console.warn('[Core 4] OracleWorker unknown msg:', msg.type);
         }
