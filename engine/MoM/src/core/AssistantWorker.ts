@@ -286,7 +286,7 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
         }
 
         case 'oracle_state': {
-            // Store oracle state for LLM context (Phase 4)
+            // Store oracle state for LLM context (Phase 5)
             break;
         }
 
@@ -294,9 +294,21 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
             const level = msg.level as string;
             console.log(`[AssistantWorker] DefconLevel → ${level} | Reason: ${msg.reason}`);
             if (level === 'RED' && overwatchMode === 'WATCHING') {
-                // Escalate immediately to MomWorker
                 momPort?.postMessage({ type: 'DEFCON_RED', reason: msg.reason });
             }
+            break;
+        }
+
+        /**
+         * SYSTEM_RESET — OracleWorker confirmed Triple-Sweep complete.
+         * Re-arm all scanners for the next hunt cycle.
+         */
+        case 'SYSTEM_RESET': {
+            console.log('[AssistantWorker] 🔭 SYSTEM_RESET — ORB Hunter re-armed for next cycle.');
+            activePosition  = null;
+            overwatchMode   = 'IDLE';
+            overwatchBuffer.length = 0;
+            orbState.clear();   // clear bucketed history for clean re-start
             break;
         }
 
@@ -326,8 +338,7 @@ function onMomMessage(msg: { type: string; [key: string]: unknown }): void {
         }
 
         /**
-         * TRADE_CLOSED — MomWorker exited a position.
-         * Return to IDLE / ORB hunting mode.
+         * TRADE_CLOSED — MomWorker exited a position (used for overwatch teardown).
          */
         case 'TRADE_CLOSED': {
             console.log(
@@ -338,6 +349,27 @@ function onMomMessage(msg: { type: string; [key: string]: unknown }): void {
             overwatchMode   = 'IDLE';
             overwatchBuffer.length = 0;
             parentPort!.postMessage({ type: 'overwatch_status', mode: 'IDLE' });
+            break;
+        }
+
+        /**
+         * SWEEP_PHASE_1_COMPLETE — MomWorker cancelled local orders.
+         * Phase 2: Query Tradovate via Main to confirm 0 positions, then fire Phase 2
+         * complete to OracleWorker to begin the final sweep.
+         */
+        case 'SWEEP_PHASE_1_COMPLETE': {
+            const sweep = msg.payload as { symbol: string; reason: string; ts: number };
+            console.log(`[AssistantWorker] 🧹 Triple-Sweep PHASE 2 — Verifying flat state for ${sweep.symbol}…`);
+
+            // Request a position check from Main (Core 4) which holds the broker
+            parentPort!.postMessage({
+                type:   'VERIFY_FLAT',
+                phase:  2,
+                symbol: sweep.symbol,
+                from:   'AssistantWorker',
+            });
+
+            // VERIFY_FLAT_RESULT is handled in the parentPort listener below
             break;
         }
 
@@ -379,12 +411,40 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             oraclePort.on('message', onOracleMessage);
 
             parentPort!.postMessage({ type: 'ready', worker: 'AssistantWorker' });
-            console.log('[AssistantWorker] Core 2 online — ORB Hunter + Tactical Overwatch active.');
+            console.log('[AssistantWorker] Core 2 online — ORB Hunter + Tactical Overwatch + Triple-Sweep wired.');
             break;
         }
 
         case 'query': {
             handleAssistantQuery(msg.payload as string);
+            break;
+        }
+
+        /**
+         * VERIFY_FLAT_RESULT — Main (Core 4) responds with Tradovate position check.
+         * If flat confirmed, fire SWEEP_PHASE_2_COMPLETE to OracleWorker.
+         */
+        case 'VERIFY_FLAT_RESULT': {
+            if ((msg.from as string) !== 'AssistantWorker') break;
+            const isFlat = msg.isFlat as boolean;
+            const symbol = msg.symbol as string;
+
+            if (isFlat) {
+                console.log(`[AssistantWorker] ✅ Phase 2 verified — ${symbol} is FLAT. Firing SWEEP_PHASE_2_COMPLETE → OracleWorker.`);
+                oraclePort?.postMessage({
+                    type:    'SWEEP_PHASE_2_COMPLETE',
+                    payload: { symbol, confirmed: true, ts: Date.now() },
+                });
+            } else {
+                console.error(
+                    `[AssistantWorker] ❌ Phase 2 FAILED — ${symbol} still shows open positions! ` +
+                    `Requesting EMERGENCY_EXIT via Main.`
+                );
+                parentPort!.postMessage({
+                    type:    'trade_command',
+                    payload: { action: 'FLATTEN_ALL', symbol, reason: 'TRIPLE_SWEEP_PHASE2_DISCREPANCY' },
+                });
+            }
             break;
         }
 

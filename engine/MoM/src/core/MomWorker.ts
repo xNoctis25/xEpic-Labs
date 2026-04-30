@@ -2,20 +2,24 @@
  * MomWorker.ts — Core 1
  * ─────────────────────────────────────────────────────────────────────────────
  * Responsibilities:
- *   • Receives candle / tick data from OracleWorker via direct IPC port.
- *   • Receives ORB_SETUP signals from AssistantWorker for execution approval.
- *   • Receives IMMINENT_REVERSION warnings from AssistantWorker.
- *   • Runs EvaluationEngine + ExecutionEngine logic.
- *   • Broadcasts IN_TRADE / TRADE_CLOSED lifecycle events to AssistantWorker.
- *   • Sends trade commands upstream to Main (Core 4) for broker dispatch.
+ *   • Receives ORB_SETUP signals from AssistantWorker.
+ *   • HANDSHAKE: Sends REQUEST_TAKEOFF to OracleWorker before every entry.
+ *     Only executes on GREEN_LIGHT — blocks on RED_LIGHT.
+ *   • WILDERNESS RULES: If the ORB fires outside a Killzone, enforces the
+ *     "Short Leash" — 50% SL, trail-to-BE on first profit, auto-scratch timer.
+ *   • TRIPLE-SWEEP PHASE 1: On exit, cancels local orders and fires
+ *     SWEEP_PHASE_1_COMPLETE to AssistantWorker to begin the exit consensus.
+ *   • Broadcasts IN_TRADE / TRADE_CLOSED lifecycle to AssistantWorker.
+ *   • Forwards EMERGENCY_EXIT and IMMINENT_REVERSION to broker via Main.
  *
- * IPC Ports received on startup (via parentPort 'init' message):
- *   • oraclePort  – MessagePort ↔ OracleWorker   (read ticks + EMERGENCY_EXIT)
- *   • assistPort  – MessagePort ↔ AssistantWorker (read ORB_SETUP + alerts)
+ * IPC Ports:
+ *   • oraclePort – MessagePort ↔ OracleWorker  (REQUEST_TAKEOFF / GREEN_LIGHT)
+ *   • assistPort – MessagePort ↔ AssistantWorker (ORB_SETUP / IMMINENT_REVERSION)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { parentPort, MessagePort } from 'worker_threads';
+import { MarketClock }             from './MarketClock';
 
 if (!parentPort) throw new Error('[MomWorker] Must be run as a worker thread.');
 
@@ -24,63 +28,165 @@ let oraclePort: MessagePort | null = null;
 let assistPort: MessagePort | null = null;
 
 // ─── Engine state ────────────────────────────────────────────────────────────
-type EngineState = 'IDLE' | 'EVALUATING' | 'IN_TRADE';
+type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
 
-// ─── Main IPC handler (from Core 4) ─────────────────────────────────────────
-parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
-    switch (msg.type) {
+// ─────────────────────────────────────────────────────────────────────────────
+// WILDERNESS SHORT LEASH CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────────
+const SL_NORMAL_POINTS      = 20;         // standard stop-loss distance (pts)
+const SL_WILDERNESS_PCT     = 0.50;       // cut SL by 50% in Wilderness
+const BE_TRIGGER_POINTS     = 5;          // trail to BE once profit hits this many pts
+const WILDERNESS_SCRATCH_MS = 3 * 60_000; // auto-scratch after 3 min if no displacement
 
-        case 'init': {
-            oraclePort = msg.oraclePort as MessagePort;
-            assistPort = msg.assistPort as MessagePort;
+// ─────────────────────────────────────────────────────────────────────────────
+// ORACLE HANDSHAKE — REQUEST_TAKEOFF / GREEN_LIGHT
+// ─────────────────────────────────────────────────────────────────────────────
+const HANDSHAKE_TIMEOUT_MS = 3000;   // abort if Oracle doesn't respond in 3s
 
-            oraclePort.on('message', onOracleMessage);
-            assistPort.on('message', onAssistantMessage);
+/** Pending handshake promise resolvers, keyed by correlation ID. */
+const pendingHandshakes = new Map<string, (light: 'GREEN_LIGHT' | 'RED_LIGHT') => void>();
 
-            parentPort!.postMessage({ type: 'ready', worker: 'MomWorker' });
-            console.log('[MomWorker] Core 1 online — IPC mesh wired.');
-            break;
-        }
+/**
+ * Sends REQUEST_TAKEOFF to OracleWorker via the direct peer port.
+ * Returns a Promise that resolves to 'GREEN_LIGHT' or 'RED_LIGHT'.
+ * Times out to 'RED_LIGHT' after HANDSHAKE_TIMEOUT_MS.
+ */
+function requestTakeoff(symbol: string, direction: string): Promise<'GREEN_LIGHT' | 'RED_LIGHT'> {
+    return new Promise((resolve) => {
+        const correlationId = `${symbol}-${Date.now()}`;
 
-        case 'shutdown': {
-            console.log('[MomWorker] Shutting down…');
-            oraclePort?.close();
-            assistPort?.close();
-            process.exit(0);
-        }
+        // Register the resolver — will be called when Oracle responds
+        pendingHandshakes.set(correlationId, resolve);
 
-        default:
-            console.warn(`[MomWorker] Unknown message type: ${msg.type}`);
-    }
-});
+        // Safety timeout: treat no-response as RED_LIGHT
+        const timer = setTimeout(() => {
+            if (pendingHandshakes.has(correlationId)) {
+                pendingHandshakes.delete(correlationId);
+                console.warn(`[MomWorker] ⏱ Handshake timeout for ${symbol} ${direction} — treating as RED_LIGHT.`);
+                resolve('RED_LIGHT');
+            }
+        }, HANDSHAKE_TIMEOUT_MS);
 
-// ─── OracleWorker → MomWorker ────────────────────────────────────────────────
+        oraclePort?.postMessage({
+            type:          'REQUEST_TAKEOFF',
+            correlationId,
+            symbol,
+            direction,
+            ts:            Date.now(),
+        });
+
+        // Keep timer ref alive (Node GC safety)
+        void timer;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTIVE TRADE STATE (for Wilderness Short Leash management)
+// ─────────────────────────────────────────────────────────────────────────────
+interface ActiveTradeContext {
+    symbol:        string;
+    direction:     'LONG' | 'SHORT';
+    entryPrice:    number;
+    stopPrice:     number;
+    entryTs:       number;
+    isWilderness:  boolean;
+    scratchTimer?: ReturnType<typeof setTimeout>;
+    beTriggered:   boolean;
+}
+
+let activeTrade: ActiveTradeContext | null = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRIPLE-SWEEP — Phase 1
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Called when MoM closes a trade (stop hit, target hit, IMMINENT_REVERSION, etc.).
+ * Phase 1: Cancel local orders → notify AssistantWorker to begin the exit consensus.
+ */
+function initiateTripleSweepPhase1(reason: string): void {
+    if (!activeTrade) return;
+
+    const trade = activeTrade;
+    console.log(`[MomWorker] 🧹 Triple-Sweep PHASE 1 initiated | Reason: ${reason}`);
+
+    // Cancel Wilderness scratch timer if running
+    if (trade.scratchTimer) clearTimeout(trade.scratchTimer);
+
+    // Tell Main to cancel all working orders for this symbol
+    parentPort!.postMessage({
+        type:    'trade_command',
+        payload: { action: 'CANCEL_ALL_ORDERS', symbol: trade.symbol, reason },
+    });
+
+    // Notify AssistantWorker → begins Phase 2 verification
+    assistPort?.postMessage({
+        type:    'SWEEP_PHASE_1_COMPLETE',
+        payload: {
+            symbol:    trade.symbol,
+            direction: trade.direction,
+            reason,
+            ts:        Date.now(),
+        },
+    });
+
+    // Broadcast trade closed lifecycle event
+    assistPort?.postMessage({
+        type:    'TRADE_CLOSED',
+        payload: { symbol: trade.symbol, reason, ts: Date.now() },
+    });
+
+    engineState = 'IDLE';
+    activeTrade = null;
+
+    parentPort!.postMessage({ type: 'trade_closed', payload: { symbol: trade.symbol, reason } });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC: OracleWorker → MomWorker
+// ─────────────────────────────────────────────────────────────────────────────
 function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
     switch (data.type) {
 
+        // ── Handshake response ────────────────────────────────────────────────
+        case 'GREEN_LIGHT':
+        case 'RED_LIGHT': {
+            const cid = data.correlationId as string;
+            const resolver = pendingHandshakes.get(cid);
+            if (resolver) {
+                pendingHandshakes.delete(cid);
+                resolver(data.type as 'GREEN_LIGHT' | 'RED_LIGHT');
+            }
+            break;
+        }
+
+        // ── Live tick → Short Leash monitoring ───────────────────────────────
         case 'tick': {
-            if (engineState !== 'IDLE') return;
-            // TODO Phase 4: feed tick into EvaluationEngine
+            if (!activeTrade || !activeTrade.isWilderness || activeTrade.beTriggered) break;
+
+            const tick       = data.payload as { price: number };
+            const profit     = activeTrade.direction === 'LONG'
+                ? tick.price - activeTrade.entryPrice
+                : activeTrade.entryPrice - tick.price;
+
+            // Trail to breakeven on first meaningful profit
+            if (profit >= BE_TRIGGER_POINTS) {
+                activeTrade.beTriggered = true;
+                activeTrade.stopPrice   = activeTrade.entryPrice;
+                console.log(`[MomWorker] 🏔️  Short Leash: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
+                parentPort!.postMessage({
+                    type:    'trade_command',
+                    payload: { action: 'MOVE_STOP_TO_BE', symbol: activeTrade.symbol, stopPrice: activeTrade.entryPrice },
+                });
+            }
             break;
         }
 
-        case 'candle': {
-            // TODO Phase 4: pass into EvaluationEngine
-            console.log('[MomWorker] Candle:', data.payload);
-            assistPort?.postMessage({ type: 'engine_state', state: engineState, payload: data.payload });
-            break;
-        }
-
-        /**
-         * EMERGENCY_EXIT — fired by OracleWorker on PULL_PLUG command from NOVA.
-         * Must immediately flatten all positions.
-         */
+        // ── Emergency exit ────────────────────────────────────────────────────
         case 'EMERGENCY_EXIT': {
-            console.error('[MomWorker] 🚨 EMERGENCY_EXIT received — flattening all positions!');
-            engineState = 'IDLE';
+            console.error('[MomWorker] 🚨 EMERGENCY_EXIT — flattening all positions!');
             parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', reason: data.reason } });
-            assistPort?.postMessage({ type: 'TRADE_CLOSED', payload: { reason: data.reason } });
+            initiateTripleSweepPhase1('EMERGENCY_EXIT');
             break;
         }
 
@@ -95,34 +201,90 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
     }
 }
 
-// ─── AssistantWorker → MomWorker ─────────────────────────────────────────────
-function onAssistantMessage(data: { type: string; [key: string]: unknown }): void {
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC: AssistantWorker → MomWorker
+// ─────────────────────────────────────────────────────────────────────────────
+async function onAssistantMessage(data: { type: string; [key: string]: unknown }): Promise<void> {
     switch (data.type) {
 
         /**
-         * ORB_SETUP — AssistantWorker detected a volume-anomaly breakout.
-         * Apply execution filters here before forwarding to broker.
+         * ORB_SETUP — Volume-anomaly breakout confirmed by AssistantWorker.
+         * Gate sequence: IDLE check → Wilderness check → HANDSHAKE → execute.
          */
         case 'ORB_SETUP': {
             const setup = data.payload as {
-                symbol: string; direction: string; breakoutPrice: number;
-                volumeRatio: number; boxHigh: number; boxLow: number; ts: number;
+                symbol: string; direction: 'LONG' | 'SHORT';
+                breakoutPrice: number; volumeRatio: number;
+                boxHigh: number; boxLow: number; ts: number;
             };
 
-            console.log(
-                `[MomWorker] 📡 ORB_SETUP | ${setup.symbol} ${setup.direction} | ` +
-                `Vol: ${setup.volumeRatio.toFixed(2)}× | Entry: ${setup.breakoutPrice}`
-            );
-
             if (engineState !== 'IDLE') {
-                console.log('[MomWorker] ORB_SETUP ignored — engine not IDLE.');
+                console.log(`[MomWorker] ORB_SETUP ignored — engine is ${engineState}.`);
                 return;
             }
 
-            // TODO Phase 4: run killzone + risk engine filters
+            const inWilderness = MarketClock.isWilderness(setup.ts);
+            const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
+            console.log(
+                `[MomWorker] 📡 ORB_SETUP | ${setup.symbol} ${setup.direction} | ` +
+                `Vol: ${setup.volumeRatio.toFixed(2)}× | Zone: ${zoneLabel}`
+            );
+
+            // ── ORACLE HANDSHAKE ──────────────────────────────────────────────
+            engineState = 'AWAITING_HANDSHAKE';
+            const light = await requestTakeoff(setup.symbol, setup.direction);
+
+            if (light === 'RED_LIGHT') {
+                console.warn(`[MomWorker] 🔴 RED_LIGHT from Oracle — ${setup.symbol} entry BLOCKED.`);
+                engineState = 'IDLE';
+                return;
+            }
+
+            console.log(`[MomWorker] 🟢 GREEN_LIGHT from Oracle — proceeding with ${setup.symbol} ${setup.direction}.`);
+
+            // ── WILDERNESS SHORT LEASH ────────────────────────────────────────
+            let slDistance = SL_NORMAL_POINTS;
+            if (inWilderness) {
+                slDistance = Math.ceil(SL_NORMAL_POINTS * SL_WILDERNESS_PCT);
+                console.log(
+                    `[MomWorker] 🌲 Wilderness Short Leash: SL reduced to ${slDistance} pts. ` +
+                    `Auto-scratch in ${WILDERNESS_SCRATCH_MS / 60000} min if no displacement.`
+                );
+            }
+
+            const stopPrice = setup.direction === 'LONG'
+                ? setup.breakoutPrice - slDistance
+                : setup.breakoutPrice + slDistance;
+
+            // ── ENTER TRADE ───────────────────────────────────────────────────
             engineState = 'IN_TRADE';
 
-            // Notify AssistantWorker to activate Tactical Overwatch
+            // Build and store trade context
+            activeTrade = {
+                symbol:       setup.symbol,
+                direction:    setup.direction,
+                entryPrice:   setup.breakoutPrice,
+                stopPrice,
+                entryTs:      setup.ts,
+                isWilderness: inWilderness,
+                beTriggered:  false,
+            };
+
+            // Wilderness: set auto-scratch timer
+            if (inWilderness) {
+                activeTrade.scratchTimer = setTimeout(() => {
+                    if (activeTrade && !activeTrade.beTriggered) {
+                        console.warn(`[MomWorker] 🌲 Wilderness scratch — no displacement after ${WILDERNESS_SCRATCH_MS / 60000} min. Exiting.`);
+                        parentPort!.postMessage({
+                            type:    'trade_command',
+                            payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
+                        });
+                        initiateTripleSweepPhase1('WILDERNESS_NO_DISPLACEMENT');
+                    }
+                }, WILDERNESS_SCRATCH_MS);
+            }
+
+            // Notify AssistantWorker → activates Tactical Overwatch
             assistPort?.postMessage({
                 type:    'IN_TRADE',
                 payload: {
@@ -130,21 +292,27 @@ function onAssistantMessage(data: { type: string; [key: string]: unknown }): voi
                     direction:  setup.direction,
                     entryPrice: setup.breakoutPrice,
                     entryTs:    setup.ts,
-                    stopPrice:  setup.direction === 'LONG' ? setup.boxLow : setup.boxHigh,
+                    stopPrice,
                 },
             });
 
             // Forward to Main → Broker
             parentPort!.postMessage({
                 type:    'trade_command',
-                payload: { action: 'ENTER', ...setup },
+                payload: {
+                    action:      'ENTER',
+                    symbol:      setup.symbol,
+                    direction:   setup.direction,
+                    price:       setup.breakoutPrice,
+                    stopPrice,
+                    isWilderness: inWilderness,
+                },
             });
             break;
         }
 
         /**
-         * IMMINENT_REVERSION — toxic opposing order flow detected.
-         * Trigger tightened stop or accelerated exit.
+         * IMMINENT_REVERSION — Toxic opposing flow detected by Tactical Overwatch.
          */
         case 'IMMINENT_REVERSION': {
             const warn = data.payload as { symbol: string; volumeRatio: number; priceDeltaPct: number };
@@ -152,7 +320,6 @@ function onAssistantMessage(data: { type: string; [key: string]: unknown }): voi
                 `[MomWorker] ⚠️  IMMINENT_REVERSION | ${warn.symbol} | ` +
                 `Vol: ${warn.volumeRatio.toFixed(2)}× | Δ: ${warn.priceDeltaPct.toFixed(3)}%`
             );
-            // TODO Phase 4: broker tighten stop or exit
             parentPort!.postMessage({
                 type:    'trade_command',
                 payload: { action: 'TIGHTEN_STOP', reason: 'IMMINENT_REVERSION', ...warn },
@@ -161,7 +328,7 @@ function onAssistantMessage(data: { type: string; [key: string]: unknown }): voi
         }
 
         case 'DEFCON_RED': {
-            console.warn('[MomWorker] DEFCON_RED relayed by AssistantWorker — halting entries.');
+            console.warn('[MomWorker] DEFCON_RED from AssistantWorker — blocking new entries.');
             break;
         }
 
@@ -169,9 +336,49 @@ function onAssistantMessage(data: { type: string; [key: string]: unknown }): voi
     }
 }
 
-// ─── Lifecycle helper ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Main IPC handler (from Core 4)
+// ─────────────────────────────────────────────────────────────────────────────
+parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
+    switch (msg.type) {
+
+        case 'init': {
+            oraclePort = msg.oraclePort as MessagePort;
+            assistPort = msg.assistPort as MessagePort;
+
+            oraclePort.on('message', onOracleMessage);
+            assistPort.on('message', (m) => void onAssistantMessage(m));
+
+            parentPort!.postMessage({ type: 'ready', worker: 'MomWorker' });
+            console.log('[MomWorker] Core 1 online — Handshake + Wilderness + Triple-Sweep wired.');
+            break;
+        }
+
+        /**
+         * position_closed — sent by Main after broker confirms exit.
+         * Triggers Phase 1 of the Triple-Sweep.
+         */
+        case 'position_closed': {
+            initiateTripleSweepPhase1(msg.reason as string ?? 'BROKER_CONFIRMED_EXIT');
+            break;
+        }
+
+        case 'shutdown': {
+            console.log('[MomWorker] Shutting down…');
+            if (activeTrade?.scratchTimer) clearTimeout(activeTrade.scratchTimer);
+            oraclePort?.close();
+            assistPort?.close();
+            process.exit(0);
+        }
+
+        default:
+            console.warn(`[MomWorker] Unknown message type: ${msg.type}`);
+    }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public helper — called by Phase 4 execution engine
+// ─────────────────────────────────────────────────────────────────────────────
 export function notifyTradeClosed(symbol: string, pnl: number): void {
-    engineState = 'IDLE';
-    assistPort?.postMessage({ type: 'TRADE_CLOSED', payload: { symbol, pnl, ts: Date.now() } });
-    parentPort!.postMessage({ type: 'trade_closed', payload: { symbol, pnl } });
+    initiateTripleSweepPhase1(`CLOSED_PNL_${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}`);
 }

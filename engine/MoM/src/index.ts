@@ -124,8 +124,13 @@ momWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
 
         case 'trade_command': {
-            // TODO Phase 2: forward to TradovateBroker
-            console.log('[Core 4] 📡 Trade command received from MomWorker:', msg.payload);
+            // TODO Phase 5: forward to TradovateBroker instance
+            console.log('[Core 4] 📡 Trade command from MomWorker:', msg.payload);
+            break;
+        }
+
+        case 'trade_closed': {
+            console.log('[Core 4] 📊 Trade closed:', msg.payload);
             break;
         }
 
@@ -141,8 +146,37 @@ assistantWorker.on('message', (msg: { type: string; [key: string]: unknown }) =>
             break;
 
         case 'assistant_response': {
-            // TODO Phase 2: push to Nova dashboard via WebSocket
+            // TODO Phase 5: push to Nova dashboard via WebSocket
             console.log('[Core 4] 🤖 Nova response:', msg.payload);
+            break;
+        }
+
+        case 'trade_command': {
+            // IMMINENT_REVERSION tighten-stop or FLATTEN_ALL relayed from AssistantWorker
+            console.log('[Core 4] 📡 Trade command from AssistantWorker:', msg.payload);
+            // TODO Phase 5: forward to TradovateBroker
+            break;
+        }
+
+        case 'orb_alert':      { console.log('[Core 4] 🔭 ORB Alert:', msg.payload); break; }
+        case 'overwatch_alert':{ console.log('[Core 4] ⚠️  Overwatch Alert:', msg.payload); break; }
+        case 'overwatch_status':{ /* silent */ break; }
+
+        /**
+         * VERIFY_FLAT — AssistantWorker requests a broker position check (Triple-Sweep Phase 2).
+         * Main queries TradovateBroker and responds with VERIFY_FLAT_RESULT.
+         */
+        case 'VERIFY_FLAT': {
+            const symbol = msg.symbol as string;
+            const from   = msg.from as string;
+            console.log(`[Core 4] 🧹 VERIFY_FLAT (Phase ${msg.phase}) for ${symbol} from ${from}`);
+
+            // TODO Phase 5: replace stub with real broker.getPositions() call
+            // const positions = await broker.getPositions();
+            // const isFlat = positions.every(p => p.symbol !== symbol || p.netPos === 0);
+            const isFlat = true;   // Phase 4 stub — assume flat; Phase 5 wires real check
+
+            assistantWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat, symbol, from });
             break;
         }
 
@@ -158,7 +192,35 @@ oracleWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
 
         case 'feed_heartbeat':
-            // Silently absorb heartbeats; log only if debugging needed
+            break;  // silent
+
+        case 'feed_status':
+            console.log(`[Core 4] 📡 Feed status [${msg.label}]: ${msg.status}`);
+            break;
+
+        case 'defcon_change':
+            console.log(`[Core 4] 🚨 DefconLevel → ${msg.level} | ${msg.reason}`);
+            break;
+
+        /**
+         * VERIFY_FLAT (Phase 3) — OracleWorker requests the final broker position check.
+         * Main responds directly on oracleWorker.postMessage with VERIFY_FLAT_RESULT.
+         */
+        case 'VERIFY_FLAT': {
+            const symbol = msg.symbol as string;
+            const from   = msg.from as string;
+            console.log(`[Core 4] 🧹 VERIFY_FLAT (Phase ${msg.phase}) for ${symbol} from ${from}`);
+
+            // TODO Phase 5: replace stub with real broker.getPositions() call
+            const isFlat = true;   // Phase 4 stub
+
+            // Respond directly to OracleWorker via its worker handle
+            oracleWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat, symbol, from });
+            break;
+        }
+
+        case 'system_reset':
+            console.log(`[Core 4] 🔭 SYSTEM_RESET confirmed — ${msg.symbol} cycle complete.`);
             break;
 
         default:

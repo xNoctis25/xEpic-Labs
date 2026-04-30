@@ -79,6 +79,24 @@ export class MarketClock {
     }
 
     /**
+     * Returns true if the US equities session is open: 09:30–16:00 ET.
+     * Used to define the outer boundary of the "Wilderness" zone.
+     */
+    public static isMarketOpen(timestampMs: number): boolean {
+        const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
+        return totalMinutes >= 570 && totalMinutes < 960; // 09:30 (570) – 16:00 (960)
+    }
+
+    /**
+     * "The Wilderness" — market is open but outside all three Killzones.
+     * Trades entered here carry significantly higher structural risk.
+     * MoM enforces Short Leash parameters when in the Wilderness.
+     */
+    public static isWilderness(timestampMs: number): boolean {
+        return MarketClock.isMarketOpen(timestampMs) && !MarketClock.isWithinTradingWindow(timestampMs);
+    }
+
+    /**
      * Returns true if the given timestamp falls within the EOD flatten window.
      * Used to force-close any open positions before the market close.
      *

@@ -218,10 +218,13 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             momPort    = msg.momPort    as MessagePort;
             assistPort = msg.assistPort as MessagePort;
 
-            parentPort!.postMessage({ type: 'ready', worker: 'OracleWorker' });
-            console.log('[OracleWorker] Core 3 online — IPC mesh wired.');
+            // Wire INBOUND listeners on both peer ports
+            momPort   .on('message', onMomMessage);
+            assistPort.on('message', onAssistantMessage);
 
-            // Start WSS Receptionist FIRST, then feed
+            parentPort!.postMessage({ type: 'ready', worker: 'OracleWorker' });
+            console.log('[OracleWorker] Core 3 online — Handshake + Triple-Sweep wired.');
+
             startWssReceptionist();
             feed.start(onTick, (label, status) => {
                 parentPort!.postMessage({ type: 'feed_status', label, status });
@@ -246,4 +249,116 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
         default:
             console.warn(`[OracleWorker] Unknown message type: ${msg.type}`);
     }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC: MomWorker → OracleWorker  (Handshake)
+// ─────────────────────────────────────────────────────────────────────────────
+function onMomMessage(data: { type: string; [key: string]: unknown }): void {
+    switch (data.type) {
+
+        /**
+         * REQUEST_TAKEOFF — MomWorker is requesting clearance to enter a trade.
+         * Oracle evaluates DefconLevel + Macro Radar and responds GREEN or RED.
+         */
+        case 'REQUEST_TAKEOFF': {
+            const cid       = data.correlationId as string;
+            const symbol    = data.symbol as string;
+            const direction = data.direction as string;
+
+            // Determine clearance based on current oracle state
+            const isVixElevated = lastVixPrice > 0 && lastVixPrice >= 20.0;
+            const isBiasAligned = (
+                (direction === 'LONG'  && vwapSlope >= 0) ||
+                (direction === 'SHORT' && vwapSlope <= 0) ||
+                vwapSlope === 0  // no bias → neutral → allow
+            );
+
+            let light: 'GREEN_LIGHT' | 'RED_LIGHT';
+            let reason: string;
+
+            if (defconLevel === 'RED') {
+                light  = 'RED_LIGHT';
+                reason = 'DefconLevel RED';
+            } else if (isVixElevated) {
+                light  = 'RED_LIGHT';
+                reason = `VIX elevated (${lastVixPrice.toFixed(2)})`;
+            } else if (!isBiasAligned) {
+                light  = 'RED_LIGHT';
+                reason = `VWAP slope bias misaligned (slope=${vwapSlope.toFixed(4)}, direction=${direction})`;
+            } else {
+                light  = 'GREEN_LIGHT';
+                reason = `DefconLevel GREEN | VIX ${lastVixPrice.toFixed(2)} | VWAP slope ${vwapSlope.toFixed(4)}`;
+            }
+
+            console.log(`[OracleWorker] 🤝 Handshake ${light} | ${symbol} ${direction} | ${reason}`);
+
+            // Respond directly on momPort (bidirectional MessagePort)
+            momPort?.postMessage({ type: light, correlationId: cid, reason });
+            break;
+        }
+
+        default: break;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IPC: AssistantWorker → OracleWorker  (Triple-Sweep Phase 2)
+// ─────────────────────────────────────────────────────────────────────────────
+function onAssistantMessage(data: { type: string; [key: string]: unknown }): void {
+    switch (data.type) {
+
+        /**
+         * SWEEP_PHASE_2_COMPLETE — AssistantWorker has confirmed 0 positions/orders.
+         * Oracle performs the final verification and resets the system to Hunting Phase.
+         */
+        case 'SWEEP_PHASE_2_COMPLETE': {
+            const payload = data.payload as { symbol: string; confirmed: boolean; ts: number };
+            console.log(`[OracleWorker] 🧹 Triple-Sweep PHASE 3 — Final flat verification for ${payload.symbol}…`);
+
+            // Request a final position check from Main (Core 4) via parentPort
+            parentPort!.postMessage({
+                type:    'VERIFY_FLAT',
+                phase:   3,
+                symbol:  payload.symbol,
+                from:    'OracleWorker',
+            });
+
+            // Note: VERIFY_FLAT_RESULT is handled in the parentPort listener below
+            break;
+        }
+
+        default: break;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// parentPort extension: handle VERIFY_FLAT_RESULT from Main (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
+    if (msg.type !== 'VERIFY_FLAT_RESULT' || (msg.from as string) !== 'OracleWorker') return;
+
+    const isFlat = msg.isFlat as boolean;
+    const symbol = msg.symbol as string;
+
+    if (isFlat) {
+        console.log(
+            `[OracleWorker] ✅ Triple-Sweep COMPLETE — ${symbol} confirmed FLAT. ` +
+            `System reset to 🔭 Hunting Phase.`
+        );
+    } else {
+        console.error(
+            `[OracleWorker] ❌ Triple-Sweep PHASE 3 FAILED — ${symbol} still shows open positions! ` +
+            `Escalating EMERGENCY_EXIT.`
+        );
+        // Escalate: blast emergency exit if broker still shows open positions
+        momPort?.postMessage({ type: 'EMERGENCY_EXIT', reason: 'TRIPLE_SWEEP_PHASE3_DISCREPANCY' });
+    }
+
+    // Reset macro radar and broadcast SYSTEM_RESET to all peers
+    defconLevel = 'GREEN';
+    const resetMsg = { type: 'SYSTEM_RESET', ts: Date.now(), confirmedFlat: isFlat };
+    momPort?.postMessage(resetMsg);
+    assistPort?.postMessage(resetMsg);
+    parentPort!.postMessage({ type: 'system_reset', symbol, ts: Date.now() });
 });
