@@ -500,10 +500,9 @@ app.post('/api/auth/change-password', async (req, res) => {
     }
 });
 
-// ── N.O.V.A. (AI COMMAND NODE) ────────────────────────────────────────────────
+// ── NOVA (AI COMMAND NODE) ────────────────────────────────────────────────────
 app.post('/api/auth/chat', async (req, res) => {
     try {
-        // Protect the route using the existing JWT logic
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ message: 'No token provided.' });
@@ -511,16 +510,15 @@ app.post('/api/auth/chat', async (req, res) => {
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
 
-        const { message, model } = req.body;
+        const { message, model, history } = req.body;
         if (!message) return res.status(400).json({ message: 'Message is required.' });
 
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.', message: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
+            return res.status(500).json({ reply: 'Nova Core Offline: Missing GEMINI_API_KEY.' });
         }
 
         // ── RBAC Model Selection ──────────────────────────────────────────────
-        // Default to flash for all users. Pro requires admin role, verified server-side.
         let targetModel = 'gemini-2.5-flash';
         if (model === 'gemini-2.5-pro') {
             const roleQuery = await pool.query('SELECT role FROM users WHERE id = $1', [decoded.id]);
@@ -529,19 +527,47 @@ app.post('/api/auth/chat', async (req, res) => {
             }
         }
 
+        // ── Build conversation contents with history ──────────────────────────
+        const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+        if (Array.isArray(history) && history.length > 0) {
+            for (const turn of history) {
+                contents.push({
+                    role: turn.role === 'ai' ? 'model' : 'user',
+                    parts: [{ text: turn.text }]
+                });
+            }
+        }
+        contents.push({ role: 'user', parts: [{ text: message }] });
+
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
             model: targetModel,
-            contents: message,
+            contents,
             config: {
-                systemInstruction: "You are N.O.V.A. AI for xEpic Labs. Keep your responses simple, clean, and concise. Do not output server times or verbose data. If asked for a greeting, reply exactly with: 'Greetings, How may I assist you?'"
+                systemInstruction: `You are Nova, the institutional-grade AI assistant for xEpic Labs — a professional trading and finance platform built for serious traders and analysts.
+
+Your core expertise:
+- Financial markets: equities, futures, forex, crypto, options, macro
+- Smart Money Concepts (SMC): liquidity sweeps, order blocks, fair value gaps, Judas swings, market structure shifts
+- Technical analysis: price action, ICT concepts, killzones (London/NY sessions), indicators
+- Prop firm rules, risk management, trading psychology, position sizing
+- General intelligence: science, technology, history, coding, current events, and more
+
+Your personality:
+- Confident, articulate, and substantive — never give a one-liner when depth is warranted
+- Professional but personable — like a sharp colleague who actually knows their stuff
+- When you lack real-time data (live prices, today's news feed), acknowledge it briefly then immediately pivot to what you CAN provide: analysis, context, historical patterns, frameworks
+- Never refuse to engage. Always find an angle that adds value.
+- Format clearly: use **bold** for key terms, bullet points for lists, and structured breakdowns when helpful
+
+The user's name is: ${decoded.username}`
             }
         });
 
         res.status(200).json({ reply: response.text });
     } catch (error: any) {
         console.error('[NOVA ERROR]', error);
-        res.status(500).json({ reply: 'Error communicating with N.O.V.A. core.', message: 'Error communicating with N.O.V.A. core.' });
+        res.status(500).json({ reply: 'Error communicating with Nova core.', message: 'Error communicating with Nova core.' });
     }
 });
 

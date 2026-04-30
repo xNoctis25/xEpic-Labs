@@ -224,7 +224,7 @@ app.get('/api/auth/me', async (req, res) => {
         }
         const token = authHeader.split(' ')[1];
         const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
-        const userQuery = await db_1.default.query('SELECT id, username, email, role, created_at FROM users WHERE id = $1', [decoded.id]);
+        const userQuery = await db_1.default.query('SELECT id, username, email, isverified, role, createdat AS created_at FROM users WHERE id = $1', [decoded.id]);
         if (userQuery.rows.length === 0) {
             return res.status(404).json({ message: 'User not found.' });
         }
@@ -396,36 +396,100 @@ app.post('/api/auth/reset-password', async (req, res) => {
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
-// ── N.O.V.A. (AI COMMAND NODE) ────────────────────────────────────────────────
-app.post('/api/auth/chat', async (req, res) => {
+// ── CHANGE PASSWORD (Protected) ───────────────────────────────────────────────
+app.post('/api/auth/change-password', async (req, res) => {
     try {
-        // Protect the route using the existing JWT logic
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ message: 'No token provided.' });
         }
         const token = authHeader.split(' ')[1];
-        jsonwebtoken_1.default.verify(token, JWT_SECRET);
-        const { message } = req.body;
+        const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: 'Current and new passwords are required.' });
+        }
+        const userQuery = await db_1.default.query('SELECT password FROM users WHERE id = $1', [decoded.id]);
+        if (userQuery.rows.length === 0)
+            return res.status(404).json({ message: 'User not found.' });
+        const validPassword = await bcrypt_1.default.compare(currentPassword, userQuery.rows[0].password);
+        if (!validPassword)
+            return res.status(401).json({ message: 'Incorrect current password.' });
+        const salt = await bcrypt_1.default.genSalt(10);
+        const hashedPassword = await bcrypt_1.default.hash(newPassword, salt);
+        await db_1.default.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, decoded.id]);
+        console.log(`[AUTH] ✅ Password changed securely for user ID: ${decoded.id}`);
+        res.status(200).json({ message: 'Password updated successfully.' });
+    }
+    catch (error) {
+        console.error('[AUTH ERROR] /change-password:', error?.message || error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+// ── NOVA (AI COMMAND NODE) ────────────────────────────────────────────────────
+app.post('/api/auth/chat', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        const token = authHeader.split(' ')[1];
+        const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const { message, model, history } = req.body;
         if (!message)
             return res.status(400).json({ message: 'Message is required.' });
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            return res.status(500).json({ reply: 'N.O.V.A. Core Offline: Missing GEMINI_API_KEY.' });
+            return res.status(500).json({ reply: 'Nova Core Offline: Missing GEMINI_API_KEY.' });
         }
+        // ── RBAC Model Selection ──────────────────────────────────────────────
+        let targetModel = 'gemini-2.5-flash';
+        if (model === 'gemini-2.5-pro') {
+            const roleQuery = await db_1.default.query('SELECT role FROM users WHERE id = $1', [decoded.id]);
+            if (roleQuery.rows.length > 0 && roleQuery.rows[0].role === 'admin') {
+                targetModel = 'gemini-2.5-pro';
+            }
+        }
+        // ── Build conversation contents with history ──────────────────────────
+        const contents = [];
+        if (Array.isArray(history) && history.length > 0) {
+            for (const turn of history) {
+                contents.push({
+                    role: turn.role === 'ai' ? 'model' : 'user',
+                    parts: [{ text: turn.text }]
+                });
+            }
+        }
+        contents.push({ role: 'user', parts: [{ text: message }] });
         const ai = new genai_1.GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: message,
+            model: targetModel,
+            contents,
             config: {
-                systemInstruction: "You are N.O.V.A. (Networked Observability & Verification Agent), the central intelligence router for xEpic Labs 'The Future of Finance'. You are a highly advanced, professional, and concise institutional AI assistant."
+                systemInstruction: `You are Nova, the institutional-grade AI assistant for xEpic Labs — a professional trading and finance platform built for serious traders and analysts.
+
+Your core expertise:
+- Financial markets: equities, futures, forex, crypto, options, macro
+- Smart Money Concepts (SMC): liquidity sweeps, order blocks, fair value gaps, Judas swings, market structure shifts
+- Technical analysis: price action, ICT concepts, killzones (London/NY sessions), indicators
+- Prop firm rules, risk management, trading psychology, position sizing
+- General intelligence: science, technology, history, coding, current events, and more
+
+Your personality:
+- Confident, articulate, and substantive — never give a one-liner when depth is warranted
+- Professional but personable — like a sharp colleague who actually knows their stuff
+- When you lack real-time data (live prices, today's news feed), acknowledge it briefly then immediately pivot to what you CAN provide: analysis, context, historical patterns, frameworks
+- Never refuse to engage. Always find an angle that adds value.
+- Format clearly: use **bold** for key terms, bullet points for lists, and structured breakdowns when helpful
+
+The user's name is: ${decoded.username}`
             }
         });
         res.status(200).json({ reply: response.text });
     }
     catch (error) {
         console.error('[NOVA ERROR]', error);
-        res.status(500).json({ reply: 'Error communicating with N.O.V.A. core.' });
+        res.status(500).json({ reply: 'Error communicating with Nova core.', message: 'Error communicating with Nova core.' });
     }
 });
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────

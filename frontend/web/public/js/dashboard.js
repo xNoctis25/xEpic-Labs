@@ -286,7 +286,7 @@ if (novaForm) {
         try {
             const res = await auth.request('/chat', {
                 method: 'POST',
-                body: JSON.stringify({ message: text, model: document.getElementById('novaModelSelect')?.value || 'gemini-2.5-flash' })
+                body: JSON.stringify({ message: text, model: document.getElementById('novaModelSelect')?.value || 'gemini-2.5-flash', history: (novaGetChats().find(c => c.id === novaGetActiveId())?.messages || []).slice(-20) })
             });
             let f = res.reply.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<b style="color:#fff">$1</b>');
             typingMsg.innerHTML = f;
