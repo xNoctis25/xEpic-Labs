@@ -412,11 +412,22 @@ const views = {
     settings: document.getElementById('profileView')
 };
 
+const ACTIVE_VIEW_KEY = 'nova_activeView';
+const VIEW_TITLES = {
+    home:     'xEpic Labs — Home',
+    nova:     'xEpic Labs — Nova',
+    settings: 'xEpic Labs — Settings'
+};
+
 window.switchView = function (viewName) {
     Object.values(navs).forEach(nav => nav && nav.classList.remove('active'));
     Object.values(views).forEach(view => view && view.classList.add('hidden'));
     if (navs[viewName])  navs[viewName].classList.add('active');
     if (views[viewName]) views[viewName].classList.remove('hidden');
+    // Persist active view so refresh lands on same screen
+    localStorage.setItem(ACTIVE_VIEW_KEY, viewName);
+    // Update browser tab title
+    document.title = VIEW_TITLES[viewName] || 'xEpic Labs';
 };
 
 if (navs.home)     navs.home.addEventListener('click',     (e) => { e.preventDefault(); window.switchView('home'); });
@@ -591,18 +602,66 @@ function novaApplyLayout() {
     inp.style.setProperty('bottom',   '0',        'important');
     inp.style.setProperty('left',     '0',        'important');
     inp.style.setProperty('right',    '0',        'important');
+
+    // Position the scroll-to-bottom button just above the input bar
+    var scrollBtn = document.getElementById('novaScrollBtn');
+    if (scrollBtn) {
+        scrollBtn.style.setProperty('position', 'absolute', 'important');
+        scrollBtn.style.setProperty('bottom',   (inpH + 10) + 'px', 'important');
+        scrollBtn.style.setProperty('left',     '50%',              'important');
+        scrollBtn.style.setProperty('z-index',  '20',               'important');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // ── Restore last active view on refresh ───────────────────────────────
+    var savedView = localStorage.getItem(ACTIVE_VIEW_KEY) || 'home';
+    window.switchView(savedView);
+    if (savedView === 'nova') {
+        // Layout engine needs view to be visible — wait for render
+        setTimeout(novaApplyLayout, 500);
+    }
+
+    // ── Nav click: re-run layout when Nova opens ───────────────────────────
     var navNova = document.getElementById('navNova');
     if (navNova) {
         navNova.addEventListener('click', function() {
             setTimeout(novaApplyLayout, 500);
         });
     }
+
+    // ── Window resize: re-apply layout if Nova is visible ─────────────────
     window.addEventListener('resize', function() {
         if (document.querySelector('.nova-main') && document.querySelector('.nova-main').offsetHeight > 0) {
             novaApplyLayout();
         }
     });
+
+    // ── Scroll-to-bottom button: show when >100px from bottom ─────────────
+    var msgs = document.getElementById('novaMessages');
+    var scrollBtn = document.getElementById('novaScrollBtn');
+
+    if (msgs && scrollBtn) {
+        // Click: smooth scroll to bottom
+        scrollBtn.addEventListener('click', function() {
+            msgs.scrollTo({ top: msgs.scrollHeight, behavior: 'smooth' });
+        });
+
+        // Scroll listener: toggle visibility + scrollbar fade
+        var scrollDebounce;
+        msgs.addEventListener('scroll', function() {
+            var atBottom = msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 60;
+            if (atBottom) {
+                scrollBtn.classList.remove('visible');
+            } else {
+                scrollBtn.classList.add('visible');
+            }
+            // Scrollbar fade: add class while scrolling, remove after idle
+            msgs.classList.add('is-scrolling');
+            clearTimeout(scrollDebounce);
+            scrollDebounce = setTimeout(function() {
+                msgs.classList.remove('is-scrolling');
+            }, 1200);
+        });
+    }
 });

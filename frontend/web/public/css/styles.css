@@ -1166,3 +1166,56 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     min-height: 0 !important;
     height: auto;
 }
+
+/* =========================================
+   NOVA SCROLL ENHANCEMENTS
+   ========================================= */
+
+/* Hide scrollbar up/down arrow buttons globally */
+::-webkit-scrollbar-button {
+    display: none !important;
+    height: 0;
+    width: 0;
+}
+
+/* novaMessages scrollbar: transparent at rest, visible while scrolling (.is-scrolling class added by JS) */
+#novaMessages::-webkit-scrollbar-thumb {
+    background: transparent;
+    transition: background 0.4s ease;
+}
+#novaMessages.is-scrolling::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Scroll-to-bottom floating button */
+.nova-scroll-bottom {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    background: rgba(20, 22, 26, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease, background 0.2s;
+    z-index: 20;
+    color: #ccc;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.nova-scroll-bottom.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+.nova-scroll-bottom:hover {
+    background: rgba(102, 252, 241, 0.12);
+    border-color: rgba(102, 252, 241, 0.3);
+    color: #66fcf1;
+}
