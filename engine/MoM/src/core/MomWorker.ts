@@ -375,6 +375,28 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
+        /**
+         * hydration_payload — sent by Core 4 before live feeds start.
+         * Warms smcExpert's rolling windows and primes the aggregator state
+         * so the engine can trade immediately on the first live candle.
+         */
+        case 'hydration_payload': {
+            const { cmeCandles } = msg.payload as {
+                cmeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }>;
+            };
+
+            for (const c of cmeCandles) {
+                // 1. Warm SMC expert internal rolling windows
+                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp });
+
+                // 2. Feed a synthetic close tick to the aggregator to align its 1-min state
+                aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
+            }
+
+            console.log(`[MomWorker] 💧 Hydrated: ${cmeCandles.length} CME candles — SMC expert + aggregator primed.`);
+            break;
+        }
+
         case 'shutdown': {
             console.log('[MomWorker] Shutting down…');
             if (activeTrade?.scratchTimer) clearTimeout(activeTrade.scratchTimer);

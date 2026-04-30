@@ -24,9 +24,9 @@ import { DatabentoLiveService, EnrichedTick, CFE_DATASET } from '../services/Dat
 if (!parentPort) throw new Error('[OracleWorker] Must be run as a worker thread.');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const WSS_PORT        = 8080;
-const VIX_RED_THRESHOLD = 20.0;    // VIX level that triggers DefconLevel RED
-const VWAP_WINDOW     = 60;        // Rolling window size for VWAP slope (ticks)
+const WSS_PORT          = 8080;
+const VIX_RED_THRESHOLD = 20.0;      // VIX level that triggers DefconLevel RED
+const VWAP_WINDOW_MS    = 15 * 60_000;  // 15-minute rolling time window for VWAP
 
 // ─── DefconLevel ─────────────────────────────────────────────────────────────
 type DefconLevel = 'GREEN' | 'RED';
@@ -53,12 +53,11 @@ function calcVwap(window: VwapSample[]): number {
     return sumV > 0 ? sumPV / sumV : 0;
 }
 
-/** Update rolling VWAP slope and emit oracle state to peers. */
+/** Update rolling VWAP slope (15-min time window) and emit oracle state. */
 function updateMacroRadar(tick: EnrichedTick): void {
     const isCfe = tick.dataset === CFE_DATASET;
 
     if (isCfe) {
-        // VIX proxy: track latest VX price
         lastVixPrice = tick.price;
         if (lastVixPrice >= VIX_RED_THRESHOLD && defconLevel === 'GREEN') {
             defconLevel = 'RED';
@@ -67,23 +66,28 @@ function updateMacroRadar(tick: EnrichedTick): void {
         return;
     }
 
-    // CME ticks → VWAP slope calculation
+    // CME ticks → 15-minute rolling time window VWAP
     cmeVwapWindow.push({ price: tick.price, volume: tick.volume, ts: tick.timestamp });
-    if (cmeVwapWindow.length > VWAP_WINDOW) cmeVwapWindow.shift();
+
+    // Prune entries older than 15 minutes from the current tick timestamp
+    const cutoff = tick.timestamp - VWAP_WINDOW_MS;
+    while (cmeVwapWindow.length > 0 && cmeVwapWindow[0].ts < cutoff) {
+        cmeVwapWindow.shift();
+    }
 
     const currentVwap = calcVwap(cmeVwapWindow);
     if (lastVwap !== 0) {
-        vwapSlope = currentVwap - lastVwap;   // positive = bullish
+        vwapSlope = currentVwap - lastVwap;   // positive = bullish macro bias
     }
     lastVwap = currentVwap;
 
     // Emit oracle state snapshot to AssistantWorker
     assistPort?.postMessage({
-        type:        'oracle_state',
-        defcon:      defconLevel,
+        type:     'oracle_state',
+        defcon:   defconLevel,
         vwapSlope,
-        vixLevel:    lastVixPrice,
-        ts:          tick.timestamp,
+        vixLevel: lastVixPrice,
+        ts:       tick.timestamp,
     });
 }
 
@@ -229,6 +233,35 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             feed.start(onTick, (label, status) => {
                 parentPort!.postMessage({ type: 'feed_status', label, status });
             });
+            break;
+        }
+
+        /**
+         * hydration_payload — sent by Core 4 before live feeds start.
+         * Pre-fills the 15-min VWAP window + VIX state from historical REST data.
+         */
+        case 'hydration_payload': {
+            const payload = msg.payload as {
+                cmeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number; dataset: string; symbol: string }>;
+                cfeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number; dataset: string; symbol: string }>;
+            };
+
+            let cmeFed = 0, cfeFed = 0;
+
+            for (const c of payload.cmeCandles) {
+                updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol });
+                cmeFed++;
+            }
+            for (const c of payload.cfeCandles) {
+                updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol });
+                cfeFed++;
+            }
+
+            console.log(
+                `[OracleWorker] 💧 Hydrated: ${cmeFed} CME candles (VWAP primed) | ` +
+                `${cfeFed} CFE candles (VIX: ${lastVixPrice.toFixed(2)}) | ` +
+                `15m VWAP slope: ${vwapSlope.toFixed(4)}`
+            );
             break;
         }
 
