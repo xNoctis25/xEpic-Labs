@@ -122,6 +122,8 @@ function novaShowContextMenu(chatId, anchorEl) {
     menu.style.top  = rect.bottom + 4 + 'px';
     menu.style.left = rect.left + 'px';
 
+    // Stop mousedown inside the menu from triggering the outside-click dismiss
+    menu.addEventListener('mousedown', (e) => e.stopPropagation());
     setTimeout(() => document.addEventListener('mousedown', novaCloseAllMenus, { once: true, capture: true }), 0);
 }
 

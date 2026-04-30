@@ -793,7 +793,7 @@ form.nova-input-area:not(.hidden) {
    ========================================= */
 body.dashboard-body { display: flex !important; flex-direction: column !important; justify-content: flex-start !important; align-items: stretch !important; height: 100vh !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }
 
-body.dashboard-body .global-top-header { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 20px 40px !important; border-bottom: 1px solid rgba(255,255,255,0.08) !important; flex-shrink: 0 !important; z-index: 50 !important; background: var(--bg) !important; }
+body.dashboard-body .global-top-header { width: 100% !important; display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 20px 40px !important;  flex-shrink: 0 !important; z-index: 50 !important; background: var(--bg) !important; }
 
 body.dashboard-body .app-layout { display: flex !important; flex: 1 !important; width: 100% !important; max-width: 100% !important; padding: 30px 40px !important; margin: 0 !important; gap: 30px !important; height: auto !important; overflow: hidden !important; }
 
@@ -955,7 +955,6 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     font-size: 0.95rem;
     font-weight: 500;
     color: #e3e3e3;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
     flex-shrink: 0;
     letter-spacing: 0.01em;
 }
@@ -982,7 +981,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     text-align: center;
 }
 /* =========================================
-   NOVA CHAT HISTORY — CONTEXT MENU & CRUD
+   NOVA CHAT HISTORY ï¿½ CONTEXT MENU & CRUD
    ========================================= */
 
 /* Chat item layout */
@@ -1003,7 +1002,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .nova-chat-item.active { background: rgba(66,133,244,0.18); color: #fff; }
 .nova-chat-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Three-dot menu button — hidden until hover */
+/* Three-dot menu button ï¿½ hidden until hover */
 .nova-chat-menu-btn {
     background: none;
     border: none;
