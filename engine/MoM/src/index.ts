@@ -178,12 +178,7 @@ async function boot(): Promise<void> {
     await db.initialize();
     const botState = await db.getState();
 
-    console.log('==========================================');
-    console.log('  M.o.M — Institutional Quant Engine v5.1');
-    console.log(`  ${tradingMode} | ${config.INDICES} | Risk: ${config.RISK}%`);
-    console.log(`  Playbook: ${playbookLabel}`);
-    console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
-    console.log('==========================================\n');
+
 
     const connected = await broker.connect();
     if (!connected) throw new Error('Broker auth failed');
@@ -241,6 +236,14 @@ async function boot(): Promise<void> {
     }
 
     console.log('[M.o.M] ✅ Test trade passed — triple-sweep verified');
+
+    console.log('\n==========================================');
+    console.log('  M.o.M — Institutional Quant Engine v5.1');
+    console.log(`  ${tradingMode} | ${config.INDICES} | Risk: ${config.RISK}%`);
+    console.log(`  Playbook: ${playbookLabel}`);
+    console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
+    console.log(`  Buying Power: $${ledger.getAvailableBuyingPower().toFixed(0)}`);
+    console.log('==========================================');
 
     // 4. Zero-Gap Hydration: wait for Databento historical to catch up
     //    Databento has ~15 min processing delay. We wait 16 min from feed start,
