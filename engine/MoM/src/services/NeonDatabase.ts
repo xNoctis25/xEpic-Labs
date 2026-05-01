@@ -47,15 +47,20 @@ export class NeonDatabase {
     private pool: Pool;
 
     constructor() {
-        const connectionString = process.env.NEON_DATABASE_URL;
+        let connectionString = process.env.NEON_DATABASE_URL || '';
         if (!connectionString) {
-            console.error('🔴 [NeonDB] - NEON_DATABASE_URL not found in .env.');
+            console.error('[NeonDB] NEON_DATABASE_URL not found in .env.');
+        }
+
+        // Append sslmode=verify-full to suppress pg deprecation warning
+        if (connectionString && !connectionString.includes('sslmode=')) {
+            connectionString += (connectionString.includes('?') ? '&' : '?') + 'sslmode=verify-full';
         }
 
         this.pool = new Pool({
-            connectionString: connectionString || '',
-            ssl: { rejectUnauthorized: false }, // Neon requires SSL
-            max: 5,                             // Small pool — M.o.M is a single bot
+            connectionString,
+            ssl: { rejectUnauthorized: false },
+            max: 5,
             idleTimeoutMillis: 30000,
         });
     }
@@ -65,7 +70,6 @@ export class NeonDatabase {
      * Must be called once on boot before any other database operations.
      */
     public async initialize(): Promise<void> {
-        console.log('🧠 [NeonDB] - Connecting to Neon Postgres...');
 
         // Create the bot_state table if it doesn't exist
         await this.pool.query(`
@@ -142,10 +146,7 @@ export class NeonDatabase {
                 INSERT INTO bot_state (current_phase, start_date, active_trading_days, running_pnl, max_drawdown_limit)
                 VALUES ('EVALUATION', NOW(), 0, 0.00, -500.00)
             `);
-            console.log('🧠 [NeonDB] - Initialized with phase: EVALUATION | Drawdown Limit: -$500');
         }
-
-        console.log('🧠 [NeonDB] - Connected and schema verified. ✅');
     }
 
     /**

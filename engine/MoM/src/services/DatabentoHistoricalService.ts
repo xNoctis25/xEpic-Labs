@@ -49,15 +49,12 @@ export async function hydrate(
         return [];
     }
 
-    const endTime   = endTimeMs ? new Date(endTimeMs) : new Date();
+    // Subtract 2-minute buffer — Databento needs time to process recent data (avoids 422)
+    const rawEnd    = endTimeMs ? new Date(endTimeMs) : new Date();
+    const endTime   = new Date(rawEnd.getTime() - 2 * 60_000);
     const startTime = new Date(endTime.getTime() - minutes * 60_000);
 
     try {
-        console.log(
-            `[DatabentoHistorical] Fetching ${minutes}m of ohlcv-1m for ${dataset} ` +
-            `[${symbols.join(', ')}] from ${startTime.toISOString()}…`
-        );
-
         const response = await axios.get(`${HIST_BASE_URL}/timeseries.get_range?stype_in=continuous`, {
             auth:         { username: apiKey, password: '' },
             params: {
@@ -100,7 +97,6 @@ export async function hydrate(
             }
         }
 
-        console.log(`[DatabentoHistorical] ✅ ${dataset}: ${candles.length} candles loaded.`);
         return candles;
 
     } catch (err: any) {

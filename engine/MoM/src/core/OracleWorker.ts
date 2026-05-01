@@ -269,11 +269,9 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
-
+        case 'VERIFY_FLAT_RESULT': break;  // Handled by dedicated listener below
 
         case 'subscribe': {
-            // Future: dynamic runtime subscriptions
-            console.log(`[OracleWorker] Runtime subscribe: ${msg.symbol}`);
             break;
         }
 
