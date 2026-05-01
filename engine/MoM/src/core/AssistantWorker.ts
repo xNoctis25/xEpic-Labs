@@ -22,6 +22,7 @@ if (!parentPort) throw new Error('[AssistantWorker] Must be run as a worker thre
 // ─── IPC Peer Ports ──────────────────────────────────────────────────────────
 let momPort:    MessagePort | null = null;
 let oraclePort: MessagePort | null = null;
+let lastSweepReason = '';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 1 — ORB VOLUME HUNTER (24/7)
@@ -63,6 +64,7 @@ interface OrbSymbolState {
     currentBucket:  OhlcvBucket | null;
     completeBuckets: OhlcvBucket[];     // ring buffer of complete buckets
     rollingVolumes:  number[];           // per-bucket total volumes for avg calc
+    isWarmedUp?:     boolean;
 }
 
 const orbState = new Map<string, OrbSymbolState>();
@@ -95,6 +97,12 @@ function processOrbTick(tick: EnrichedTick): void {
             // Close the bucket
             state.completeBuckets.push(state.currentBucket);
             state.rollingVolumes.push(state.currentBucket.volume);
+
+            if (state.rollingVolumes.length === ROLLING_VOL_BUCKETS && !state.isWarmedUp) {
+                state.isWarmedUp = true;
+                parentPort!.postMessage({ type: 'WARMUP_COMPLETE' });
+            }
+
             // Trim ring buffers
             if (state.completeBuckets.length > ROLLING_VOL_BUCKETS + BOX_LOOKBACK_BUCKETS) {
                 state.completeBuckets.shift();
@@ -131,6 +139,8 @@ function processOrbTick(tick: EnrichedTick): void {
 
     // Only scan "tight" consolidation ranges
     if (boxRange > BOX_TIGHT_THRESHOLD) return;
+
+    if (state.rollingVolumes.length < ROLLING_VOL_BUCKETS) return;
 
     // ── Volume anomaly check ──────────────────────────────────────────────────
     const avgVol   = rollingAvgVolume(state.rollingVolumes);
@@ -359,6 +369,7 @@ function onMomMessage(msg: { type: string; [key: string]: unknown }): void {
          */
         case 'SWEEP_PHASE_1_COMPLETE': {
             const sweep = msg.payload as { symbol: string; reason: string; ts: number };
+            lastSweepReason = (msg.payload as any).reason || 'UNKNOWN';
             console.log(`[AssistantWorker] 🧹 Triple-Sweep PHASE 2 — Verifying flat state for ${sweep.symbol}…`);
 
             // Request a position check from Main (Core 4) which holds the broker
@@ -433,7 +444,7 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
                 console.log(`[AssistantWorker] ✅ Phase 2 verified — ${symbol} is FLAT. Firing SWEEP_PHASE_2_COMPLETE → OracleWorker.`);
                 oraclePort?.postMessage({
                     type:    'SWEEP_PHASE_2_COMPLETE',
-                    payload: { symbol, confirmed: true, ts: Date.now() },
+                    payload: { symbol, confirmed: true, reason: lastSweepReason, ts: Date.now() },
                 });
             } else {
                 console.error(

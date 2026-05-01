@@ -34,6 +34,7 @@ let assistPort: MessagePort | null = null;
 // ─── Engine state ────────────────────────────────────────────────────────────
 type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
+let isTestingTrade = false;
 
 // ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
 const smcExpert  = new SMCExpert();
@@ -171,6 +172,21 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
         // ── Live tick processing ───────────────────────────────────────────────
         case 'tick': {
             const tick = data.payload as Tick;
+
+            if (isTestingTrade && engineState === 'IDLE') {
+                isTestingTrade = false;
+                engineState = 'IN_TRADE';
+                const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
+
+                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: (tick as any).price, stopPrice: (tick as any).price - 100, entryTs: (tick as any).timestamp, isWilderness: false, beTriggered: false };
+
+                parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol: tradeSymbol, price: (tick as any).price } });
+
+                setTimeout(() => {
+                    parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', symbol: tradeSymbol, reason: 'TEST_TRADE_COMPLETE' } });
+                    initiateTripleSweepPhase1('TEST_TRADE_COMPLETE');
+                }, 15000);
+            }
 
             // Always feed aggregator so SMC indicators stay aligned
             aggregator.processTick(tick);
@@ -385,17 +401,21 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
          * Warms smcExpert's rolling windows and primes the aggregator state
          * so the engine can trade immediately on the first live candle.
          */
-        case 'hydration_payload': {
-            const { cmeCandles } = msg.payload as {
-                cmeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number }>;
-            };
-
+        case 'hydration_payload':
+        case 'HYDRATION': {
+            const p = msg.payload as any;
+            const cmeCandles = p.cmeCandles || [];
             for (const c of cmeCandles) {
                 // 1. Warm SMC expert internal rolling windows
                 smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp });
 
                 // 2. Feed a synthetic close tick to the aggregator to align its 1-min state
                 aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
+            }
+
+            if (cmeCandles.length < 15) {
+                isTestingTrade = true;
+                console.log('[MomWorker] 🧊 Cold boot detected. Arming Test Trade...');
             }
 
             console.log(`[MomWorker] 💧 Hydrated: ${cmeCandles.length} CME candles — SMC expert + aggregator primed.`);

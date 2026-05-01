@@ -101,6 +101,14 @@ async function handleTradeCommand(
 
     switch (action) {
 
+        case 'TEST_ENTER': {
+            const symbol = payload.symbol as string;
+            const price  = payload.price as number;
+            console.log(`[Core 4] 🧪 Executing TEST_ENTER: 3 ${symbol} @ ${price} (Bypassing Sizer)`);
+            await executionEngine.executeBracket(symbol, price, 'BUY', 3);
+            break;
+        }
+
         case 'ENTER': {
             const symbol    = payload.symbol    as string;
             const price     = payload.price     as number;
@@ -283,6 +291,13 @@ function wireAssistantHandler(): void {
                 console.log('[Core 4] 🤖 Nova response:', msg.payload);
                 break;
 
+            case 'WARMUP_COMPLETE':
+                console.log('\n==========================================');
+                console.log('🔥 Warm up complete');
+                console.log('🎯 Starting to hunt');
+                console.log('==========================================\n');
+                break;
+
             case 'trade_command':
                 // IMMINENT_REVERSION tighten-stop or FLATTEN_ALL relayed from AssistantWorker
                 void handleTradeCommand(msg.payload as Record<string, unknown>, 'AssistantWorker');
@@ -372,7 +387,14 @@ function wireOracleHandler(): void {
             }
 
             case 'system_reset':
-                console.log(`[Core 4] 🔭 SYSTEM_RESET confirmed — ${msg.symbol} cycle complete.`);
+                if (msg.reason === 'TEST_TRADE_COMPLETE') {
+                    console.log('\n==========================================');
+                    console.log('✅ Triple sweep Trade test successful');
+                    console.log('🧊 Starting Warm up...');
+                    console.log('==========================================\n');
+                } else {
+                    console.log(`[Core 4] 🔭 SYSTEM_RESET confirmed — ${msg.symbol} cycle complete.`);
+                }
                 break;
 
             case 'tick':

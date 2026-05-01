@@ -35,6 +35,7 @@ let defconLevel: DefconLevel = 'GREEN';
 // ─── Peer ports (wired by Main via MessageChannel) ───────────────────────────
 let momPort:    MessagePort | null = null;
 let assistPort: MessagePort | null = null;
+let lastSweepReason = '';
 
 // ─── Databento service ───────────────────────────────────────────────────────
 const feed = new DatabentoLiveService();
@@ -349,6 +350,7 @@ function onAssistantMessage(data: { type: string; [key: string]: unknown }): voi
          */
         case 'SWEEP_PHASE_2_COMPLETE': {
             const payload = data.payload as { symbol: string; confirmed: boolean; ts: number };
+            lastSweepReason = (data.payload as any).reason || 'UNKNOWN';
             console.log(`[OracleWorker] 🧹 Triple-Sweep PHASE 3 — Final flat verification for ${payload.symbol}…`);
 
             // Request a final position check from Main (Core 4) via parentPort
@@ -395,5 +397,5 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
     const resetMsg = { type: 'SYSTEM_RESET', ts: Date.now(), confirmedFlat: isFlat };
     momPort?.postMessage(resetMsg);
     assistPort?.postMessage(resetMsg);
-    parentPort!.postMessage({ type: 'system_reset', symbol, ts: Date.now() });
+    parentPort!.postMessage({ type: 'system_reset', symbol, ts: Date.now(), reason: lastSweepReason });
 });
