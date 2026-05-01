@@ -327,14 +327,12 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
             const cmeCandles = p.cmeCandles || [];
             for (const c of cmeCandles) {
                 const state = getOrbState(c.symbol);
-                const bucket = { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, start: c.timestamp, ticks: 4 };
-                state.completeBuckets.push(bucket);
+                state.completeBuckets.push({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, start: c.timestamp, ticks: 4 });
                 state.rollingVolumes.push(c.volume);
                 if (state.completeBuckets.length > ROLLING_VOL_BUCKETS + BOX_LOOKBACK_BUCKETS) state.completeBuckets.shift();
                 if (state.rollingVolumes.length > ROLLING_VOL_BUCKETS) state.rollingVolumes.shift();
             }
-            const syms = [...new Set(cmeCandles.map((c: any) => c.symbol))].join(', ');
-            console.log(`[AssistantWorker] 💧 Hydrated: ${cmeCandles.length} CME candles into ORB scanner for [${syms}]`);
+            console.log(`[AssistantWorker] 💧 Hydrated: ${cmeCandles.length} CME candles into ORB scanner.`);
             break;
         }
 

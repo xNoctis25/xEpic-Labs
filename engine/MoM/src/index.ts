@@ -47,6 +47,7 @@ const broker          = new TradovateBroker();
 const db              = new NeonDatabase();
 const executionEngine = new ExecutionEngine(broker, db);
 const ledger          = new SessionLedger();
+let positionMonitor: NodeJS.Timeout | null = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Worker handles (declared at module scope for shutdown access)
@@ -106,6 +107,17 @@ async function handleTradeCommand(
             const price  = payload.price as number;
             console.log(`[Core 4] 🧪 Executing TEST_ENTER: 3 ${symbol} @ ${price} (Bypassing Sizer)`);
             await executionEngine.executeBracket(symbol, price, 'BUY', 3);
+            if (positionMonitor) clearInterval(positionMonitor);
+            positionMonitor = setInterval(async () => {
+                try {
+                    const net = await broker.getNetPositionQty(symbol);
+                    if (net === 0) {
+                        clearInterval(positionMonitor!); positionMonitor = null;
+                        console.log(`[Core 4] ✅ Broker reports ${symbol} is FLAT (Bracket Fill).`);
+                        momWorker.postMessage({ type: 'position_closed', reason: 'NATURAL_BRACKET_FILL' });
+                    }
+                } catch (e) {}
+            }, 5000);
             break;
         }
 
@@ -132,14 +144,28 @@ async function handleTradeCommand(
             ledger.reserveMargin(sizing.qty * marginPerContract);
 
             await executionEngine.executeBracket(symbol, price, side, sizing.qty);
+            if (positionMonitor) clearInterval(positionMonitor);
+            positionMonitor = setInterval(async () => {
+                try {
+                    const net = await broker.getNetPositionQty(symbol);
+                    if (net === 0) {
+                        clearInterval(positionMonitor!); positionMonitor = null;
+                        console.log(`[Core 4] ✅ Broker reports ${symbol} is FLAT (Bracket Fill).`);
+                        momWorker.postMessage({ type: 'position_closed', reason: 'NATURAL_BRACKET_FILL' });
+                    }
+                } catch (e) {}
+            }, 5000);
             break;
         }
 
         case 'FLATTEN_ALL': {
             const symbol = payload.symbol as string | undefined;
+            const reason = payload.reason as string | undefined;
             console.log(`[Core 4] 🧹 FLATTEN_ALL ${symbol ?? '(all)'} — triggered by ${source}`);
+            if (positionMonitor) { clearInterval(positionMonitor); positionMonitor = null; }
             if (symbol) {
                 await executionEngine.flattenPosition(symbol);
+                momWorker.postMessage({ type: 'position_closed', reason: reason ?? 'MANUAL_FLATTEN' });
             } else {
                 await broker.cancelAllWorkingOrders();
             }

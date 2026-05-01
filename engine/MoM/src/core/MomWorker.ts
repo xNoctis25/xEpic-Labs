@@ -184,7 +184,6 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
 
                 setTimeout(() => {
                     parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', symbol: tradeSymbol, reason: 'TEST_TRADE_COMPLETE' } });
-                    initiateTripleSweepPhase1('TEST_TRADE_COMPLETE');
                 }, 15000);
             }
 

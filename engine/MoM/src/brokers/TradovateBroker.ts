@@ -394,13 +394,24 @@ export class TradovateBroker {
 
     public async cancelAllWorkingOrders(): Promise<void> {
         await this.refreshTokenIfNeeded();
-        const { id: accountId } = await this.getAccountId();
+        await this.getAccountId();
         try {
-            await this.withTokenRetry(() =>
-                this.axiosInstance.post('/order/cancelAllOrders', { accountId })
-            );
-            console.log(`🧹 [TradovateBroker] - All working orders canceled.`);
-        } catch (error: any) { }
+            const orderRes = await this.withTokenRetry(() => this.axiosInstance.get('/order/list'));
+            const workingOrders = (orderRes.data || []).filter((o: any) => o.ordStatus === 'Working');
+            if (workingOrders.length === 0) return;
+            
+            console.log(`🧹 [TradovateBroker] - Found ${workingOrders.length} working orders. Canceling individually...`);
+            for (const order of workingOrders) {
+                try {
+                    await this.withTokenRetry(() => this.axiosInstance.post('/order/cancelOrder', { orderId: order.id }));
+                    console.log(`  ✅ Canceled order ID: ${order.id}`);
+                } catch (err: any) {
+                    console.error(`  ❌ Failed to cancel order ID: ${order.id}`, err.message);
+                }
+            }
+        } catch (error: any) {
+            console.error(`🔴 [TradovateBroker] - cancelAllWorkingOrders FAILED:`, error.message);
+        }
     }
 
     // ─── Active Trade Monitor Support ──────────────────────────────────
