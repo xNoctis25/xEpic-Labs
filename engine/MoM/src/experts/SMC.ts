@@ -82,7 +82,7 @@ export class SMC {
     // Main Analysis — called every 1-minute candle
     // ─────────────────────────────────────────────────────────────────────────
 
-    public analyze(candle: Candle): SmcSignal {
+    public analyze(candle: Candle, indicatorsOnly: boolean = false): SmcSignal {
         this.candles.push(candle);
         this.candleCount++;
 
@@ -153,6 +153,16 @@ export class SMC {
 
         // ── Step 2: Mitigate / Invalidate old FVGs ────────────────────────
         this.updateFvgRegistry(candle);
+
+        // ── Indicators-only mode: update state but don't consume FVGs ─────
+        if (indicatorsOnly) {
+            this.lastHeartbeat = {
+                trend, fvg: fvgLabel, decision: 'HOLD',
+                activeFvgCount: this.fvgRegistry.filter(z => z.isActive).length,
+                atr: this.currentATR,
+            };
+            return holdSignal;
+        }
 
         // ── Step 3: Scan ALL active FVGs for tap entries ──────────────────
         const signal = this.scanForTapEntry(candle, vwap, trend);

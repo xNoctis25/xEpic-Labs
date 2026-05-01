@@ -1,4 +1,3 @@
-import WebSocket from 'ws';
 import axios, { AxiosInstance } from 'axios';
 import { config as dotEnvConfig } from 'dotenv';
 import { config } from '../config/env';
@@ -20,8 +19,6 @@ const TOKEN_TTL_MS = 60 * 60 * 1000;
  * Market data has been moved to DatabentoLiveService.
  */
 export class TradovateBroker {
-    private ws: WebSocket | null = null;
-    private isConnected: boolean = false;
     private accessToken: string = '';
 
     // --- Token lifecycle ---

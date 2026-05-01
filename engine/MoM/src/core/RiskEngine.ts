@@ -1,4 +1,5 @@
 import { PositionSizer } from './PositionSizer';
+import { MarketClock }   from './MarketClock';
 
 /**
  * RiskEngine — Dynamic Daily Loss Management
@@ -66,9 +67,8 @@ export class RiskEngine {
     private scheduleMidnightReset(): void {
         // Resets daily PnL at midnight ET
         setInterval(() => {
-            const now = new Date();
-            const estTime = new Date(now.toLocaleString("en-US", {timeZone: "America/New_York"}));
-            if (estTime.getHours() === 0 && estTime.getMinutes() === 0) {
+            const { hour, minute } = MarketClock.getEasternHM();
+            if (hour === 0 && minute === 0) {
                 console.log(`🔄 [RiskEngine] - Midnight ET Reset. PnL cleared.`);
                 this.dailyRealizedPnL = 0.0;
                 this.isHalted = false;

@@ -325,6 +325,7 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             momPort?.close();
             oraclePort?.close();
             process.exit(0);
+            break;
         }
 
         default:

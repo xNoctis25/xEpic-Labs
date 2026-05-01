@@ -66,24 +66,30 @@ export class ExecutionEngine {
         currentPrice: number,
         side: 'BUY' | 'SELL',
         qty: number = 1,
+        stopPrice?: number,
     ): Promise<string | null> {
         const action: 'Buy' | 'Sell' = side === 'BUY' ? 'Buy' : 'Sell';
 
+        // Derive SL distance: use explicit stopPrice if provided, else default 20pts
+        const slDistance = stopPrice
+            ? Math.abs(currentPrice - stopPrice)
+            : this.SL_POINTS;
+
         // Calculate price targets based on direction
-        const slPrice = side === 'BUY'
-            ? currentPrice - this.SL_POINTS
-            : currentPrice + this.SL_POINTS;
+        const slPrice = stopPrice ?? (side === 'BUY'
+            ? currentPrice - slDistance
+            : currentPrice + slDistance);
 
         const tp1Price = side === 'BUY'
-            ? currentPrice + this.SL_POINTS       // 1:1 RR
-            : currentPrice - this.SL_POINTS;
+            ? currentPrice + slDistance       // 1:1 RR
+            : currentPrice - slDistance;
 
         const tp2Price = side === 'BUY'
-            ? currentPrice + (this.SL_POINTS * 2)  // 1:2 RR
-            : currentPrice - (this.SL_POINTS * 2);
+            ? currentPrice + (slDistance * 2)  // 1:2 RR
+            : currentPrice - (slDistance * 2);
 
         // Trailing stop offset (always negative in Tradovate's pegDifference)
-        const pegDifference = -(this.SL_POINTS);
+        const pegDifference = -(slDistance);
 
         let primaryOrderId: string | null = null;
 
@@ -92,8 +98,8 @@ export class ExecutionEngine {
             // qty === 1: The Pure Runner
             // ==========================================
             if (qty === 1) {
-                console.log(`⚡ [ExecutionEngine] - SCALE-OUT: The Pure Runner (1 contract)`);
-                console.log(`⚡ [ExecutionEngine] - ${side} Runner: Entry ~${currentPrice} | TrailingStop: ${this.SL_POINTS}pts`);
+                console.log(`⚡ [ExecutionEngine] - SCALE-OUT: The Pure Runner (1 contract) | SL: ${slDistance.toFixed(1)}pts`);
+                console.log(`⚡ [ExecutionEngine] - ${side} Runner: Entry ~${currentPrice} | TrailingStop: ${slDistance.toFixed(1)}pts`);
 
                 primaryOrderId = await this.broker.placeOrder(symbol, action, 1, {
                     orderType: 'TrailingStop',
@@ -107,11 +113,11 @@ export class ExecutionEngine {
                 console.log(`⚡ [ExecutionEngine] - SCALE-OUT: The Split (2 contracts)`);
 
                 // Order A: 1 contract with 1:1 TP + standard SL
-                console.log(`⚡ [ExecutionEngine] - Leg A: ${side} ×1 | TP: ${tp1Price} (+${this.SL_POINTS}pts 1:1) | SL: ${slPrice}`);
+                console.log(`⚡ [ExecutionEngine] - Leg A: ${side} ×1 | TP: ${tp1Price} (+${slDistance.toFixed(1)}pts 1:1) | SL: ${slPrice}`);
                 primaryOrderId = await this.broker.placeBracketOrder(symbol, action, 1, tp1Price, slPrice);
 
                 // Order B: 1 contract runner with trailing stop (no TP)
-                console.log(`⚡ [ExecutionEngine] - Leg B: ${side} ×1 | Runner TrailingStop: ${this.SL_POINTS}pts`);
+                console.log(`⚡ [ExecutionEngine] - Leg B: ${side} ×1 | Runner TrailingStop: ${slDistance.toFixed(1)}pts`);
                 await this.broker.placeOrder(symbol, action, 1, {
                     orderType: 'TrailingStop',
                     pegDifference,
@@ -129,15 +135,15 @@ export class ExecutionEngine {
                 console.log(`⚡ [ExecutionEngine] - TP1: ×${tp1Qty} @ 1:1 | TP2: ×${tp2Qty} @ 1:2 | Runner: ×${runnerQty} trailing`);
 
                 // Order A: TP1 tier — Take Profit at 1:1 RR + standard SL
-                console.log(`⚡ [ExecutionEngine] - Leg A: ${side} ×${tp1Qty} | TP: ${tp1Price} (+${this.SL_POINTS}pts 1:1) | SL: ${slPrice}`);
+                console.log(`⚡ [ExecutionEngine] - Leg A: ${side} ×${tp1Qty} | TP: ${tp1Price} (+${slDistance.toFixed(1)}pts 1:1) | SL: ${slPrice}`);
                 primaryOrderId = await this.broker.placeBracketOrder(symbol, action, tp1Qty, tp1Price, slPrice);
 
                 // Order B: TP2 tier — Take Profit at 1:2 RR + standard SL
-                console.log(`⚡ [ExecutionEngine] - Leg B: ${side} ×${tp2Qty} | TP: ${tp2Price} (+${this.SL_POINTS * 2}pts 1:2) | SL: ${slPrice}`);
+                console.log(`⚡ [ExecutionEngine] - Leg B: ${side} ×${tp2Qty} | TP: ${tp2Price} (+${(slDistance * 2).toFixed(1)}pts 1:2) | SL: ${slPrice}`);
                 await this.broker.placeBracketOrder(symbol, action, tp2Qty, tp2Price, slPrice);
 
                 // Order C: Runner tier — Trailing stop only (no TP)
-                console.log(`⚡ [ExecutionEngine] - Leg C: ${side} ×${runnerQty} | Runner TrailingStop: ${this.SL_POINTS}pts`);
+                console.log(`⚡ [ExecutionEngine] - Leg C: ${side} ×${runnerQty} | Runner TrailingStop: ${slDistance.toFixed(1)}pts`);
                 await this.broker.placeOrder(symbol, action, runnerQty, {
                     orderType: 'TrailingStop',
                     pegDifference,

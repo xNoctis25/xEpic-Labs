@@ -413,6 +413,12 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             break;
         }
 
+        case 'SYSTEM_RESET': {
+            console.log('[MoMEngine] SYSTEM_RESET — clearing DEFCON, resetting state.');
+            isDefconRed = false;
+            break;
+        }
+
         default: break;
     }
 }
@@ -439,6 +445,16 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
                 return;
             }
             if (!isHuntingActive) return;  // Warmup gate — no trades until hydration complete
+
+            // DEFCON RED gate: suppress ORB entries (mirrors SMC pipeline gate)
+            if (isDefconRed) {
+                console.log(`[MoMEngine] ORB_SETUP blocked — DEFCON RED active.`);
+                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                    source: 'MoM', regime: 'DEFCON',
+                    message: `DEFCON_RED: ORB ${setup.direction} blocked for ${setup.symbol}. Vol: ${setup.volumeRatio.toFixed(2)}×`,
+                }});
+                return;
+            }
 
             const inWilderness = MarketClock.isWilderness(setup.ts);
             const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
@@ -547,15 +563,20 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
          * IMMINENT_REVERSION — Toxic opposing flow detected by Tactical Overwatch.
          */
         case 'IMMINENT_REVERSION': {
-            const warn = data.payload as { symbol: string; volumeRatio: number; priceDeltaPct: number };
+            const warn = data.payload as { symbol: string; currentPrice: number; volumeRatio: number; priceDeltaPct: number };
             console.warn(
                 `[MoMEngine] ⚠️  IMMINENT_REVERSION | ${warn.symbol} | ` +
                 `Vol: ${warn.volumeRatio.toFixed(2)}× | Δ: ${warn.priceDeltaPct.toFixed(3)}%`
             );
-            parentPort!.postMessage({
-                type:    'trade_command',
-                payload: { action: 'TIGHTEN_STOP', reason: 'IMMINENT_REVERSION', ...warn },
-            });
+            if (activeTrade) {
+                const tightStop = activeTrade.direction === 'LONG'
+                    ? warn.currentPrice - CHOKE_DISTANCE_POINTS
+                    : warn.currentPrice + CHOKE_DISTANCE_POINTS;
+                parentPort!.postMessage({
+                    type:    'trade_command',
+                    payload: { action: 'TIGHTEN_STOP', symbol: warn.symbol, stopPrice: tightStop, direction: activeTrade.direction, reason: 'IMMINENT_REVERSION' },
+                });
+            }
             break;
         }
 
@@ -605,6 +626,7 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             oraclePort?.close();
             assistPort?.close();
             process.exit(0);
+            break;
         }
 
         default:
@@ -646,7 +668,12 @@ function onCandleComplete(candle: Candle): void {
     }
 
     // ── Analyze candle for SMC structure (used by both ATM + signal pipeline)
-    const signal: SmcSignal = smcExpert.analyze(candle);
+    // Indicators-only mode: update ATR/VWAP/FVG registry but don't consume
+    // FVGs via tap scanning. Activated when:
+    //   1. Engine is IN_TRADE (can't act on signals)
+    //   2. Hunting not yet active (warmup / race window)
+    const indicatorsOnly = !isHuntingActive || (engineState === 'IN_TRADE' && !!activeTrade);
+    const signal: SmcSignal = smcExpert.analyze(candle, indicatorsOnly);
 
     // ── Active Trade Monitor (per-candle while IN_TRADE) ─────────────────
     if (engineState === 'IN_TRADE' && activeTrade) {

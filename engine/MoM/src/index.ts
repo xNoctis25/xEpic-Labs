@@ -188,7 +188,7 @@ async function handleTradeCommand(
                 source: src, entryTs: Date.now(),
             };
 
-            await executionEngine.executeBracket(symbol, price, side, sizing.qty);
+            await executionEngine.executeBracket(symbol, price, side, sizing.qty, payload.stopPrice as number | undefined);
             if (positionMonitor) clearInterval(positionMonitor);
             let failsafeInjected = false;
             positionMonitor = setInterval(async () => {
@@ -274,6 +274,7 @@ async function boot(): Promise<void> {
     console.log('[M.o.M] ✅ Broker authenticated');
 
     await ledger.initialize(broker);
+    ledger.startBackgroundReconciliation(broker);
     console.log(`[M.o.M] ✅ Ledger synced — $${ledger.getAvailableBuyingPower().toFixed(0)} buying power`);
 
     // Initialize lifecycle state machine + EoDR schedulers
@@ -349,7 +350,12 @@ async function boot(): Promise<void> {
         const handler = (msg: any) => {
             if (msg.type === 'HYDRATION_COMPLETE') {
                 oracleWorker.off('message', handler);
-                console.log(`[M.o.M] ✅ Hydrated: ${msg.cmeCount} CME + ${msg.cfeCount} CFE candles | VIX: ${(msg.vixLevel ?? 0).toFixed(2)}`);
+                const vix = msg.vixLevel ?? 0;
+                const vixTag = vix < 15 ? '😌 Calm — low vol, complacency'
+                             : vix < 25 ? '📊 Normal — standard volatility'
+                             : vix < 30 ? '⚠️  Elevated — rising fear, wider swings'
+                             :            '🔴 Extreme Fear — hedging frenzy, expect chaos';
+                console.log(`[M.o.M] ✅ Hydrated: ${msg.cmeCount} CME + ${msg.cfeCount} CFE candles | VIX: ${vix.toFixed(2)} (${vixTag})`);
                 resolve();
             }
         };
@@ -445,6 +451,11 @@ function wireOracleHandler(): void {
             }
 
             case 'system_reset':
+                // Clear orphaned position monitors from prior trade cycles
+                if (positionMonitor) {
+                    clearInterval(positionMonitor);
+                    positionMonitor = null;
+                }
                 if (msg.reason === 'TEST_TRADE_COMPLETE' && testTradeResolve) {
                     testTradeResolve();
                     testTradeResolve = null;
@@ -459,10 +470,14 @@ function wireOracleHandler(): void {
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 function shutdown(): void {
     console.log('[M.o.M] Shutting down...');
+    ledger.stopReconciliation();
     momWorker      ?.postMessage({ type: 'shutdown' });
     assistantWorker?.postMessage({ type: 'shutdown' });
     oracleWorker   ?.postMessage({ type: 'shutdown' });
-    setTimeout(() => process.exit(0), 2000);
+    setTimeout(async () => {
+        await db.disconnect().catch(() => {});
+        process.exit(0);
+    }, 2000);
 }
 
 process.on('SIGINT',  shutdown);

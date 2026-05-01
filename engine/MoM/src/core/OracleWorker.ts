@@ -269,7 +269,34 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
-        case 'VERIFY_FLAT_RESULT': break;  // Handled by dedicated listener below
+        case 'VERIFY_FLAT_RESULT': {
+            if ((msg.from as string) !== 'OracleWorker') break;
+
+            const isFlat = msg.isFlat as boolean;
+            const symbol = msg.symbol as string;
+
+            if (isFlat) {
+                console.log(
+                    `[OracleWorker] ✅ Triple-Sweep COMPLETE — ${symbol} confirmed FLAT. ` +
+                    `System reset to 🔭 Hunting Phase.`
+                );
+            } else {
+                console.error(
+                    `[OracleWorker] ❌ Triple-Sweep PHASE 3 FAILED — ${symbol} still shows open positions! ` +
+                    `Escalating EMERGENCY_EXIT.`
+                );
+                // Escalate: blast emergency exit if broker still shows open positions
+                momPort?.postMessage({ type: 'EMERGENCY_EXIT', reason: 'TRIPLE_SWEEP_PHASE3_DISCREPANCY' });
+            }
+
+            // Reset macro radar and broadcast SYSTEM_RESET to all peers
+            defconLevel = 'GREEN';
+            const resetMsg = { type: 'SYSTEM_RESET', ts: Date.now(), confirmedFlat: isFlat };
+            momPort?.postMessage(resetMsg);
+            assistPort?.postMessage(resetMsg);
+            parentPort!.postMessage({ type: 'system_reset', symbol, ts: Date.now(), reason: lastSweepReason });
+            break;
+        }
 
         case 'subscribe': {
             break;
@@ -281,6 +308,7 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             momPort?.close();
             assistPort?.close();
             process.exit(0);
+            break;
         }
 
         default:
@@ -376,33 +404,4 @@ function onAssistantMessage(data: { type: string; [key: string]: unknown }): voi
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// parentPort extension: handle VERIFY_FLAT_RESULT from Main (Phase 3)
-// ─────────────────────────────────────────────────────────────────────────────
-parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
-    if (msg.type !== 'VERIFY_FLAT_RESULT' || (msg.from as string) !== 'OracleWorker') return;
 
-    const isFlat = msg.isFlat as boolean;
-    const symbol = msg.symbol as string;
-
-    if (isFlat) {
-        console.log(
-            `[OracleWorker] ✅ Triple-Sweep COMPLETE — ${symbol} confirmed FLAT. ` +
-            `System reset to 🔭 Hunting Phase.`
-        );
-    } else {
-        console.error(
-            `[OracleWorker] ❌ Triple-Sweep PHASE 3 FAILED — ${symbol} still shows open positions! ` +
-            `Escalating EMERGENCY_EXIT.`
-        );
-        // Escalate: blast emergency exit if broker still shows open positions
-        momPort?.postMessage({ type: 'EMERGENCY_EXIT', reason: 'TRIPLE_SWEEP_PHASE3_DISCREPANCY' });
-    }
-
-    // Reset macro radar and broadcast SYSTEM_RESET to all peers
-    defconLevel = 'GREEN';
-    const resetMsg = { type: 'SYSTEM_RESET', ts: Date.now(), confirmedFlat: isFlat };
-    momPort?.postMessage(resetMsg);
-    assistPort?.postMessage(resetMsg);
-    parentPort!.postMessage({ type: 'system_reset', symbol, ts: Date.now(), reason: lastSweepReason });
-});
