@@ -529,23 +529,47 @@ function updateMarketClock() {
     }
 
     // 4. Classify active session & killzone
-    let sessionText  = 'Session: Asia';
+    // Matches engine MarketClock killzones:
+    //   London:  02:15–05:00 ET
+    //   NY AM:   09:30–11:30 ET
+    //   NY PM:   13:30–15:45 ET
+    //   Wilderness = market open (09:30–16:00) but outside all killzones
+    let sessionText  = '';
     let sessionColor = 'green';
-    let kzText       = 'Killzone: Inactive';
+    let kzText       = '';
     let kzColor      = 'gray';
 
-    if (totalMinutes >= 120 && totalMinutes < 300) {
-        sessionText  = 'Session: London'; sessionColor = 'green';
-        kzText  = totalMinutes >= 135 ? 'Killzone: London' : 'Killzone: Pre-London';
-        kzColor = totalMinutes >= 135 ? 'green' : 'gray';
-    } else if (totalMinutes >= 570 && totalMinutes < 720) {
-        sessionText  = 'Session: New York'; sessionColor = 'green';
-        kzText  = (totalMinutes >= 585 && totalMinutes < 690) ? 'Killzone: NY AM' : 'Killzone: Outside';
-        kzColor = (totalMinutes >= 585 && totalMinutes < 690) ? 'green' : 'gray';
-    } else if (totalMinutes >= 810 && totalMinutes < 960) {
-        sessionText  = 'Session: New York'; sessionColor = 'green';
-        kzText  = totalMinutes < 945 ? 'Killzone: NY PM' : 'Killzone: Outside';
-        kzColor = totalMinutes < 945 ? 'green' : 'gray';
+    // Session classification — CME futures (23hr trading day)
+    // Asia:     18:00–02:00 ET (CME Globex open)
+    // London:   02:00–08:00 ET
+    // New York: 08:00–17:00 ET
+    // 17:00–18:00 is already caught above as "Closed: CME Maint"
+    if (totalMinutes >= 1080) {
+        sessionText = 'Session: Asia';
+    } else if (totalMinutes >= 0 && totalMinutes < 120) {
+        sessionText = 'Session: Asia';
+    } else if (totalMinutes >= 120 && totalMinutes < 480) {
+        sessionText = 'Session: London';
+    } else if (totalMinutes >= 480 && totalMinutes < 1020) {
+        sessionText = 'Session: New York';
+    }
+
+    // Killzone classification (matches MarketClock exactly)
+    const isLondonKZ = totalMinutes >= 135 && totalMinutes < 300;   // 02:15–05:00
+    const isNYAM     = totalMinutes >= 570 && totalMinutes < 690;   // 09:30–11:30
+    const isNYPM     = totalMinutes >= 810 && totalMinutes < 945;   // 13:30–15:45
+    const isMarketOpen = totalMinutes >= 570 && totalMinutes < 960; // 09:30–16:00
+
+    if (isLondonKZ) {
+        kzText = 'Killzone: London'; kzColor = 'green';
+    } else if (isNYAM) {
+        kzText = 'Killzone: NY AM'; kzColor = 'green';
+    } else if (isNYPM) {
+        kzText = 'Killzone: NY PM'; kzColor = 'green';
+    } else if (isMarketOpen) {
+        kzText = 'Killzone: Wilderness'; kzColor = 'yellow';
+    } else {
+        kzText = 'Killzone: Inactive'; kzColor = 'gray';
     }
 
     uiSessionLabel.textContent  = sessionText;
