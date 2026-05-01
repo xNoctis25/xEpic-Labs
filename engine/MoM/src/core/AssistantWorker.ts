@@ -55,15 +55,18 @@ export interface OrbSetup {
 // ── Scanner constants ────────────────────────────────────────────────────────
 const BUCKET_MS            = 60_000;    // 1-minute buckets for consolidation box
 const BOX_LOOKBACK_BUCKETS = 5;         // build box from last N complete 1-min buckets
-const VOLUME_SPIKE_RATIO   = 1.5;       // anomaly threshold: 1.5× rolling avg
+const VOLUME_SPIKE_RATIO   = 1.5;       // anomaly threshold: 1.5× rolling avg bucket volume
 const ROLLING_VOL_BUCKETS  = 20;        // rolling average window (buckets)
-const BOX_TIGHT_THRESHOLD  = 0.0015;    // max box range / midpoint (0.15%) to be "tight"
+const ATR_ORB_PERIOD       = 14;        // ATR lookback for dynamic box threshold
+const BOX_ATR_MULT         = 0.5;       // box must be tighter than ATR * 0.5
 
 // ── Per-symbol ORB state ─────────────────────────────────────────────────────
 interface OrbSymbolState {
-    currentBucket:  OhlcvBucket | null;
+    currentBucket:   OhlcvBucket | null;
     completeBuckets: OhlcvBucket[];     // ring buffer of complete buckets
     rollingVolumes:  number[];           // per-bucket total volumes for avg calc
+    atrValues:       number[];           // rolling TR values for ATR calculation
+    currentATR:      number;             // current 14-period ATR
     isWarmedUp?:     boolean;
 }
 
@@ -71,7 +74,10 @@ const orbState = new Map<string, OrbSymbolState>();
 
 function getOrbState(symbol: string): OrbSymbolState {
     if (!orbState.has(symbol)) {
-        orbState.set(symbol, { currentBucket: null, completeBuckets: [], rollingVolumes: [] });
+        orbState.set(symbol, {
+            currentBucket: null, completeBuckets: [], rollingVolumes: [],
+            atrValues: [], currentATR: 0,
+        });
     }
     return orbState.get(symbol)!;
 }
@@ -85,6 +91,9 @@ function rollingAvgVolume(volumes: number[]): number {
 /**
  * Called for every CME tick. Aggregates into 1-minute OHLCV buckets,
  * calculates the consolidation box, and checks for volume-anomaly breakouts.
+ *
+ * KEY FIX: Volume ratio compares CURRENT BUCKET accumulated volume vs
+ * rolling average bucket volume (not single tick volume).
  */
 function processOrbTick(tick: EnrichedTick): void {
     const sym   = tick.symbol;
@@ -94,9 +103,25 @@ function processOrbTick(tick: EnrichedTick): void {
     // ── Open or advance the current 1-min bucket ─────────────────────────────
     if (!state.currentBucket || now - state.currentBucket.start >= BUCKET_MS) {
         if (state.currentBucket) {
+            const closedBucket = state.currentBucket;
+
             // Close the bucket
-            state.completeBuckets.push(state.currentBucket);
-            state.rollingVolumes.push(state.currentBucket.volume);
+            state.completeBuckets.push(closedBucket);
+            state.rollingVolumes.push(closedBucket.volume);
+
+            // Update ATR from completed buckets
+            const cLen = state.completeBuckets.length;
+            if (cLen >= 2) {
+                const prev = state.completeBuckets[cLen - 2];
+                const tr = Math.max(
+                    closedBucket.high - closedBucket.low,
+                    Math.abs(closedBucket.high - prev.close),
+                    Math.abs(closedBucket.low - prev.close),
+                );
+                state.atrValues.push(tr);
+                if (state.atrValues.length > ATR_ORB_PERIOD) state.atrValues.shift();
+                state.currentATR = state.atrValues.reduce((a, b) => a + b, 0) / state.atrValues.length;
+            }
 
             if (state.rollingVolumes.length === ROLLING_VOL_BUCKETS && !state.isWarmedUp) {
                 state.isWarmedUp = true;
@@ -134,19 +159,21 @@ function processOrbTick(tick: EnrichedTick): void {
     const boxBuckets = state.completeBuckets.slice(-BOX_LOOKBACK_BUCKETS);
     const boxHigh    = Math.max(...boxBuckets.map(x => x.high));
     const boxLow     = Math.min(...boxBuckets.map(x => x.low));
-    const midpoint   = (boxHigh + boxLow) / 2;
-    const boxRange   = (boxHigh - boxLow) / midpoint;
+    const boxRange   = boxHigh - boxLow;  // absolute points
 
-    // Only scan "tight" consolidation ranges
-    if (boxRange > BOX_TIGHT_THRESHOLD) return;
+    // ── ATR-dynamic box tightness check ───────────────────────────────────────
+    // Box must be tighter than ATR * 0.5 (adapts to current volatility)
+    const boxThreshold = state.currentATR > 0 ? state.currentATR * BOX_ATR_MULT : boxRange + 1;
+    if (boxRange > boxThreshold) return;
 
     if (state.rollingVolumes.length < ROLLING_VOL_BUCKETS) return;
 
-    // ── Volume anomaly check ──────────────────────────────────────────────────
-    const avgVol   = rollingAvgVolume(state.rollingVolumes);
+    // ── Volume anomaly check (BUCKET volume, not single tick) ─────────────────
+    const avgVol = rollingAvgVolume(state.rollingVolumes);
     if (avgVol === 0) return;
 
-    const volRatio = tick.volume / avgVol;
+    // Compare the CURRENT BUCKET's accumulated volume against the rolling avg
+    const volRatio = b.volume / avgVol;
     if (volRatio < VOLUME_SPIKE_RATIO) return;
 
     // ── Breakout direction ────────────────────────────────────────────────────
@@ -160,7 +187,7 @@ function processOrbTick(tick: EnrichedTick): void {
         symbol:         sym,
         dataset:        tick.dataset,
         breakoutPrice:  tick.price,
-        breakoutVolume: tick.volume,
+        breakoutVolume: b.volume,
         direction,
         boxHigh,
         boxLow,
@@ -170,7 +197,8 @@ function processOrbTick(tick: EnrichedTick): void {
 
     console.log(
         `[AssistantWorker] 🔭 ORB_SETUP detected | ${sym} ${direction} | ` +
-        `Vol ratio: ${volRatio.toFixed(2)}× | Box: [${boxLow.toFixed(2)}, ${boxHigh.toFixed(2)}] | ` +
+        `Bucket Vol: ${b.volume} (${volRatio.toFixed(2)}× avg) | ` +
+        `Box: [${boxLow.toFixed(2)}, ${boxHigh.toFixed(2)}] (range: ${boxRange.toFixed(2)}, ATR: ${state.currentATR.toFixed(2)}) | ` +
         `Breakout @ ${tick.price.toFixed(2)}`
     );
 
@@ -384,7 +412,7 @@ function onMomMessage(msg: { type: string; [key: string]: unknown }): void {
         case 'SWEEP_PHASE_1_COMPLETE': {
             const sweep = msg.payload as { symbol: string; reason: string; ts: number };
             lastSweepReason = (msg.payload as any).reason || 'UNKNOWN';
-            console.log(`[AssistantWorker] 🧹 Triple-Sweep PHASE 2 — Verifying flat state for ${sweep.symbol}…`);
+            console.log(`[M.o.M] 🧹 Triple-Sweep P2 — verifying ${sweep.symbol}...`);
 
             // Request a position check from Main (Core 4) which holds the broker
             parentPort!.postMessage({
@@ -436,7 +464,6 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             oraclePort.on('message', onOracleMessage);
 
             parentPort!.postMessage({ type: 'ready', worker: 'AssistantWorker' });
-            console.log('[AssistantWorker] Core 2 online — ORB Hunter + Tactical Overwatch + Triple-Sweep wired.');
             break;
         }
 

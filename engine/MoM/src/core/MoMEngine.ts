@@ -7,7 +7,7 @@ import { ContractBuilder } from '../utils/ContractBuilder';
 
 import { MarketClock } from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
-import { SMCExpert } from '../experts/SMCExpert';
+import { SMCExpert, SmcSignal } from '../experts/SMCExpert';
 import { TradovateBroker } from '../brokers/TradovateBroker';
 import { OracleService } from '../services/OracleService';
 import { SessionLedger } from '../services/SessionLedger';
@@ -390,13 +390,13 @@ export class MoMEngine {
         // Active Trade Monitor — Forward candle to monitor while in-trade
         // ==========================================
         if (this.activePosition && this.monitor.isMonitoring()) {
-            await this.monitor.onCandleComplete(candle, signal);
+            await this.monitor.onCandleComplete(candle, signal.action);
             // If the monitor triggered a flatten, activePosition will be null now
             if (!this.activePosition) return;
         }
 
         // Only process BUY/SELL signals — skip HOLD
-        if (signal === 'HOLD') return;
+        if (signal.action === 'HOLD') return;
 
         // Already in a position — do not open a second one
         if (this.activePosition) return;
@@ -425,7 +425,7 @@ export class MoMEngine {
             console.log(`🔮 [MoMEngine] - Signal IGNORED: News blackout active (±15 min window).`);
             // Log rejection to SMCExpert for EoDR
             this.smcExpert.dailyRejectedSetups.push(
-                `${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}: ${signal === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected (Oracle News Blockout).`
+                `${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' })}: ${signal.action === 'BUY' ? 'Bullish' : 'Bearish'} FVG rejected (Oracle News Blockout).`
             );
             return;
         }
@@ -462,33 +462,33 @@ export class MoMEngine {
         // ==========================================
         const modeLabel = this.currentPhase === 'EVALUATION' ? '📝 PAPER' : '🔥 LIVE';
         const oracleLabel = config.USE_ORACLE ? 'Oracle ✅' : 'Oracle ⏭️';
-        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: ${oracleLabel} Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) Phase ✅ → Executing ${signal}`);
+        console.log(`✅ [MoMEngine] - Gates passed [${modeLabel}]: ${oracleLabel} Sizer ✅ (${sizing.symbolRoot} × ${sizing.qty}) Phase ✅ → Executing ${signal.action} (conf: ${signal.confidence}/8)`);
 
         // Reserve margin from the ledger
         this.ledger.reserveMargin(totalMarginRequired);
 
         // Fire the bracket order via the ExecutionEngine
-        this.executionEngine.executeBracket(tradeSymbol, candle.close, signal, sizing.qty)
+        this.executionEngine.executeBracket(tradeSymbol, candle.close, signal.action, sizing.qty)
             .then((orderId) => {
                 if (orderId) {
                     this.activePosition = {
-                        side: signal,
+                        side: signal.action as 'BUY' | 'SELL',
                         entryPrice: candle.close,
                         margin: totalMarginRequired,
                         riskBudget: sizing.riskBudget,
                         qty: sizing.qty,
                         timestamp: Date.now(),
                     };
-                    console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
+                    console.log(`📊 [MoMEngine] - Position OPEN [${modeLabel}]: ${signal.action} @ ${candle.close} | ${sizing.symbolRoot} × ${sizing.qty} | Margin: $${totalMarginRequired} | Order: ${orderId}`);
 
                     // Activate the Active Trade Monitor
-                    const hardStopPrice = signal === 'BUY'
+                    const hardStopPrice = signal.action === 'BUY'
                         ? candle.close - this.SL_POINTS
                         : candle.close + this.SL_POINTS;
 
                     this.monitor.start({
                         symbol: tradeSymbol,
-                        side: signal,
+                        side: signal.action as 'BUY' | 'SELL',
                         entryPrice: candle.close,
                         hardStopPrice,
                         qty: sizing.qty,

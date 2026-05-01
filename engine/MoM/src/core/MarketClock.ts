@@ -37,14 +37,15 @@ export class MarketClock {
 
     /**
      * Returns true if the given timestamp falls within the AM Killzone (Equities Open).
-     * AM Killzone: 09:45 – 11:30 ET (inclusive)
-     * Features a 15-minute "Silver Bullet" buffer to avoid the 9:30 AM opening liquidity sweep.
+     * AM Killzone: 09:30 – 11:30 ET (inclusive)
+     * The 9:30 AM open is the highest-probability window — NO blanket buffer.
+     * Use isOpeningDrive() for special Judas Swing confirmation during the first 5 minutes.
      *
      * @param timestampMs - UNIX epoch in milliseconds
      */
     public static isAMKillzone(timestampMs: number): boolean {
         const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
-        return totalMinutes >= 585 && totalMinutes <= 690; // 09:45 (585) – 11:30 (690)
+        return totalMinutes >= 570 && totalMinutes <= 690; // 09:30 (570) – 11:30 (690)
     }
 
     /**
@@ -69,13 +70,24 @@ export class MarketClock {
         // London Killzone: 02:15 ET (135) to 05:00 ET (300) -> 15 min buffer
         const isLondon = totalMinutes >= 135 && totalMinutes < 300;
 
-        // AM Killzone: 09:45 ET (585) to 11:30 ET (690) -> 15 min buffer
-        const isAM = totalMinutes >= 585 && totalMinutes < 690;
+        // AM Killzone: 09:30 ET (570) to 11:30 ET (690) -> NO buffer (open is prime time)
+        const isAM = totalMinutes >= 570 && totalMinutes < 690;
 
         // PM Killzone: 13:30 ET (810) to 15:45 ET (945) -> No buffer needed, early cutoff
         const isPM = totalMinutes >= 810 && totalMinutes < 945;
 
         return isLondon || isAM || isPM;
+    }
+
+    /**
+     * Returns true during the first 5 minutes of the US open (09:30 – 09:35 ET).
+     * During this window, MomWorker should apply Judas Swing confirmation:
+     * Wait for the 2nd 1-min candle to close in the same direction as the 1st
+     * before firing a trade, confirming the opening drive is real.
+     */
+    public static isOpeningDrive(timestampMs: number): boolean {
+        const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
+        return totalMinutes >= 570 && totalMinutes < 575; // 09:30 – 09:35 ET
     }
 
     /**

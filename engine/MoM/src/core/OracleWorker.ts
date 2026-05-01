@@ -25,8 +25,10 @@ if (!parentPort) throw new Error('[OracleWorker] Must be run as a worker thread.
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const WSS_PORT          = 8080;
-const VIX_RED_THRESHOLD = 20.0;      // VIX level that triggers DefconLevel RED
+const VIX_RED_THRESHOLD = 25.0;      // VIX level that triggers DefconLevel RED (raised from 20)
 const VWAP_WINDOW_MS    = 15 * 60_000;  // 15-minute rolling time window for VWAP
+const VWAP_EMA_ALPHA    = 0.05;      // EMA decay — ~20-tick half-life (~2 min reactivity)
+const VWAP_DEAD_ZONE    = 0.5;       // Slope within ±0.5 is treated as neutral (allows trade)
 
 // ─── DefconLevel ─────────────────────────────────────────────────────────────
 type DefconLevel = 'GREEN' | 'RED';
@@ -44,7 +46,7 @@ const feed = new DatabentoLiveService();
 interface VwapSample { price: number; volume: number; ts: number; }
 const cmeVwapWindow: VwapSample[] = [];   // rolling window for ES/MES VWAP slope
 let   lastVwap = 0;
-let   vwapSlope = 0;          // positive = bullish bias, negative = bearish bias
+let   vwapSlope = 0;          // EMA-smoothed VWAP slope (positive = bullish, negative = bearish)
 let   lastVixPrice = 0;       // latest VX tick price (proxy for VIX level)
 
 /** Calculate VWAP from a rolling window of ticks. */
@@ -78,7 +80,9 @@ function updateMacroRadar(tick: EnrichedTick): void {
 
     const currentVwap = calcVwap(cmeVwapWindow);
     if (lastVwap !== 0) {
-        vwapSlope = currentVwap - lastVwap;   // positive = bullish macro bias
+        // EMA-weighted slope — reacts within 2 minutes instead of dragging 15 min of stale data
+        const rawSlope = currentVwap - lastVwap;
+        vwapSlope = VWAP_EMA_ALPHA * rawSlope + (1 - VWAP_EMA_ALPHA) * vwapSlope;
     }
     lastVwap = currentVwap;
 
@@ -112,9 +116,10 @@ function broadcastDefcon(level: DefconLevel, reason: string): void {
  *   3. Main/Core 4 (parentPort — for WebSocket delivery to dashboard)
  */
 function onTick(tick: EnrichedTick): void {
-    if (defconLevel === 'RED') return;   // HALT: suppress data flow to MomWorker
+    // ALWAYS multicast ticks to keep all workers' indicators primed.
+    // DEFCON RED only suppresses execution (via MomWorker handshake), NOT data flow.
 
-    // 1. Signal core — fire immediately
+    // 1. Signal core — fire immediately (MomWorker uses DEFCON for handshake gating)
     momPort?.postMessage({ type: 'tick', payload: tick });
 
     // 2. Assistant — for context awareness
@@ -223,42 +228,44 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             momPort    = msg.momPort    as MessagePort;
             assistPort = msg.assistPort as MessagePort;
 
-            // Wire INBOUND listeners on both peer ports
             momPort   .on('message', onMomMessage);
             assistPort.on('message', onAssistantMessage);
 
             parentPort!.postMessage({ type: 'ready', worker: 'OracleWorker' });
-            console.log('[OracleWorker] Core 3 online — Handshake + Triple-Sweep wired.');
 
             startWssReceptionist();
-            feed.start(
-                onTick,
-                (payload) => {
-                    const msg = { type: 'HYDRATION', payload };
-                    momPort?.postMessage(msg);
-                    assistPort?.postMessage(msg);
-                    parentPort!.postMessage(msg);
 
-                    // Self-process for Macro Radar
-                    let cmeFed = 0, cfeFed = 0;
-                    for (const c of payload.cmeCandles) {
-                        updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
-                        cmeFed++;
-                    }
-                    for (const c of payload.cfeCandles) {
-                        updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
-                        cfeFed++;
-                    }
-                    console.log(
-                        `[OracleWorker] 💧 Hydrated: ${cmeFed} CME candles (VWAP primed) | ` +
-                        `${cfeFed} CFE candles (VIX: ${lastVixPrice.toFixed(2)}) | ` +
-                        `15m VWAP slope: ${vwapSlope.toFixed(4)}`
-                    );
-                },
-                (label, status) => {
-                    parentPort!.postMessage({ type: 'feed_status', label, status });
+            // Phase 1: Stream ticks immediately (no hydration — test trade first)
+            feed.start(onTick, (label, status) => {
+                parentPort!.postMessage({ type: 'feed_status', label, status });
+            });
+            break;
+        }
+
+        // Phase 2: Main triggers hydration AFTER successful test trade
+        case 'TRIGGER_HYDRATION': {
+            feed.hydrateGap().then((payload) => {
+                const hydMsg = { type: 'HYDRATION', payload };
+                momPort?.postMessage(hydMsg);
+                assistPort?.postMessage(hydMsg);
+
+                for (const c of payload.cmeCandles) {
+                    updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
                 }
-            );
+                for (const c of payload.cfeCandles) {
+                    updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
+                }
+
+                parentPort!.postMessage({
+                    type: 'HYDRATION_COMPLETE',
+                    cmeCount: payload.cmeCandles.length,
+                    cfeCount: payload.cfeCandles.length,
+                    vixLevel: lastVixPrice,
+                });
+            }).catch((err: Error) => {
+                console.error(`[M.o.M] Hydration failed: ${err.message}`);
+                parentPort!.postMessage({ type: 'HYDRATION_COMPLETE', cmeCount: 0, cfeCount: 0, vixLevel: 0 });
+            });
             break;
         }
 
@@ -299,11 +306,13 @@ function onMomMessage(data: { type: string; [key: string]: unknown }): void {
             const direction = data.direction as string;
 
             // Determine clearance based on current oracle state
-            const isVixElevated = lastVixPrice > 0 && lastVixPrice >= 20.0;
-            const isBiasAligned = (
-                (direction === 'LONG'  && vwapSlope >= 0) ||
-                (direction === 'SHORT' && vwapSlope <= 0) ||
-                vwapSlope === 0  // no bias → neutral → allow
+            const isVixElevated = lastVixPrice > 0 && lastVixPrice >= VIX_RED_THRESHOLD;
+
+            // Dead zone: slope within ±VWAP_DEAD_ZONE is treated as neutral → allow
+            const isNeutral = Math.abs(vwapSlope) <= VWAP_DEAD_ZONE;
+            const isBiasAligned = isNeutral || (
+                (direction === 'LONG'  && vwapSlope > 0) ||
+                (direction === 'SHORT' && vwapSlope < 0)
             );
 
             let light: 'GREEN_LIGHT' | 'RED_LIGHT';

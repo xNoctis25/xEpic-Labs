@@ -93,7 +93,7 @@ export async function hydrate(
                     volume:    Number(rec.volume),
                     timestamp: tsMs,
                     dataset,
-                    symbol:    symbols[0],  // primary symbol for this feed
+                    symbol:    symbols[0],  // Each feed is queried separately per dataset — symbols[0] is correct
                 });
             } catch {
                 // skip malformed JSONL lines

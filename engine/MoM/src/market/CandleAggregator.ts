@@ -33,4 +33,15 @@ export class CandleAggregator {
             this.currentCandle.volume += tick.volume;
         }
     }
+
+    /**
+     * Emits the current incomplete candle (if any) without waiting for the next tick.
+     * Useful during EOD flatten, low-volume gaps, or forced indicator updates.
+     * The candle is NOT cleared — it continues accumulating if more ticks arrive.
+     */
+    public flush(): void {
+        if (this.currentCandle) {
+            this.onCandleComplete(this.currentCandle);
+        }
+    }
 }

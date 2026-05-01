@@ -1,6 +1,6 @@
 import { Candle } from '../market/CandleAggregator';
 import { BacktestResult, TradeRecord } from './types';
-import { SMCExpert } from '../experts/SMCExpert';
+import { SMCExpert, SmcSignal } from '../experts/SMCExpert';
 import { MarketClock } from '../core/MarketClock';
 import { PositionSizer, SizingResult } from '../core/PositionSizer';
 import { config } from '../config/env';
@@ -299,7 +299,7 @@ export class BacktestEngine {
             // ENTRY LOGIC — Silver Bullet + PositionSizer
             // ==========================================
             if (!activePosition && session === 'AM_KILLZONE' && candle.timestamp >= cooldownUntil) {
-                if (signal === 'BUY' || signal === 'SELL') {
+                if (signal.action === 'BUY' || signal.action === 'SELL') {
                     // Call PositionSizer with current equity
                     const sizing = PositionSizer.calculate(equity, SL_POINTS, config.INDICES);
 
@@ -321,7 +321,7 @@ export class BacktestEngine {
                         ` | Buying ${sizing.qty} ${sizing.symbolRoot}`
                     );
 
-                    const isLong = signal === 'BUY';
+                    const isLong = signal.action === 'BUY';
                     const tiers = this.buildTiers(candle.close, isLong, sizing.qty, SL_POINTS);
 
                     // Log tier allocation
@@ -330,7 +330,7 @@ export class BacktestEngine {
                         : sizing.qty === 2
                             ? 'The Split'
                             : `Institutional (TP1×${tiers[0].qty} + TP2×${tiers[1].qty} + Runner×${tiers[2].qty})`;
-                    console.log(`[Backtest] ${signal} @ ${candle.close} | ${tierLabel}`);
+                    console.log(`[Backtest] ${signal.action} @ ${candle.close} | ${tierLabel} | Conf: ${signal.confidence}/8`);
 
                     activePosition = {
                         entryPrice: candle.close,

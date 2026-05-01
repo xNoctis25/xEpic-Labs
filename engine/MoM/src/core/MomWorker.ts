@@ -21,7 +21,7 @@
 import { parentPort, MessagePort } from 'worker_threads';
 import { MarketClock }             from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
-import { SMCExpert }               from '../experts/SMCExpert';
+import { SMCExpert, SmcSignal }    from '../experts/SMCExpert';
 import { ContractBuilder }         from '../utils/ContractBuilder';
 import { config }                  from '../config/env';
 
@@ -34,7 +34,7 @@ let assistPort: MessagePort | null = null;
 // ─── Engine state ────────────────────────────────────────────────────────────
 type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
-let isTestingTrade = false;
+let isTestingTrade = true;  // Armed immediately — test trade fires on first tick (before hydration)
 
 // ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
 const smcExpert  = new SMCExpert();
@@ -47,6 +47,10 @@ const SL_NORMAL_POINTS      = 20;         // standard stop-loss distance (pts)
 const SL_WILDERNESS_PCT     = 0.50;       // cut SL by 50% in Wilderness
 const BE_TRIGGER_POINTS     = 5;          // trail to BE once profit hits this many pts
 const WILDERNESS_SCRATCH_MS = 3 * 60_000; // auto-scratch after 3 min if no displacement
+const MIN_SMC_CONFIDENCE    = 5;          // minimum confluence score (out of 8) to take a trade
+
+// DEFCON state (received from OracleWorker)
+let isDefconRed = false;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ORACLE HANDSHAKE — REQUEST_TAKEOFF / GREEN_LIGHT
@@ -172,15 +176,19 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
         // ── Live tick processing ───────────────────────────────────────────────
         case 'tick': {
             const tick = data.payload as Tick;
+            const enriched = tick as any;
+
+            // CRITICAL: Skip CFE/VX ticks — only process CME (ES/MES)
+            if (enriched.dataset && enriched.dataset !== 'GLBX.MDP3') break;
 
             if (isTestingTrade && engineState === 'IDLE') {
                 isTestingTrade = false;
                 engineState = 'IN_TRADE';
                 const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
 
-                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: (tick as any).price, stopPrice: (tick as any).price - 100, entryTs: (tick as any).timestamp, isWilderness: false, beTriggered: false };
+                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: enriched.price, stopPrice: enriched.price - 100, entryTs: enriched.timestamp, isWilderness: false, beTriggered: false };
 
-                parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol: tradeSymbol, price: (tick as any).price } });
+                parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol: tradeSymbol, price: enriched.price } });
 
                 setTimeout(() => {
                     parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', symbol: tradeSymbol, reason: 'TEST_TRADE_COMPLETE' } });
@@ -218,8 +226,12 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
         }
 
         case 'defcon_change': {
-            if ((data.level as string) === 'RED') {
-                console.warn('[MomWorker] DefconLevel RED — halting new entries.');
+            const level = data.level as string;
+            isDefconRed = level === 'RED';
+            if (isDefconRed) {
+                console.warn('[MomWorker] DefconLevel RED — halting new entries (data flow continues).');
+            } else {
+                console.log('[MomWorker] DefconLevel GREEN — entries re-enabled.');
             }
             break;
         }
@@ -230,12 +242,6 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             for (const c of cmeCandles) {
                 smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp });
                 aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
-            }
-            if (cmeCandles.length < 15) {
-                isTestingTrade = true;
-                console.log('[MomWorker] 🧊 Cold boot detected. Arming Test Trade...');
-            } else {
-                console.log(`[MomWorker] 💧 Hydrated: ${cmeCandles.length} CME candles — SMC expert + aggregator primed.`);
             }
             break;
         }
@@ -398,7 +404,6 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             assistPort.on('message', (m) => void onAssistantMessage(m));
 
             parentPort!.postMessage({ type: 'ready', worker: 'MomWorker' });
-            console.log('[MomWorker] Core 1 online — Handshake + Wilderness + Triple-Sweep wired.');
             break;
         }
 
@@ -450,18 +455,38 @@ function onCandleComplete(candle: Candle): void {
  * Mirrors the ORB_SETUP flow so both signal sources share the same execution path.
  */
 async function processSmcSignal(candle: Candle): Promise<void> {
-    const signal = smcExpert.analyze(candle);
-    if (signal === 'HOLD') return;
+    const signal: SmcSignal = smcExpert.analyze(candle);
+    if (signal.action === 'HOLD') return;
     if (engineState !== 'IDLE')  return;
 
-    const direction: 'LONG' | 'SHORT' = signal === 'BUY' ? 'LONG' : 'SHORT';
+    // DEFCON RED gate: indicators stay primed but no new entries
+    if (isDefconRed) {
+        console.log(`[MomWorker] SMC ${signal.action} blocked — DEFCON RED active.`);
+        return;
+    }
+
+    // Minimum confidence gate — only high-probability setups
+    if (signal.confidence < MIN_SMC_CONFIDENCE) {
+        console.log(
+            `[MomWorker] SMC ${signal.action} below confidence threshold ` +
+            `(${signal.confidence}/${MIN_SMC_CONFIDENCE}). Skipping. Reason: ${signal.reason}`
+        );
+        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+            source: 'MoM',
+            regime: 'Killzone',
+            message: `LOW_CONF: ${signal.reason} — conf=${signal.confidence} (min=${MIN_SMC_CONFIDENCE})`,
+        }});
+        return;
+    }
+
+    const direction: 'LONG' | 'SHORT' = signal.action === 'BUY' ? 'LONG' : 'SHORT';
     const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
     const inWilderness = MarketClock.isWilderness(candle.timestamp);
     const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
 
     console.log(
         `[MomWorker] 📊 SMC Signal | ${tradeSymbol} ${direction} | ` +
-        `Zone: ${zoneLabel} | C: ${candle.close}`
+        `Zone: ${zoneLabel} | C: ${candle.close} | Confidence: ${signal.confidence}/8 | ${signal.reason}`
     );
 
     // ── ORACLE HANDSHAKE ──────────────────────────────────────────────────────
@@ -480,14 +505,16 @@ async function processSmcSignal(candle: Candle): Promise<void> {
 
     console.log(`[MomWorker] 🟢 GREEN_LIGHT — executing ${tradeSymbol} ${direction}.`);
 
-    // ── WILDERNESS SHORT LEASH ────────────────────────────────────────────────
-    let slDistance = SL_NORMAL_POINTS;
+    // ── DYNAMIC STOP LOSS (ATR-based with Wilderness override) ────────────────
+    const atr = smcExpert.getATR();
+    let slDistance = atr > 0 ? Math.max(5, Math.ceil(atr * 1.5)) : SL_NORMAL_POINTS;
+
     if (inWilderness) {
-        slDistance = Math.ceil(SL_NORMAL_POINTS * SL_WILDERNESS_PCT);
+        slDistance = Math.ceil(slDistance * SL_WILDERNESS_PCT);
         parentPort!.postMessage({ type: 'TELEMETRY', payload: {
             source:  'MoM',
             regime:  'Wilderness',
-            message: `SMC Short Leash activated for ${tradeSymbol} ${direction}: SL → ${slDistance} pts.`,
+            message: `SMC Short Leash activated for ${tradeSymbol} ${direction}: SL → ${slDistance} pts (ATR: ${atr.toFixed(2)}).`,
         }});
     }
 
@@ -538,6 +565,7 @@ async function processSmcSignal(candle: Candle): Promise<void> {
             stopPrice,
             isWilderness: inWilderness,
             source:      'SMC',
+            confidence:  signal.confidence,
         },
     });
 }

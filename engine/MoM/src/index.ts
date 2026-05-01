@@ -1,20 +1,10 @@
 /**
  * index.ts — Master Thread (Core 4)
  * ─────────────────────────────────────────────────────────────────────────────
- *  4-Core Distributed Architecture
- * ─────────────────────────────────────────────────────────────────────────────
- *
- *  Core 1 │ MomWorker       → SMC + ORB signal evaluation + trade execution
+ *  Core 1 │ MomWorker       → SMC signal evaluation + trade execution
  *  Core 2 │ AssistantWorker → ORB Hunter + Tactical Overwatch + Triple-Sweep P2
- *  Core 3 │ OracleWorker    → Databento dual-feed + Macro Radar + WSS Receptionist
+ *  Core 3 │ OracleWorker    → Databento dual-feed + Macro Radar + WSS
  *  Core 4 │ THIS FILE       → Boot, broker I/O, ExecutionEngine, lifecycle
- *
- *  IPC Mesh (Zero-Latency Direct Ports via MessageChannel):
- *    OracleWorker ──(oracleMom)──▶ MomWorker
- *    OracleWorker ──(oracleAssist)▶ AssistantWorker
- *    MomWorker    ──(momAssist)──▶  AssistantWorker
- *
- *  All trade_command messages travel parentPort → Core 4 → Broker.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -31,58 +21,51 @@ import { config }                           from './config/env';
 
 dotenv.config();
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Banner
-// ─────────────────────────────────────────────────────────────────────────────
+const maxContracts = config.MAX_CONTRACTS;
+const playbookLabel = maxContracts > 0
+    ? `Prop Firm (max ${maxContracts} contracts)`
+    : 'Cash Account';
+
 console.log('==========================================');
-console.log('  M.o.M (Master of Masters) Quant Engine  ');
-console.log('  Version 5.0 - 4-Core Worker Architecture');
-console.log(`  Risk: ${config.RISK}%`);
+console.log('  M.o.M — Institutional Quant Engine v5.1');
+console.log(`  Risk: ${config.RISK}% | Mode: ${config.INDICES}`);
+console.log(`  Playbook: ${playbookLabel}`);
 console.log('==========================================\n');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Global Services (live in Main thread only — no cross-thread sharing)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Global Services ─────────────────────────────────────────────────────────
 const broker          = new TradovateBroker();
 const db              = new NeonDatabase();
 const executionEngine = new ExecutionEngine(broker, db);
 const ledger          = new SessionLedger();
 let positionMonitor: NodeJS.Timeout | null = null;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Worker handles (declared at module scope for shutdown access)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Worker handles ──────────────────────────────────────────────────────────
 let momWorker:       Worker;
 let assistantWorker: Worker;
 let oracleWorker:    Worker;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper — resolve compiled worker path
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Resolve worker path ─────────────────────────────────────────────────────
 const isTsNode = __filename.endsWith('.ts');
-
 function workerPath(name: string): string {
     const ext = isTsNode ? '.ts' : '.js';
     return path.join(__dirname, 'core', `${name}${ext}`);
 }
-
 const workerOpts = isTsNode ? { execArgv: ['-r', 'ts-node/register'] } : {};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Worker Error / Exit Handlers
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Test trade lifecycle ────────────────────────────────────────────────────
+let testTradeResolve: (() => void) | null = null;
+
+// ─── Worker error handlers ───────────────────────────────────────────────────
 function onWorkerError(name: string) {
-    return (err: Error) => console.error(`[Core 4] 🔴 ${name} crashed:`, err);
+    return (err: Error) => console.error(`[M.o.M] ❌ ${name} crashed: ${err.message}`);
 }
 function onWorkerExit(name: string) {
     return (code: number) => {
-        if (code !== 0) console.error(`[Core 4] 🔴 ${name} exited with code ${code}`);
+        if (code !== 0) console.error(`[M.o.M] ❌ ${name} exited (code ${code})`);
     };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VERIFY_FLAT — queries broker for real net position + working stops
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Broker flat check ───────────────────────────────────────────────────────
 async function checkIsFlat(symbol: string): Promise<boolean> {
     const [netPos, stopCount] = await Promise.all([
         broker.getNetPositionQty(symbol),
@@ -91,9 +74,7 @@ async function checkIsFlat(symbol: string): Promise<boolean> {
     return netPos === 0 && stopCount === 0;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// trade_command dispatcher — wires Core 1 actions to ExecutionEngine + Broker
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Trade command dispatcher ────────────────────────────────────────────────
 async function handleTradeCommand(
     payload: Record<string, unknown>,
     source:  'MomWorker' | 'AssistantWorker',
@@ -105,7 +86,7 @@ async function handleTradeCommand(
         case 'TEST_ENTER': {
             const symbol = payload.symbol as string;
             const price  = payload.price as number;
-            console.log(`[Core 4] 🧪 Executing TEST_ENTER: 3 ${symbol} @ ${price} (Bypassing Sizer)`);
+            console.log(`[M.o.M] 🧪 Test Trade: 3x ${symbol} @ ${price}`);
             await executionEngine.executeBracket(symbol, price, 'BUY', 3);
             if (positionMonitor) clearInterval(positionMonitor);
             positionMonitor = setInterval(async () => {
@@ -113,10 +94,11 @@ async function handleTradeCommand(
                     const net = await broker.getNetPositionQty(symbol);
                     if (net === 0) {
                         clearInterval(positionMonitor!); positionMonitor = null;
-                        console.log(`[Core 4] ✅ Broker reports ${symbol} is FLAT (Bracket Fill).`);
                         momWorker.postMessage({ type: 'position_closed', reason: 'NATURAL_BRACKET_FILL' });
                     }
-                } catch (e) {}
+                } catch (e: any) {
+                    console.warn(`[M.o.M] Position monitor: ${e.message}`);
+                }
             }, 5000);
             break;
         }
@@ -126,17 +108,16 @@ async function handleTradeCommand(
             const price     = payload.price     as number;
             const rawDir    = payload.direction as string;
             const side: 'BUY' | 'SELL' = (rawDir === 'LONG' || rawDir === 'BUY') ? 'BUY' : 'SELL';
+            const src       = payload.source as string || 'SMC';
+            const conf      = payload.confidence as number || 0;
 
-            console.log(`[Core 4] 🔥 ENTER ${side} ${symbol} @ ${price} (src: ${source})`);
+            console.log(`[M.o.M] 🔥 ENTER ${side} ${symbol} @ ${price} | Src: ${src} | Conf: ${conf}/8`);
 
             const sizing = PositionSizer.calculate(
-                ledger.getAvailableBuyingPower(),
-                20,                 // SL_POINTS
-                config.INDICES,
+                ledger.getAvailableBuyingPower(), 20, config.INDICES,
             );
-
             if (!sizing) {
-                console.warn('[Core 4] PositionSizer returned null — trade BLOCKED (insufficient buying power).');
+                console.warn('[M.o.M] ❌ Trade BLOCKED — insufficient buying power.');
                 return;
             }
 
@@ -150,10 +131,12 @@ async function handleTradeCommand(
                     const net = await broker.getNetPositionQty(symbol);
                     if (net === 0) {
                         clearInterval(positionMonitor!); positionMonitor = null;
-                        console.log(`[Core 4] ✅ Broker reports ${symbol} is FLAT (Bracket Fill).`);
+                        console.log(`[M.o.M] ✅ Position FLAT — bracket filled.`);
                         momWorker.postMessage({ type: 'position_closed', reason: 'NATURAL_BRACKET_FILL' });
                     }
-                } catch (e) {}
+                } catch (e: any) {
+                    console.warn(`[M.o.M] Position monitor: ${e.message}`);
+                }
             }, 5000);
             break;
         }
@@ -161,7 +144,7 @@ async function handleTradeCommand(
         case 'FLATTEN_ALL': {
             const symbol = payload.symbol as string | undefined;
             const reason = payload.reason as string | undefined;
-            console.log(`[Core 4] 🧹 FLATTEN_ALL ${symbol ?? '(all)'} — triggered by ${source}`);
+            console.log(`[M.o.M] 🧹 FLATTEN ${symbol ?? 'ALL'} — ${reason ?? source}`);
             if (positionMonitor) { clearInterval(positionMonitor); positionMonitor = null; }
             if (symbol) {
                 await executionEngine.flattenPosition(symbol);
@@ -173,7 +156,6 @@ async function handleTradeCommand(
         }
 
         case 'CANCEL_ALL_ORDERS': {
-            console.log(`[Core 4] ❌ CANCEL_ALL_ORDERS — ${payload.symbol ?? 'all'}`);
             await broker.cancelAllWorkingOrders();
             break;
         }
@@ -183,263 +165,207 @@ async function handleTradeCommand(
             const symbol    = payload.symbol    as string;
             const stopPrice = payload.stopPrice as number;
             const rawDir    = (payload.direction as string | undefined) ?? 'LONG';
-            // exitAction is opposite of our position direction
             const exitAction: 'Buy' | 'Sell' = (rawDir === 'LONG' || rawDir === 'BUY') ? 'Sell' : 'Buy';
-
-            console.log(`[Core 4] 🛑 ${action} ${symbol} → stop @ ${stopPrice}`);
+            console.log(`[M.o.M] 🛑 ${action} ${symbol} → ${stopPrice}`);
             await broker.modifyStopWithVerification(symbol, exitAction, 1, stopPrice);
             break;
         }
 
         default:
-            console.warn(`[Core 4] Unknown trade_command action: ${action}`);
+            console.warn(`[M.o.M] Unknown trade action: ${action}`);
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BOOT — sequential service init → spawn workers → wire IPC mesh
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── BOOT SEQUENCE ───────────────────────────────────────────────────────────
 async function boot(): Promise<void> {
-    console.log('[Core 4] 🔍 Initializing core services…');
 
-    // 1. Neon Postgres
+    // 1. Core Services
     await db.initialize();
-    console.log('[Core 4] ✅ Neon Postgres connected.');
+    console.log('[M.o.M] ✅ DB connected');
 
-    // 2. Tradovate Broker OAuth
     const connected = await broker.connect();
-    if (!connected) throw new Error('TradovateBroker.connect() returned false.');
-    console.log('[Core 4] ✅ TradovateBroker authenticated.');
+    if (!connected) throw new Error('Broker auth failed');
+    console.log('[M.o.M] ✅ Broker authenticated');
 
-    // 3. Session Ledger balance sync
     await ledger.initialize(broker);
-    console.log(`[Core 4] ✅ SessionLedger synced. Buying Power: $${ledger.getAvailableBuyingPower().toFixed(2)}`);
+    console.log(`[M.o.M] ✅ Ledger synced — $${ledger.getAvailableBuyingPower().toFixed(0)} buying power`);
 
-    // ── Spawn Workers ─────────────────────────────────────────────────────────
-    console.log('[Core 4] 🚀 Spawning 3 worker cores…');
+    // 2. Spawn Workers + Wire IPC Mesh
     momWorker       = new Worker(workerPath('MomWorker'), workerOpts);
     assistantWorker = new Worker(workerPath('AssistantWorker'), workerOpts);
     oracleWorker    = new Worker(workerPath('OracleWorker'), workerOpts);
 
-    // ── Wire Error / Exit Handlers ────────────────────────────────────────────
     momWorker      .on('error', onWorkerError('MomWorker'))      .on('exit', onWorkerExit('MomWorker'));
     assistantWorker.on('error', onWorkerError('AssistantWorker')).on('exit', onWorkerExit('AssistantWorker'));
     oracleWorker   .on('error', onWorkerError('OracleWorker'))   .on('exit', onWorkerExit('OracleWorker'));
 
+    const channelOracleMom    = new MessageChannel();
+    const channelOracleAssist = new MessageChannel();
+    const channelMomAssist    = new MessageChannel();
 
-    // ── Build Zero-Latency IPC Mesh via MessageChannel ────────────────────────
-    //   Channel A: OracleWorker ←→ MomWorker       (ticks / emergency)
-    //   Channel B: OracleWorker ←→ AssistantWorker (ticks / oracle state)
-    //   Channel C: MomWorker    ←→ AssistantWorker (ORB / IN_TRADE / sweep)
-    const channelOracleMom    = new MessageChannel();   // Channel A
-    const channelOracleAssist = new MessageChannel();   // Channel B
-    const channelMomAssist    = new MessageChannel();   // Channel C
-
-    // MomWorker — port1 from A (reads Oracle), port1 from C (r/w Assistant)
     momWorker.postMessage(
         { type: 'init', oraclePort: channelOracleMom.port1, assistPort: channelMomAssist.port1 },
         [channelOracleMom.port1, channelMomAssist.port1],
     );
-
-    // AssistantWorker — port2 from C (r/w Mom), port1 from B (r/w Oracle)
     assistantWorker.postMessage(
         { type: 'init', momPort: channelMomAssist.port2, oraclePort: channelOracleAssist.port1 },
         [channelMomAssist.port2, channelOracleAssist.port1],
     );
-
-    // OracleWorker — port2 from A (r/w Mom), port2 from B (r/w Assistant)
     oracleWorker.postMessage(
         { type: 'init', momPort: channelOracleMom.port2, assistPort: channelOracleAssist.port2 },
         [channelOracleMom.port2, channelOracleAssist.port2],
     );
 
-
-    // ── Wire Message Handlers ─────────────────────────────────────────────────
     wireMomHandler();
     wireAssistantHandler();
     wireOracleHandler();
 
-    console.log('[Core 4] ✅ All systems live — 4-core mesh active.\n');
+    console.log('[M.o.M] ✅ 4-core mesh online — feeds connecting...');
+
+    // 3. Wait for test trade to complete (60s timeout = HALT on failure)
+    console.log('[M.o.M] 🧪 Awaiting test trade + triple-sweep...');
+
+    const testTradeResult = await new Promise<boolean>((resolve) => {
+        testTradeResolve = () => resolve(true);
+        setTimeout(() => resolve(false), 60_000);
+    });
+
+    if (!testTradeResult) {
+        console.error('\n==========================================');
+        console.error('  ❌ TEST TRADE FAILED — SYSTEM HALTED');
+        console.error('  Triple-sweep did not complete in 60s.');
+        console.error('==========================================\n');
+        process.exit(1);
+    }
+
+    console.log('[M.o.M] ✅ Test trade passed — triple-sweep verified');
+
+    // 4. Trigger hydration AFTER test trade success
+    console.log('[M.o.M] 💧 Hydrating historical data...');
+    oracleWorker.postMessage({ type: 'TRIGGER_HYDRATION' });
+
+    await new Promise<void>((resolve) => {
+        const handler = (msg: any) => {
+            if (msg.type === 'HYDRATION_COMPLETE') {
+                oracleWorker.off('message', handler);
+                console.log(`[M.o.M] ✅ Hydrated: ${msg.cmeCount} CME + ${msg.cfeCount} CFE candles | VIX: ${(msg.vixLevel ?? 0).toFixed(2)}`);
+                resolve();
+            }
+        };
+        oracleWorker.on('message', handler);
+    });
+
+    console.log('\n==========================================');
+    console.log('  🎯 ALL SYSTEMS PRIMED — HUNTING');
+    console.log('==========================================\n');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MomWorker message handler
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── MomWorker handler ───────────────────────────────────────────────────────
 function wireMomHandler(): void {
     momWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
         switch (msg.type) {
-
-            case 'ready':
-                console.log('[Core 4] ✅ MomWorker (Core 1) ready.');
-                break;
-
+            case 'ready': break;
             case 'trade_command':
                 void handleTradeCommand(msg.payload as Record<string, unknown>, 'MomWorker');
                 break;
-
-            case 'trade_closed':
-                console.log('[Core 4] 📊 Trade closed:', msg.payload);
-                break;
-
+            case 'trade_closed': break;
             case 'position_closed':
                 momWorker.postMessage({ type: 'position_closed', reason: msg.reason });
                 break;
-
-            /**
-             * TELEMETRY — structured event from MomWorker.
-             * Fire-and-forget insert into mom_telemetry_logs.
-             */
             case 'TELEMETRY': {
                 const p = msg.payload as { source: string; regime: string; message: string };
                 void db.logTelemetry(p.source, p.regime, p.message);
                 break;
             }
-
-            default:
-                console.warn('[Core 4] MomWorker unknown msg:', msg.type);
+            default: break;
         }
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AssistantWorker message handler
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── AssistantWorker handler ─────────────────────────────────────────────────
 function wireAssistantHandler(): void {
     assistantWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
         switch (msg.type) {
-
-            case 'ready':
-                console.log('[Core 4] ✅ AssistantWorker (Core 2) ready.');
-                break;
-
-            case 'assistant_response':
-                // TODO Phase 6: push to Nova dashboard via WebSocket
-                console.log('[Core 4] 🤖 Nova response:', msg.payload);
-                break;
-
-            case 'WARMUP_COMPLETE':
-                console.log('\n==========================================');
-                console.log('🔥 Warm up complete');
-                console.log('🎯 Starting to hunt');
-                console.log('==========================================\n');
-                break;
+            case 'ready': break;
+            case 'assistant_response': break;
+            case 'WARMUP_COMPLETE': break;
+            case 'overwatch_status': break;
 
             case 'trade_command':
-                // IMMINENT_REVERSION tighten-stop or FLATTEN_ALL relayed from AssistantWorker
                 void handleTradeCommand(msg.payload as Record<string, unknown>, 'AssistantWorker');
                 break;
 
-            case 'orb_alert':       console.log('[Core 4] 🔭 ORB Alert:', msg.payload); break;
-            case 'overwatch_alert': console.log('[Core 4] ⚠️  Overwatch Alert:', msg.payload); break;
-            case 'overwatch_status': /* silent */ break;
+            case 'orb_alert':
+                console.log('[M.o.M] 🔭 ORB Signal:', msg.payload);
+                break;
+            case 'overwatch_alert':
+                console.log('[M.o.M] ⚠️  Overwatch:', msg.payload);
+                break;
 
-            /**
-             * TELEMETRY — structured event from AssistantWorker.
-             * Fire-and-forget insert into mom_telemetry_logs.
-             */
             case 'TELEMETRY': {
                 const p = msg.payload as { source: string; regime: string; message: string };
                 void db.logTelemetry(p.source, p.regime, p.message);
                 break;
             }
 
-            /**
-             * VERIFY_FLAT (Phase 2) — AssistantWorker requests real broker flat check.
-             */
             case 'VERIFY_FLAT': {
                 const symbol = msg.symbol as string;
                 const from   = msg.from   as string;
-                console.log(`[Core 4] 🧹 VERIFY_FLAT Phase 2 for ${symbol}`);
                 checkIsFlat(symbol)
                     .then(isFlat => assistantWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat, symbol, from }))
-                    .catch(err  => {
-                        console.error('[Core 4] VERIFY_FLAT Phase 2 error:', err.message);
-                        assistantWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat: false, symbol, from });
-                    });
+                    .catch(() => assistantWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat: false, symbol, from }));
                 break;
             }
-
-            default:
-                console.warn('[Core 4] AssistantWorker unknown msg:', msg.type);
+            default: break;
         }
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OracleWorker message handler
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── OracleWorker handler ────────────────────────────────────────────────────
 function wireOracleHandler(): void {
     oracleWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
         switch (msg.type) {
-
-            case 'ready':
-                console.log('[Core 4] ✅ OracleWorker (Core 3) ready — dual feed starting.');
-                break;
-
-            case 'feed_heartbeat': break;  // silent
-
-            case 'feed_status':
-                console.log(`[Core 4] 📡 Feed [${msg.label}]: ${msg.status}`);
-                break;
+            case 'ready': break;
+            case 'feed_heartbeat': break;
+            case 'feed_status': break;
+            case 'tick': break;
+            case 'HYDRATION': break;
+            case 'HYDRATION_COMPLETE': break;
 
             case 'defcon_change':
-                console.log(`[Core 4] 🚨 DefconLevel → ${msg.level} | ${msg.reason}`);
+                console.log(`[M.o.M] 🚨 DEFCON → ${msg.level} | ${msg.reason}`);
                 break;
 
-            /**
-             * TELEMETRY — structured event from OracleWorker.
-             * Fire-and-forget insert into mom_telemetry_logs.
-             */
             case 'TELEMETRY': {
                 const p = msg.payload as { source: string; regime: string; message: string };
                 void db.logTelemetry(p.source, p.regime, p.message);
                 break;
             }
 
-            /**
-             * VERIFY_FLAT (Phase 3) — OracleWorker requests the FINAL broker flat check.
-             */
             case 'VERIFY_FLAT': {
                 const symbol = msg.symbol as string;
                 const from   = msg.from   as string;
-                console.log(`[Core 4] 🧹 VERIFY_FLAT Phase 3 for ${symbol}`);
                 checkIsFlat(symbol)
                     .then(isFlat => oracleWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat, symbol, from }))
-                    .catch(err  => {
-                        console.error('[Core 4] VERIFY_FLAT Phase 3 error:', err.message);
-                        oracleWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat: false, symbol, from });
-                    });
+                    .catch(() => oracleWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat: false, symbol, from }));
                 break;
             }
 
             case 'system_reset':
-                if (msg.reason === 'TEST_TRADE_COMPLETE') {
-                    console.log('\n==========================================');
-                    console.log('✅ Triple sweep Trade test successful');
-                    console.log('🧊 Starting Warm up...');
-                    console.log('==========================================\n');
-                } else {
-                    console.log(`[Core 4] 🔭 SYSTEM_RESET confirmed — ${msg.symbol} cycle complete.`);
+                if (msg.reason === 'TEST_TRADE_COMPLETE' && testTradeResolve) {
+                    testTradeResolve();
+                    testTradeResolve = null;
                 }
                 break;
 
-            case 'tick':
-                break; // Silent pass-through (forwarded to dashboard later)
-
-            case 'HYDRATION':
-                break; // Handled locally by workers, ignored by Main
-
-            default:
-                console.warn('[Core 4] OracleWorker unknown msg:', msg.type);
+            default: break;
         }
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Graceful Shutdown
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Graceful Shutdown ───────────────────────────────────────────────────────
 function shutdown(): void {
-    console.log('\n[Core 4] Shutdown signal — stopping all workers…');
+    console.log('[M.o.M] Shutting down...');
     momWorker      ?.postMessage({ type: 'shutdown' });
     assistantWorker?.postMessage({ type: 'shutdown' });
     oracleWorker   ?.postMessage({ type: 'shutdown' });
@@ -449,10 +375,8 @@ function shutdown(): void {
 process.on('SIGINT',  shutdown);
 process.on('SIGTERM', shutdown);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Entry Point
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Entry Point ─────────────────────────────────────────────────────────────
 boot().catch((err: Error) => {
-    console.error('[Core 4] 🔴 BOOT FAILED:', err.message);
+    console.error(`[M.o.M] ❌ BOOT FAILED: ${err.message}`);
     process.exit(1);
 });
