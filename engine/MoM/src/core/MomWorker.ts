@@ -35,6 +35,7 @@ let assistPort: MessagePort | null = null;
 type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
 let isTestingTrade = true;  // Armed immediately — test trade fires on first tick (before hydration)
+let isHuntingActive = false; // Warmup gate: blocks ALL trade signals until hydration completes
 
 // ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
 const smcExpert  = new SMCExpert();
@@ -268,6 +269,8 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
             };
 
             if (engineState !== 'IDLE') {
+            if (!isHuntingActive) return;  // Warmup gate
+
                 console.log(`[MomWorker] ORB_SETUP ignored — engine is ${engineState}.`);
                 return;
             }
@@ -416,6 +419,11 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
+        case 'HUNTING_ACTIVE': {
+            isHuntingActive = true;
+            break;
+        }
+
         case 'shutdown': {
             console.log('[MomWorker] Shutting down…');
             if (activeTrade?.scratchTimer) clearTimeout(activeTrade.scratchTimer);
@@ -458,6 +466,7 @@ async function processSmcSignal(candle: Candle): Promise<void> {
     const signal: SmcSignal = smcExpert.analyze(candle);
     if (signal.action === 'HOLD') return;
     if (engineState !== 'IDLE')  return;
+    if (!isHuntingActive)        return;  // Warmup gate — no trades until hydration complete
 
     // DEFCON RED gate: indicators stay primed but no new entries
     if (isDefconRed) {

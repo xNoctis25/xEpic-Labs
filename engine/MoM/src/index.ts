@@ -289,6 +289,10 @@ async function boot(): Promise<void> {
     });
 
     console.log('\n==========================================');
+    // 5. Flip the warmup gate -- allow real trades
+    momWorker.postMessage({ type: 'HUNTING_ACTIVE' });
+    assistantWorker.postMessage({ type: 'HUNTING_ACTIVE' });
+
     console.log('  🎯 ALL SYSTEMS PRIMED — HUNTING');
     console.log('==========================================\n');
 }
