@@ -225,6 +225,22 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             break;
         }
 
+        case 'HYDRATION': {
+            const p = data.payload as any;
+            const cmeCandles = p.cmeCandles || [];
+            for (const c of cmeCandles) {
+                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp });
+                aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
+            }
+            if (cmeCandles.length < 15) {
+                isTestingTrade = true;
+                console.log('[MomWorker] 🧊 Cold boot detected. Arming Test Trade...');
+            } else {
+                console.log(`[MomWorker] 💧 Hydrated: ${cmeCandles.length} CME candles — SMC expert + aggregator primed.`);
+            }
+            break;
+        }
+
         default: break;
     }
 }
@@ -393,32 +409,6 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
          */
         case 'position_closed': {
             initiateTripleSweepPhase1(msg.reason as string ?? 'BROKER_CONFIRMED_EXIT');
-            break;
-        }
-
-        /**
-         * hydration_payload — sent by Core 4 before live feeds start.
-         * Warms smcExpert's rolling windows and primes the aggregator state
-         * so the engine can trade immediately on the first live candle.
-         */
-        case 'hydration_payload':
-        case 'HYDRATION': {
-            const p = msg.payload as any;
-            const cmeCandles = p.cmeCandles || [];
-            for (const c of cmeCandles) {
-                // 1. Warm SMC expert internal rolling windows
-                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp });
-
-                // 2. Feed a synthetic close tick to the aggregator to align its 1-min state
-                aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
-            }
-
-            if (cmeCandles.length < 15) {
-                isTestingTrade = true;
-                console.log('[MomWorker] 🧊 Cold boot detected. Arming Test Trade...');
-            }
-
-            console.log(`[MomWorker] 💧 Hydrated: ${cmeCandles.length} CME candles — SMC expert + aggregator primed.`);
             break;
         }
 

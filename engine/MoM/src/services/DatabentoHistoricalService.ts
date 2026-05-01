@@ -65,7 +65,6 @@ export async function hydrate(
                 symbols:  symbols.join(','),
                 schema:   'ohlcv-1m',
                 start:    startTime.toISOString(),
-                end:      endTime.toISOString(),
                 encoding: 'json',
             },
             responseType: 'text',

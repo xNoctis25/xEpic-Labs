@@ -322,6 +322,22 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
             break;
         }
 
+        case 'HYDRATION': {
+            const p = msg.payload as any;
+            const cmeCandles = p.cmeCandles || [];
+            for (const c of cmeCandles) {
+                const state = getOrbState(c.symbol);
+                const bucket = { open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, start: c.timestamp, ticks: 4 };
+                state.completeBuckets.push(bucket);
+                state.rollingVolumes.push(c.volume);
+                if (state.completeBuckets.length > ROLLING_VOL_BUCKETS + BOX_LOOKBACK_BUCKETS) state.completeBuckets.shift();
+                if (state.rollingVolumes.length > ROLLING_VOL_BUCKETS) state.rollingVolumes.shift();
+            }
+            const syms = [...new Set(cmeCandles.map((c: any) => c.symbol))].join(', ');
+            console.log(`[AssistantWorker] 💧 Hydrated: ${cmeCandles.length} CME candles into ORB scanner for [${syms}]`);
+            break;
+        }
+
         default: break;
     }
 }
@@ -456,45 +472,6 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
                     payload: { action: 'FLATTEN_ALL', symbol, reason: 'TRIPLE_SWEEP_PHASE2_DISCREPANCY' },
                 });
             }
-            break;
-        }
-
-        /**
-         * hydration_payload — sent by Core 4 before live feeds start.
-         * Directly injects historical OHLCV buckets into the ORB scanner state
-         * so consolidation boxes and rolling volume averages are pre-filled.
-         */
-        case 'hydration_payload': {
-            const { cmeCandles } = msg.payload as {
-                cmeCandles: Array<{ open: number; high: number; low: number; close: number; volume: number; timestamp: number; symbol: string }>;
-            };
-
-            // Group by symbol, then push directly into completeBuckets + rollingVolumes
-            for (const c of cmeCandles) {
-                const state = getOrbState(c.symbol);
-
-                const bucket = {
-                    open: c.open, high: c.high, low: c.low, close: c.close,
-                    volume: c.volume, start: c.timestamp, ticks: 4,
-                };
-
-                state.completeBuckets.push(bucket);
-                state.rollingVolumes.push(c.volume);
-
-                // Trim ring buffers to their configured max sizes
-                if (state.completeBuckets.length > ROLLING_VOL_BUCKETS + BOX_LOOKBACK_BUCKETS) {
-                    state.completeBuckets.shift();
-                }
-                if (state.rollingVolumes.length > ROLLING_VOL_BUCKETS) {
-                    state.rollingVolumes.shift();
-                }
-            }
-
-            const syms = [...new Set(cmeCandles.map(c => c.symbol))].join(', ');
-            console.log(
-                `[AssistantWorker] 💧 Hydrated: ${cmeCandles.length} CME candles ` +
-                `into ORB scanner for [${syms}] — boxes + rolling volume primed.`
-            );
             break;
         }
 
