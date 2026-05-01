@@ -65,6 +65,11 @@ export class NeonDatabase {
             max: 5,
             idleTimeoutMillis: 30000,
         });
+
+        // Prevent unhandled pool errors from dumping Client internals to stderr
+        this.pool.on('error', (err) => {
+            console.warn(`[NeonDB] Pool background error: ${err.message}`);
+        });
     }
 
     /**

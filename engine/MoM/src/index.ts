@@ -8,6 +8,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+// Suppress Node.js deprecation warnings (pg SSL, etc.)
+process.env.NODE_NO_WARNINGS = '1';
+
 import * as dotenv from 'dotenv';
 import * as path   from 'path';
 import { Worker, MessageChannel } from 'worker_threads';
