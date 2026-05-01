@@ -1,6 +1,5 @@
 import cron from 'node-cron';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
-import { SMCExpert } from '../experts/SMCExpert';
 import { SessionLedger } from '../services/SessionLedger';
 
 /**
@@ -86,7 +85,7 @@ export class EvaluationEngine {
      * Generates a comprehensive End of Day Report, prints it to console,
      * and saves it to the daily_reports table in Neon Postgres.
      */
-    public async generateEoDR(ledger: SessionLedger, smcExpert: SMCExpert): Promise<void> {
+    public async generateEoDR(ledger: SessionLedger): Promise<void> {
         console.log(`\n📋 ═══════════════════════════════════════════`);
         console.log(`📋  M.o.M END OF DAY REPORT (EoDR)`);
         console.log(`📋  ${new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}`);
@@ -94,21 +93,14 @@ export class EvaluationEngine {
 
         const sessionPnL = ledger.getSessionPnL();
         const totalTrades = await this.db.getTodaysTradeCount();
-        const rejections = [...smcExpert.dailyRejectedSetups];
         const state = await this.db.getState();
 
-        // Build the summary text
+        // Build the summary text from session data
         const pnlStr = sessionPnL >= 0 ? `+$${sessionPnL.toFixed(2)}` : `-$${Math.abs(sessionPnL).toFixed(2)}`;
         const lines: string[] = [
             `Took ${totalTrades} trade(s). Net P&L: ${pnlStr}.`,
-            `Rejected ${rejections.length} setup(s) due to filter failures.`,
             `Phase: ${state.currentPhase} | Running P&L: $${state.runningPnl.toFixed(2)} | Day ${state.activeTradingDays}/20.`,
         ];
-
-        if (rejections.length > 0) {
-            lines.push('', '--- Rejected Setups ---');
-            rejections.forEach((r, i) => lines.push(`  ${i + 1}. ${r}`));
-        }
 
         const eodrSummary = lines.join('\n');
 
@@ -121,15 +113,12 @@ export class EvaluationEngine {
             await this.db.insertDailyReport({
                 totalTrades,
                 netPnl: sessionPnL,
-                rejectedSetupsLog: rejections,
+                rejectedSetupsLog: [],
                 eodrSummary,
             });
         } catch (error: any) {
             console.error(`🔴 [EvaluationEngine] - Failed to save EoDR:`, error.message);
         }
-
-        // Clear the expert's daily rejection log after archiving
-        smcExpert.clearDailyRejections();
     }
 
     /**
@@ -140,7 +129,6 @@ export class EvaluationEngine {
     public startSchedulers(
         getSessionPnL: () => number,
         ledger: SessionLedger,
-        smcExpert: SMCExpert,
     ): void {
         // 16:00 ET — State Machine Evaluation
         cron.schedule('0 16 * * 1-5', async () => {
@@ -154,7 +142,7 @@ export class EvaluationEngine {
         // 17:15 ET — EoDR (during CME maintenance window 17:00-18:00)
         cron.schedule('15 17 * * 1-5', async () => {
             console.log(`\n⏰ [EvaluationEngine] - 17:15 ET CME maintenance — generating EoDR...`);
-            await this.generateEoDR(ledger, smcExpert);
+            await this.generateEoDR(ledger);
         }, {
             timezone: 'America/New_York',
         });

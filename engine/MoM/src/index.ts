@@ -1,7 +1,7 @@
 /**
  * index.ts — Master Thread (Core 4)
  * ─────────────────────────────────────────────────────────────────────────────
- *  Core 1 │ MomWorker       → SMC signal evaluation + trade execution
+ *  Core 1 │ MoMEngine       → SMC signal evaluation + trade execution
  *  Core 2 │ AssistantWorker → ORB Hunter + Tactical Overwatch + Triple-Sweep P2
  *  Core 3 │ OracleWorker    → Databento dual-feed + Macro Radar + WSS
  *  Core 4 │ THIS FILE       → Boot, broker I/O, ExecutionEngine, lifecycle
@@ -20,6 +20,8 @@ import { NeonDatabase }                     from './services/NeonDatabase';
 import { ExecutionEngine }                  from './core/ExecutionEngine';
 import { SessionLedger }                    from './services/SessionLedger';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './core/PositionSizer';
+import { RiskEngine }                    from './core/RiskEngine';
+import { EvaluationEngine }              from './core/EvaluationEngine';
 import { config }                           from './config/env';
 
 dotenv.config();
@@ -35,6 +37,8 @@ const broker          = new TradovateBroker();
 const db              = new NeonDatabase();
 const executionEngine = new ExecutionEngine(broker, db);
 const ledger          = new SessionLedger();
+const riskEngine      = new RiskEngine();
+const evalEngine      = new EvaluationEngine(db);
 let positionMonitor: NodeJS.Timeout | null = null;
 
 // ─── Worker handles ──────────────────────────────────────────────────────────
@@ -99,6 +103,10 @@ async function reconcileLedgerOnClose(reason: string): Promise<void> {
 
         ledger.releaseMarginAndApplyPnL(ctx.margin, realizedPnL);
 
+        // Update RiskEngine daily P&L tracker
+        const riskBudget = ledger.getAvailableBuyingPower() * (config.RISK / 100);
+        riskEngine.updatePnL(realizedPnL, riskBudget);
+
         const pnlStr = realizedPnL >= 0 ? `+$${realizedPnL.toFixed(2)}` : `-$${Math.abs(realizedPnL).toFixed(2)}`;
         const duration = ((Date.now() - ctx.entryTs) / 60000).toFixed(1);
         console.log(
@@ -119,7 +127,7 @@ async function reconcileLedgerOnClose(reason: string): Promise<void> {
 // ─── Trade command dispatcher ────────────────────────────────────────────────
 async function handleTradeCommand(
     payload: Record<string, unknown>,
-    source:  'MomWorker' | 'AssistantWorker',
+    source:  'MoMEngine' | 'AssistantWorker',
 ): Promise<void> {
     const action = payload.action as string;
 
@@ -155,6 +163,13 @@ async function handleTradeCommand(
 
             console.log(`[M.o.M] 🔥 ENTER ${side} ${symbol} @ ${price} | Src: ${src} | Conf: ${conf}/8`);
 
+            // RiskEngine daily halt gate
+            if (!riskEngine.canTrade()) {
+                console.warn('[M.o.M] ❌ Trade BLOCKED — RiskEngine daily halt (3x stop-out limit).');
+                void db.logTelemetry('Core4', 'Risk', 'DAILY_HALT: Trade blocked by RiskEngine.');
+                return;
+            }
+
             const sizing = PositionSizer.calculate(
                 ledger.getAvailableBuyingPower(), 20, config.INDICES,
             );
@@ -175,6 +190,7 @@ async function handleTradeCommand(
 
             await executionEngine.executeBracket(symbol, price, side, sizing.qty);
             if (positionMonitor) clearInterval(positionMonitor);
+            let failsafeInjected = false;
             positionMonitor = setInterval(async () => {
                 try {
                     const net = await broker.getNetPositionQty(symbol);
@@ -183,7 +199,26 @@ async function handleTradeCommand(
                         console.log(`[M.o.M] ✅ Position FLAT — bracket filled.`);
                         await reconcileLedgerOnClose('NATURAL_BRACKET_FILL');
                         momWorker.postMessage({ type: 'position_closed', reason: 'NATURAL_BRACKET_FILL' });
+                        return;
                     }
+
+                    // ── Naked Position Failsafe ──────────────────────────────
+                    const stopCount = await broker.getWorkingStopOrders(symbol);
+                    if (stopCount < 0) return;  // query failed — skip this cycle
+                    if (stopCount > 0) { failsafeInjected = false; return; }  // protected ✅
+
+                    // NAKED: position exists but no stops
+                    if (failsafeInjected) return;  // already injected, waiting to register
+
+                    const exitAction: 'Buy' | 'Sell' = side === 'BUY' ? 'Sell' : 'Buy';
+                    const stopPrice = side === 'BUY'
+                        ? price - 20  // hard stop at SL_POINTS
+                        : price + 20;
+
+                    console.warn(`🛡️ [FAILSAFE] Naked position! ${net}x ${symbol}, 0 stops. Injecting emergency stop @ ${stopPrice}`);
+                    void db.logTelemetry('Core4', 'Risk', `NAKED_FAILSAFE: ${symbol} ${net}x — injecting stop @ ${stopPrice}`);
+                    await broker.placeProtectiveStop(symbol, exitAction, Math.abs(net), stopPrice);
+                    failsafeInjected = true;
                 } catch (e: any) {
                     console.warn(`[M.o.M] Position monitor: ${e.message}`);
                 }
@@ -241,12 +276,17 @@ async function boot(): Promise<void> {
     await ledger.initialize(broker);
     console.log(`[M.o.M] ✅ Ledger synced — $${ledger.getAvailableBuyingPower().toFixed(0)} buying power`);
 
+    // Initialize lifecycle state machine + EoDR schedulers
+    const phase = await evalEngine.initialize();
+    evalEngine.startSchedulers(() => ledger.getSessionPnL(), ledger);
+    console.log(`[M.o.M] ✅ EvaluationEngine online — Phase: ${phase}`);
+
     // 2. Spawn Workers + Wire IPC Mesh
-    momWorker       = new Worker(workerPath('MomWorker'), workerOpts);
+    momWorker       = new Worker(workerPath('MoMEngine'), workerOpts);
     assistantWorker = new Worker(workerPath('AssistantWorker'), workerOpts);
     oracleWorker    = new Worker(workerPath('OracleWorker'), workerOpts);
 
-    momWorker      .on('error', onWorkerError('MomWorker'))      .on('exit', onWorkerExit('MomWorker'));
+    momWorker      .on('error', onWorkerError('MoMEngine'))      .on('exit', onWorkerExit('MoMEngine'));
     assistantWorker.on('error', onWorkerError('AssistantWorker')).on('exit', onWorkerExit('AssistantWorker'));
     oracleWorker   .on('error', onWorkerError('OracleWorker'))   .on('exit', onWorkerExit('OracleWorker'));
 
@@ -325,13 +365,13 @@ async function boot(): Promise<void> {
     console.log('==========================================\n');
 }
 
-// ─── MomWorker handler ───────────────────────────────────────────────────────
+// ─── MoMEngine handler ───────────────────────────────────────────────────────
 function wireMomHandler(): void {
     momWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
         switch (msg.type) {
             case 'ready': break;
             case 'trade_command':
-                void handleTradeCommand(msg.payload as Record<string, unknown>, 'MomWorker');
+                void handleTradeCommand(msg.payload as Record<string, unknown>, 'MoMEngine');
                 break;
             case 'trade_closed': break;
             case 'position_closed':
