@@ -118,7 +118,7 @@ interface ActiveTradeContext {
 let activeTrade: ActiveTradeContext | null = null;
 
 // ─── ATM Constants ───────────────────────────────────────────────────────────
-const TIME_DECAY_CANDLES      = 8;      // scratch after N candles with no momentum
+const TIME_DECAY_CANDLES      = 5;      // scratch after N candles with no momentum
 const FLAT_TOLERANCE_POINTS   = 0.50;   // ≈ 2 ticks on MES
 const VOLUME_DECLINE_COUNT    = 3;      // consecutive declining volume candles
 const CHOKE_DISTANCE_POINTS   = 3;      // tight stop distance during choke hold
