@@ -52,8 +52,10 @@ export class NeonDatabase {
             console.error('[NeonDB] NEON_DATABASE_URL not found in .env.');
         }
 
-        // Append sslmode=verify-full to suppress pg deprecation warning
-        if (connectionString && !connectionString.includes('sslmode=')) {
+        // Suppress pg SSL deprecation warning: replace 'require' with 'verify-full'
+        if (connectionString.includes('sslmode=require')) {
+            connectionString = connectionString.replace('sslmode=require', 'sslmode=verify-full');
+        } else if (connectionString && !connectionString.includes('sslmode=')) {
             connectionString += (connectionString.includes('?') ? '&' : '?') + 'sslmode=verify-full';
         }
 
