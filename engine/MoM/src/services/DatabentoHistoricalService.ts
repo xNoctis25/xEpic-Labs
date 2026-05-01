@@ -49,9 +49,9 @@ export async function hydrate(
         return [];
     }
 
-    // Subtract 2-minute buffer — Databento needs time to process recent data (avoids 422)
+    // Databento historical API needs ~5 min to process recent data (avoids 422)
     const rawEnd    = endTimeMs ? new Date(endTimeMs) : new Date();
-    const endTime   = new Date(rawEnd.getTime() - 2 * 60_000);
+    const endTime   = new Date(rawEnd.getTime() - 5 * 60_000);
     const startTime = new Date(endTime.getTime() - minutes * 60_000);
 
     try {
@@ -101,11 +101,12 @@ export async function hydrate(
         return candles;
 
     } catch (err: any) {
-        // HTTP error or timeout — degrade gracefully, live feed still starts
+        const body = err.response?.data ? String(err.response.data).slice(0, 200) : '';
         console.warn(
-            `[DatabentoHistorical] ⚠️  Hydration failed for ${dataset}: ` +
-            `${err.response?.status ?? ''} ${err.message}. Starting cold.`
+            `[Hydration] ${dataset} FAILED: ${err.response?.status ?? ''} | ` +
+            `start=${startTime.toISOString()} end=${endTime.toISOString()} | ${body}`
         );
         return [];
     }
 }
+
