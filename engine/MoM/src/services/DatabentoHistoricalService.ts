@@ -32,7 +32,10 @@ export async function waitForDataAvailability(
     const apiKey = (process.env.DATABENTO_API_KEY || '').trim();
     if (!apiKey) return false;
 
-    const target = new Date(targetMs);
+    // Floor target to nearest minute — Databento reports in 10-min buckets,
+    // sub-minute precision is pointless. Live candles cover the gap.
+    const flooredMs = targetMs - (targetMs % 60_000);
+    const target = new Date(flooredMs);
     const deadline = Date.now() + timeoutMs;
     const POLL_INTERVAL = 30_000; // check every 30 seconds
 
@@ -92,7 +95,11 @@ export async function hydrate(
         return [];
     }
 
-    const endTime   = endTimeMs ? new Date(endTimeMs) : new Date();
+    // Floor end time to nearest minute — avoids Databento edge cases
+    // where sub-minute timestamps fall outside processed bucket boundaries.
+    const rawEnd    = endTimeMs ?? Date.now();
+    const flooredEnd = rawEnd - (rawEnd % 60_000);
+    const endTime   = new Date(flooredEnd);
     const startTime = new Date(endTime.getTime() - minutes * 60_000);
 
     try {
@@ -110,8 +117,10 @@ export async function hydrate(
             timeout:      30_000,
         });
 
+        const raw = response.data as string;
+        const lines = raw.split('\n').filter(l => l.trim().length > 0);
+        console.log(`[Hydration] ${dataset}: ${response.status} OK | ${lines.length} records | window: ${startTime.toISOString()} → ${endTime.toISOString()}`);
         const candles: HydrationCandle[] = [];
-        const lines = (response.data as string).split('\n').filter(l => l.trim().length > 0);
 
         for (const line of lines) {
             try {
