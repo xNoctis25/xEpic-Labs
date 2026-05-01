@@ -234,8 +234,6 @@ async function boot(): Promise<void> {
     await db.initialize();
     const botState = await db.getState();
 
-
-
     const connected = await broker.connect();
     if (!connected) throw new Error('Broker auth failed');
     console.log('[M.o.M] ✅ Broker authenticated');
@@ -369,12 +367,6 @@ function wireAssistantHandler(): void {
                 console.log('[M.o.M] ⚠️  Overwatch:', msg.payload);
                 break;
 
-            case 'TELEMETRY': {
-                const p = msg.payload as { source: string; regime: string; message: string };
-                void db.logTelemetry(p.source, p.regime, p.message);
-                break;
-            }
-
             case 'VERIFY_FLAT': {
                 const symbol = msg.symbol as string;
                 const from   = msg.from   as string;
@@ -398,17 +390,10 @@ function wireOracleHandler(): void {
             case 'tick': break;
             case 'HYDRATION': break;
             case 'HYDRATION_COMPLETE': break;
-            case 'FEED_START_TIME': break;  // Handled by boot await
 
             case 'defcon_change':
                 console.log(`[M.o.M] 🚨 DEFCON → ${msg.level} | ${msg.reason}`);
                 break;
-
-            case 'TELEMETRY': {
-                const p = msg.payload as { source: string; regime: string; message: string };
-                void db.logTelemetry(p.source, p.regime, p.message);
-                break;
-            }
 
             case 'VERIFY_FLAT': {
                 const symbol = msg.symbol as string;

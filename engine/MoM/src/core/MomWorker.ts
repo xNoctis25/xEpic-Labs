@@ -277,11 +277,10 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
             };
 
             if (engineState !== 'IDLE') {
-            if (!isHuntingActive) return;  // Warmup gate
-
                 console.log(`[MomWorker] ORB_SETUP ignored — engine is ${engineState}.`);
                 return;
             }
+            if (!isHuntingActive) return;  // Warmup gate — no trades until hydration complete
 
             const inWilderness = MarketClock.isWilderness(setup.ts);
             const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
@@ -379,6 +378,7 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
                     price:       setup.breakoutPrice,
                     stopPrice,
                     isWilderness: inWilderness,
+                    source:      'ORB',
                 },
             });
             break;
