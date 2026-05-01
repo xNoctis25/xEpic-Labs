@@ -529,36 +529,51 @@ function updateMarketClock() {
     }
 
     // 4. Classify active session & killzone
-    // Matches engine MarketClock killzones:
-    //   London:  02:15–05:00 ET
-    //   NY AM:   09:30–11:30 ET
-    //   NY PM:   13:30–15:45 ET
-    //   Wilderness = market open (09:30–16:00) but outside all killzones
-    let sessionText  = '';
+    // CME Futures Sessions (ET):
+    //   Tokyo:    18:00–04:00 (1080–240)
+    //   London:   02:00–11:00 (120–660)
+    //   New York: 08:00–17:00 (480–1020)
+    // Overlaps:
+    //   Tokyo + London:    02:00–04:00 (120–240)
+    //   London + New York: 08:00–11:00 (480–660)
     let sessionColor = 'green';
     let kzText       = '';
     let kzColor      = 'gray';
 
-    // Session classification — CME futures (23hr trading day)
-    // Asia:     18:00–02:00 ET (CME Globex open)
-    // London:   02:00–08:00 ET
-    // New York: 08:00–17:00 ET
-    // 17:00–18:00 is already caught above as "Closed: CME Maint"
-    if (totalMinutes >= 1080) {
-        sessionText = 'Session: Asia';
-    } else if (totalMinutes >= 0 && totalMinutes < 120) {
-        sessionText = 'Session: Asia';
-    } else if (totalMinutes >= 120 && totalMinutes < 480) {
-        sessionText = 'Session: London';
-    } else if (totalMinutes >= 480 && totalMinutes < 1020) {
-        sessionText = 'Session: New York';
+    const isTokyo  = totalMinutes >= 1080 || totalMinutes < 240;   // 18:00–04:00
+    const isLondon = totalMinutes >= 120  && totalMinutes < 660;   // 02:00–11:00
+    const isNY     = totalMinutes >= 480  && totalMinutes < 1020;  // 08:00–17:00
+
+    const activeSessions = [];
+    if (isTokyo)  activeSessions.push('Tokyo');
+    if (isLondon) activeSessions.push('London');
+    if (isNY)     activeSessions.push('New York');
+
+    const isOverlap = activeSessions.length > 1;
+
+    if (activeSessions.length === 0) {
+        // 17:00–18:00 gap caught by CME Maint above; this shouldn't fire
+        uiSessionLabel.textContent = 'Session: Closed';
+        sessionColor = 'red';
+        _stopSessionOverlap();
+    } else if (!isOverlap) {
+        uiSessionLabel.textContent = 'Session: ' + activeSessions[0];
+        _stopSessionOverlap();
+    } else {
+        _startSessionOverlap(activeSessions, uiSessionLabel);
     }
 
-    // Killzone classification (matches MarketClock exactly)
-    const isLondonKZ = totalMinutes >= 135 && totalMinutes < 300;   // 02:15–05:00
-    const isNYAM     = totalMinutes >= 570 && totalMinutes < 690;   // 09:30–11:30
-    const isNYPM     = totalMinutes >= 810 && totalMinutes < 945;   // 13:30–15:45
-    const isMarketOpen = totalMinutes >= 570 && totalMinutes < 960; // 09:30–16:00
+    uiSessionDot.className = 'dot ' + (isOverlap ? 'pulse-green' : sessionColor);
+
+    // Killzone classification (matches engine MarketClock exactly)
+    //   London KZ: 02:15–05:00 ET
+    //   NY AM:     09:30–11:30 ET
+    //   NY PM:     13:30–15:45 ET
+    //   Wilderness = equity market open (09:30–16:00) but outside all killzones
+    const isLondonKZ   = totalMinutes >= 135 && totalMinutes < 300;   // 02:15–05:00
+    const isNYAM       = totalMinutes >= 570 && totalMinutes < 690;   // 09:30–11:30
+    const isNYPM       = totalMinutes >= 810 && totalMinutes < 945;   // 13:30–15:45
+    const isMarketOpen = totalMinutes >= 570 && totalMinutes < 960;   // 09:30–16:00
 
     if (isLondonKZ) {
         kzText = 'Killzone: London'; kzColor = 'green';
@@ -572,10 +587,39 @@ function updateMarketClock() {
         kzText = 'Killzone: Inactive'; kzColor = 'gray';
     }
 
-    uiSessionLabel.textContent  = sessionText;
-    uiSessionDot.className      = 'dot ' + sessionColor;
     uiKillzoneLabel.textContent = kzText;
     uiKillzoneDot.className     = 'dot ' + kzColor;
+}
+
+// ── SESSION OVERLAP CROSSFADE ─────────────────────────────────────────────────
+var _overlapTimer = null;
+var _overlapSessions = [];
+var _overlapIdx = 0;
+
+function _startSessionOverlap(sessions, label) {
+    // If already cycling these exact sessions, skip
+    if (_overlapTimer && JSON.stringify(_overlapSessions) === JSON.stringify(sessions)) return;
+    _stopSessionOverlap();
+    _overlapSessions = sessions;
+    _overlapIdx = 0;
+
+    function cycle() {
+        label.style.opacity = '0';
+        setTimeout(function() {
+            label.textContent = 'Session: ' + _overlapSessions[_overlapIdx];
+            label.style.opacity = '1';
+            _overlapIdx = (_overlapIdx + 1) % _overlapSessions.length;
+        }, 400);
+    }
+
+    label.textContent = 'Session: ' + sessions[0];
+    _overlapIdx = 1;
+    _overlapTimer = setInterval(cycle, 3000);
+}
+
+function _stopSessionOverlap() {
+    if (_overlapTimer) { clearInterval(_overlapTimer); _overlapTimer = null; }
+    _overlapSessions = [];
 }
 
 updateMarketClock();
