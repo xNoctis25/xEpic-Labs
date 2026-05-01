@@ -226,7 +226,11 @@ export class DatabentoLiveService {
     private cmeConn: SingleFeedConnection | null = null;
     private cfeConn: SingleFeedConnection | null = null;
     private firstTickTimestamp: number | null = null;
+    private _feedStartTime: number = 0;
     private broadcastTick: ((tick: EnrichedTick) => void) | null = null;
+
+    /** Wall-clock time (Date.now()) when the feed first connected and ticks started flowing. */
+    public get feedStartTime(): number { return this._feedStartTime; }
 
     /**
      * Phase 1: Connect both feeds and stream ticks immediately.
@@ -243,7 +247,10 @@ export class DatabentoLiveService {
         const statusCb = onStatus ?? (() => {});
 
         this.cmeConn = new SingleFeedConnection(CME_CONFIG, apiKey, (tick) => {
-            if (!this.firstTickTimestamp) this.firstTickTimestamp = tick.timestamp;
+            if (!this.firstTickTimestamp) {
+                this.firstTickTimestamp = tick.timestamp;
+                this._feedStartTime = Date.now();
+            }
             if (this.broadcastTick) this.broadcastTick(tick);
         }, statusCb);
 

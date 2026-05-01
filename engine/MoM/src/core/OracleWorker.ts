@@ -269,6 +269,11 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
+        case 'GET_FEED_START_TIME': {
+            parentPort!.postMessage({ type: 'FEED_START_TIME', feedStartTime: feed.feedStartTime });
+            break;
+        }
+
         case 'VERIFY_FLAT_RESULT': break;  // Handled by dedicated listener below
 
         case 'subscribe': {

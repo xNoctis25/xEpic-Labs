@@ -49,9 +49,7 @@ export async function hydrate(
         return [];
     }
 
-    // Databento historical API needs ~5 min to process recent data (avoids 422)
-    const rawEnd    = endTimeMs ? new Date(endTimeMs) : new Date();
-    const endTime   = new Date(rawEnd.getTime() - 5 * 60_000);
+    const endTime   = endTimeMs ? new Date(endTimeMs) : new Date();
     const startTime = new Date(endTime.getTime() - minutes * 60_000);
 
     try {

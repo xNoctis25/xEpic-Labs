@@ -240,7 +240,32 @@ async function boot(): Promise<void> {
 
     console.log('[M.o.M] ✅ Test trade passed — triple-sweep verified');
 
-    // 4. Trigger hydration AFTER test trade success
+    // 4. Zero-Gap Hydration: wait for Databento historical to catch up
+    //    Databento has ~15 min processing delay. We wait 16 min from feed start,
+    //    then fetch historical ending at feed start time. Live candles cover
+    //    from feed start to now. Result = ZERO GAP.
+    const DATABENTO_DELAY_MS = 16 * 60_000; // 15 min delay + 1 min buffer
+    oracleWorker.postMessage({ type: 'GET_FEED_START_TIME' });
+
+    const feedStartTime = await new Promise<number>((resolve) => {
+        const handler = (msg: any) => {
+            if (msg.type === 'FEED_START_TIME') {
+                oracleWorker.off('message', handler);
+                resolve(msg.feedStartTime as number);
+            }
+        };
+        oracleWorker.on('message', handler);
+    });
+
+    const elapsed = Date.now() - feedStartTime;
+    const waitMs  = Math.max(0, DATABENTO_DELAY_MS - elapsed);
+
+    if (waitMs > 0) {
+        const waitMin = (waitMs / 60_000).toFixed(1);
+        console.log(`[M.o.M] ⏳ Building live candles... hydration in ${waitMin}min (Databento sync)`);
+        await new Promise(r => setTimeout(r, waitMs));
+    }
+
     console.log('[M.o.M] 💧 Hydrating historical data...');
     oracleWorker.postMessage({ type: 'TRIGGER_HYDRATION' });
 
@@ -331,6 +356,7 @@ function wireOracleHandler(): void {
             case 'tick': break;
             case 'HYDRATION': break;
             case 'HYDRATION_COMPLETE': break;
+            case 'FEED_START_TIME': break;  // Handled by boot await
 
             case 'defcon_change':
                 console.log(`[M.o.M] 🚨 DEFCON → ${msg.level} | ${msg.reason}`);
