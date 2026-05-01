@@ -25,12 +25,7 @@ const maxContracts = config.MAX_CONTRACTS;
 const playbookLabel = maxContracts > 0
     ? `Prop Firm (max ${maxContracts} contracts)`
     : 'Cash Account';
-
-console.log('==========================================');
-console.log('  M.o.M — Institutional Quant Engine v5.1');
-console.log(`  Risk: ${config.RISK}% | Mode: ${config.INDICES}`);
-console.log(`  Playbook: ${playbookLabel}`);
-console.log('==========================================\n');
+const tradingMode = config.TRADING_MODE === 'LIVE' ? '🟢 LIVE' : '🟡 PAPER';
 
 // ─── Global Services ─────────────────────────────────────────────────────────
 const broker          = new TradovateBroker();
@@ -181,7 +176,14 @@ async function boot(): Promise<void> {
 
     // 1. Core Services
     await db.initialize();
-    console.log('[M.o.M] ✅ DB connected');
+    const botState = await db.getState();
+
+    console.log('==========================================');
+    console.log('  M.o.M — Institutional Quant Engine v5.1');
+    console.log(`  ${tradingMode} | ${config.INDICES} | Risk: ${config.RISK}%`);
+    console.log(`  Playbook: ${playbookLabel}`);
+    console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
+    console.log('==========================================\n');
 
     const connected = await broker.connect();
     if (!connected) throw new Error('Broker auth failed');
