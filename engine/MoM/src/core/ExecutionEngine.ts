@@ -57,7 +57,7 @@ export class ExecutionEngine {
      *
      * @param symbol       - Tradovate contract symbol (e.g., 'MESM6')
      * @param currentPrice - Current market price at signal time
-     * @param side         - 'BUY' or 'SELL' from SMCExpert
+     * @param side         - 'BUY' or 'SELL' from SMC
      * @param qty          - Total contract quantity from PositionSizer
      * @returns First order ID from the broker, or null if all orders failed
      */

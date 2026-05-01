@@ -126,8 +126,9 @@ export async function hydrate(
             try {
                 const rec = JSON.parse(line) as Record<string, unknown>;
 
-                // ts_event is nanoseconds — use BigInt to avoid precision loss
-                const tsNs = BigInt(rec.ts_event as string);
+                // ts_event is inside the 'hd' header object
+                const hd = rec.hd as Record<string, unknown>;
+                const tsNs = BigInt(hd.ts_event as string);
                 const tsMs = Number(tsNs / 1_000_000n);
 
                 // Prices are raw fixed-point integers (multiply by 1e-9)

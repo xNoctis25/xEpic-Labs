@@ -6,7 +6,7 @@ import { MarketClock } from '../core/MarketClock';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Snapshot of the SMCExpert's state after each analyze() call.
+ * Snapshot of the SMC's state after each analyze() call.
  * Used by MoMEngine for the verbose heartbeat log.
  */
 export interface HeartbeatSnapshot {
@@ -28,7 +28,7 @@ export interface FvgZone {
     vwapConfluence: boolean;   // true if FVG overlaps session VWAP
 }
 
-/** Rich signal output from SMCExpert — carries confidence metadata. */
+/** Rich signal output from SMC — carries confidence metadata. */
 export interface SmcSignal {
     action:     'BUY' | 'SELL' | 'HOLD';
     confidence: number;        // 0-10 confluence score
@@ -50,10 +50,10 @@ const MAX_CANDLES           = 100;          // Ring buffer size — trim older c
 const CME_SESSION_RESET_HOUR = 18;         // 6:00 PM ET = CME Globex session open
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SMCExpert — Institutional Grade FVG + MSS Signal Engine
+// SMC — Institutional Grade FVG + MSS Signal Engine
 // ─────────────────────────────────────────────────────────────────────────────
 
-export class SMCExpert {
+export class SMC {
     private candles: Candle[] = [];
     private candleCount = 0;   // monotonic counter (survives trimming)
 
@@ -229,7 +229,7 @@ export class SMCExpert {
                         vwapConfluence,
                     });
                     console.log(
-                        `[SMCExpert] 🟢 Bullish FVG REGISTERED | Zone: [${c1.high.toFixed(2)}, ${c3.low.toFixed(2)}] | ` +
+                        `[SMC] 🟢 Bullish FVG REGISTERED | Zone: [${c1.high.toFixed(2)}, ${c3.low.toFixed(2)}] | ` +
                         `Gap: ${gapSize.toFixed(2)} pts (ATR min: ${minGap.toFixed(2)}) | VWAP confluence: ${vwapConfluence}`
                     );
                 }
@@ -258,7 +258,7 @@ export class SMCExpert {
                         vwapConfluence,
                     });
                     console.log(
-                        `[SMCExpert] 🔴 Bearish FVG REGISTERED | Zone: [${c3.high.toFixed(2)}, ${c1.low.toFixed(2)}] | ` +
+                        `[SMC] 🔴 Bearish FVG REGISTERED | Zone: [${c3.high.toFixed(2)}, ${c1.low.toFixed(2)}] | ` +
                         `Gap: ${gapSize.toFixed(2)} pts | VWAP confluence: ${vwapConfluence}`
                     );
                 }
@@ -331,7 +331,7 @@ export class SMCExpert {
                 fvg.isActive = false;
 
                 console.log(
-                    `[SMCExpert] 🎯 BULLISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
+                    `[SMC] 🎯 BULLISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
                     `Age: ${this.candleCount - fvg.formationIdx} candles | Confidence: ${confidence}/8`
                 );
 
@@ -356,7 +356,7 @@ export class SMCExpert {
                 fvg.isActive = false;
 
                 console.log(
-                    `[SMCExpert] 🎯 BEARISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
+                    `[SMC] 🎯 BEARISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
                     `Age: ${this.candleCount - fvg.formationIdx} candles | Confidence: ${confidence}/8`
                 );
 

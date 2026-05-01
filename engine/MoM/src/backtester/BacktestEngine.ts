@@ -1,6 +1,6 @@
 import { Candle } from '../market/CandleAggregator';
 import { BacktestResult, TradeRecord } from './types';
-import { SMCExpert, SmcSignal } from '../experts/SMCExpert';
+import { SMC, SmcSignal } from '../experts/SMC';
 import { MarketClock } from '../core/MarketClock';
 import { PositionSizer, SizingResult } from '../core/PositionSizer';
 import { config } from '../config/env';
@@ -152,7 +152,7 @@ export class BacktestEngine {
     /**
      * Runs a standard backtest over a given set of candles.
      *
-     * Uses SMCExpert (FVG + MSS) as the sole signal source.
+     * Uses SMC (FVG + MSS) as the sole signal source.
      * PositionSizer determines dynamic qty per trade.
      * 3-tier scale-out simulates ExecutionEngine's bracket logic.
      *
@@ -162,10 +162,10 @@ export class BacktestEngine {
      */
     public async runStandardBacktest(candles: Candle[], symbol: string): Promise<BacktestResult> {
         console.log(`[BacktestEngine] Running backtest on ${candles.length} candles for ${symbol}...`);
-        console.log(`[BacktestEngine] Expert: SMCExpert (FVG + MSS) | Silver Bullet: AM Killzone 09:30-11:00 ET`);
+        console.log(`[BacktestEngine] Expert: SMC (FVG + MSS) | Silver Bullet: AM Killzone 09:30-11:00 ET`);
         console.log(`[BacktestEngine] Scale-Out: Dynamic 3-Tier (PositionSizer + TrailingStop simulation)`);
 
-        const smcExpert = new SMCExpert();
+        const smc = new SMC();
 
         const SL_POINTS = 20;
         const COOLDOWN_MS = 3 * 60 * 1000; // 3-minute cooldown after each trade
@@ -192,7 +192,7 @@ export class BacktestEngine {
             if (currentDrawdown > maxDrawdown) maxDrawdown = currentDrawdown;
 
             // Feed every candle to the Expert (indicators must stay in sync)
-            const signal = smcExpert.analyze(candle);
+            const signal = smc.analyze(candle);
 
             // ==========================================
             // EXIT LOGIC — Multi-Tier Scale-Out Simulation

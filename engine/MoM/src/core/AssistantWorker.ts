@@ -16,6 +16,7 @@
 
 import { parentPort, MessagePort } from 'worker_threads';
 import { EnrichedTick }            from '../services/DatabentoLiveService';
+import { ORB, OrbSetup }           from '../experts/ORB';
 
 if (!parentPort) throw new Error('[AssistantWorker] Must be run as a worker thread.');
 
@@ -28,185 +29,9 @@ let lastSweepReason = '';
 // SECTION 1 — ORB VOLUME HUNTER (24/7)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A single OHLCV bucket for consolidation box tracking. */
-interface OhlcvBucket {
-    open:   number;
-    high:   number;
-    low:    number;
-    close:  number;
-    volume: number;
-    start:  number;   // epoch ms
-    ticks:  number;
-}
-
-/** The ORB setup payload sent to MomWorker for execution approval. */
-export interface OrbSetup {
-    symbol:         string;
-    dataset:        string;
-    breakoutPrice:  number;       // price at breakout moment
-    breakoutVolume: number;       // tick volume that confirmed the break
-    direction:      'LONG' | 'SHORT';
-    boxHigh:        number;       // consolidation box high
-    boxLow:         number;       // consolidation box low
-    volumeRatio:    number;       // breakoutVolume / rollingAvgVolume
-    ts:             number;       // epoch ms
-}
-
-// ── Scanner constants ────────────────────────────────────────────────────────
-const BUCKET_MS            = 60_000;    // 1-minute buckets for consolidation box
-const BOX_LOOKBACK_BUCKETS = 5;         // build box from last N complete 1-min buckets
-const VOLUME_SPIKE_RATIO   = 1.5;       // anomaly threshold: 1.5× rolling avg bucket volume
-const ROLLING_VOL_BUCKETS  = 20;        // rolling average window (buckets)
-const ATR_ORB_PERIOD       = 14;        // ATR lookback for dynamic box threshold
-const BOX_ATR_MULT         = 0.5;       // box must be tighter than ATR * 0.5
-
-// ── Per-symbol ORB state ─────────────────────────────────────────────────────
-interface OrbSymbolState {
-    currentBucket:   OhlcvBucket | null;
-    completeBuckets: OhlcvBucket[];     // ring buffer of complete buckets
-    rollingVolumes:  number[];           // per-bucket total volumes for avg calc
-    atrValues:       number[];           // rolling TR values for ATR calculation
-    currentATR:      number;             // current 14-period ATR
-    isWarmedUp?:     boolean;
-}
-
-const orbState = new Map<string, OrbSymbolState>();
-
-function getOrbState(symbol: string): OrbSymbolState {
-    if (!orbState.has(symbol)) {
-        orbState.set(symbol, {
-            currentBucket: null, completeBuckets: [], rollingVolumes: [],
-            atrValues: [], currentATR: 0,
-        });
-    }
-    return orbState.get(symbol)!;
-}
-
-/** Rolling average of the last N bucket volumes. */
-function rollingAvgVolume(volumes: number[]): number {
-    if (volumes.length === 0) return 0;
-    return volumes.reduce((a, b) => a + b, 0) / volumes.length;
-}
-
-/**
- * Called for every CME tick. Aggregates into 1-minute OHLCV buckets,
- * calculates the consolidation box, and checks for volume-anomaly breakouts.
- *
- * KEY FIX: Volume ratio compares CURRENT BUCKET accumulated volume vs
- * rolling average bucket volume (not single tick volume).
- */
-function processOrbTick(tick: EnrichedTick): void {
-    const sym   = tick.symbol;
-    const state = getOrbState(sym);
-    const now   = tick.timestamp;
-
-    // ── Open or advance the current 1-min bucket ─────────────────────────────
-    if (!state.currentBucket || now - state.currentBucket.start >= BUCKET_MS) {
-        if (state.currentBucket) {
-            const closedBucket = state.currentBucket;
-
-            // Close the bucket
-            state.completeBuckets.push(closedBucket);
-            state.rollingVolumes.push(closedBucket.volume);
-
-            // Update ATR from completed buckets
-            const cLen = state.completeBuckets.length;
-            if (cLen >= 2) {
-                const prev = state.completeBuckets[cLen - 2];
-                const tr = Math.max(
-                    closedBucket.high - closedBucket.low,
-                    Math.abs(closedBucket.high - prev.close),
-                    Math.abs(closedBucket.low - prev.close),
-                );
-                state.atrValues.push(tr);
-                if (state.atrValues.length > ATR_ORB_PERIOD) state.atrValues.shift();
-                state.currentATR = state.atrValues.reduce((a, b) => a + b, 0) / state.atrValues.length;
-            }
-
-            if (state.rollingVolumes.length === ROLLING_VOL_BUCKETS && !state.isWarmedUp) {
-                state.isWarmedUp = true;
-                parentPort!.postMessage({ type: 'WARMUP_COMPLETE' });
-            }
-
-            // Trim ring buffers
-            if (state.completeBuckets.length > ROLLING_VOL_BUCKETS + BOX_LOOKBACK_BUCKETS) {
-                state.completeBuckets.shift();
-            }
-            if (state.rollingVolumes.length > ROLLING_VOL_BUCKETS) {
-                state.rollingVolumes.shift();
-            }
-        }
-        // Open new bucket
-        state.currentBucket = {
-            open: tick.price, high: tick.price,
-            low:  tick.price, close: tick.price,
-            volume: tick.volume, start: now, ticks: 1,
-        };
-        return;  // need at least one tick inside to compute an anomaly
-    }
-
-    // ── Update current bucket ─────────────────────────────────────────────────
-    const b = state.currentBucket;
-    b.high   = Math.max(b.high, tick.price);
-    b.low    = Math.min(b.low,  tick.price);
-    b.close  = tick.price;
-    b.volume += tick.volume;
-    b.ticks++;
-
-    // Need enough history to build a consolidation box
-    if (state.completeBuckets.length < BOX_LOOKBACK_BUCKETS) return;
-
-    const boxBuckets = state.completeBuckets.slice(-BOX_LOOKBACK_BUCKETS);
-    const boxHigh    = Math.max(...boxBuckets.map(x => x.high));
-    const boxLow     = Math.min(...boxBuckets.map(x => x.low));
-    const boxRange   = boxHigh - boxLow;  // absolute points
-
-    // ── ATR-dynamic box tightness check ───────────────────────────────────────
-    // Box must be tighter than ATR * 0.5 (adapts to current volatility)
-    const boxThreshold = state.currentATR > 0 ? state.currentATR * BOX_ATR_MULT : boxRange + 1;
-    if (boxRange > boxThreshold) return;
-
-    if (state.rollingVolumes.length < ROLLING_VOL_BUCKETS) return;
-
-    // ── Volume anomaly check (BUCKET volume, not single tick) ─────────────────
-    const avgVol = rollingAvgVolume(state.rollingVolumes);
-    if (avgVol === 0) return;
-
-    // Compare the CURRENT BUCKET's accumulated volume against the rolling avg
-    const volRatio = b.volume / avgVol;
-    if (volRatio < VOLUME_SPIKE_RATIO) return;
-
-    // ── Breakout direction ────────────────────────────────────────────────────
-    let direction: 'LONG' | 'SHORT' | null = null;
-    if (tick.price > boxHigh) direction = 'LONG';
-    if (tick.price < boxLow)  direction = 'SHORT';
-    if (!direction) return;
-
-    // ── Construct and send ORB_SETUP to MomWorker ─────────────────────────────
-    const setup: OrbSetup = {
-        symbol:         sym,
-        dataset:        tick.dataset,
-        breakoutPrice:  tick.price,
-        breakoutVolume: b.volume,
-        direction,
-        boxHigh,
-        boxLow,
-        volumeRatio:    volRatio,
-        ts:             now,
-    };
-
-    console.log(
-        `[AssistantWorker] 🔭 ORB_SETUP detected | ${sym} ${direction} | ` +
-        `Bucket Vol: ${b.volume} (${volRatio.toFixed(2)}× avg) | ` +
-        `Box: [${boxLow.toFixed(2)}, ${boxHigh.toFixed(2)}] (range: ${boxRange.toFixed(2)}, ATR: ${state.currentATR.toFixed(2)}) | ` +
-        `Breakout @ ${tick.price.toFixed(2)}`
-    );
-
-    momPort?.postMessage({ type: 'ORB_SETUP', payload: setup });
-
-    // Notify dashboard via Main
-    parentPort!.postMessage({ type: 'orb_alert', payload: setup });
-}
+const orbExpert = new ORB(() => {
+    parentPort!.postMessage({ type: 'WARMUP_COMPLETE' });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 2 — TACTICAL OVERWATCH
@@ -316,7 +141,11 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
             if (!tick || tick.dataset !== 'GLBX.MDP3') return;  // CME only
 
             // 24/7 ORB scanner
-            processOrbTick(tick);
+            const setup = orbExpert.analyze(tick);
+            if (setup) {
+                momPort?.postMessage({ type: 'ORB_SETUP', payload: setup });
+                parentPort!.postMessage({ type: 'orb_alert', payload: setup });
+            }
 
             // Tactical Overwatch (only when in a live trade)
             if (overwatchMode === 'WATCHING') evaluateOverwatch(tick);
@@ -337,30 +166,18 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
             break;
         }
 
-        /**
-         * SYSTEM_RESET — OracleWorker confirmed Triple-Sweep complete.
-         * Re-arm all scanners for the next hunt cycle.
-         */
         case 'SYSTEM_RESET': {
-            console.log('[AssistantWorker] 🔭 SYSTEM_RESET — ORB Hunter re-armed for next cycle.');
+            orbExpert.reset();
             activePosition  = null;
             overwatchMode   = 'IDLE';
             overwatchBuffer.length = 0;
-            orbState.clear();   // clear bucketed history for clean re-start
             break;
         }
 
         case 'HYDRATION': {
             const p = msg.payload as any;
             const cmeCandles = p.cmeCandles || [];
-            for (const c of cmeCandles) {
-                const state = getOrbState(c.symbol);
-                state.completeBuckets.push({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, start: c.timestamp, ticks: 4 });
-                state.rollingVolumes.push(c.volume);
-                if (state.completeBuckets.length > ROLLING_VOL_BUCKETS + BOX_LOOKBACK_BUCKETS) state.completeBuckets.shift();
-                if (state.rollingVolumes.length > ROLLING_VOL_BUCKETS) state.rollingVolumes.shift();
-            }
-            console.log(`[AssistantWorker] 💧 Hydrated: ${cmeCandles.length} CME candles into ORB scanner.`);
+            orbExpert.hydrate(cmeCandles);
             break;
         }
 

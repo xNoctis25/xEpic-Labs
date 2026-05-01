@@ -21,7 +21,7 @@
 import { parentPort, MessagePort } from 'worker_threads';
 import { MarketClock }             from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
-import { SMCExpert, SmcSignal }    from '../experts/SMCExpert';
+import { SMC, SmcSignal }    from '../experts/SMC';
 import { ContractBuilder }         from '../utils/ContractBuilder';
 import { config }                  from '../config/env';
 
@@ -38,7 +38,7 @@ let isTestingTrade = true;  // Armed immediately — test trade fires on first t
 let isHuntingActive = false; // Warmup gate: blocks ALL trade signals until hydration completes
 
 // ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
-const smcExpert  = new SMCExpert();
+const smcExpert  = new SMC();
 const aggregator = new CandleAggregator(1, onCandleComplete);  // hoisted fn ref
 
 // ─────────────────────────────────────────────────────────────────────────────
