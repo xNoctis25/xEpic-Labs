@@ -51,6 +51,19 @@ function workerPath(name: string): string {
 const workerOpts = isTsNode ? { execArgv: ['-r', 'ts-node/register'] } : {};
 
 // ─── Test trade lifecycle ────────────────────────────────────────────────────
+
+// Active trade context — tracks entry details for PnL calculation on close
+interface ActiveTradeCtx {
+    symbol:     string;
+    direction:  'BUY' | 'SELL';
+    entryPrice: number;
+    qty:        number;
+    margin:     number;
+    source:     string;   // SMC or ORB
+    entryTs:    number;
+}
+let activeTradeCtx: ActiveTradeCtx | null = null;
+
 let testTradeResolve: (() => void) | null = null;
 
 // ─── Worker error handlers ───────────────────────────────────────────────────
@@ -70,6 +83,37 @@ async function checkIsFlat(symbol: string): Promise<boolean> {
         broker.getWorkingStopOrders(symbol),
     ]);
     return netPos === 0 && stopCount === 0;
+}
+
+// --- Ledger reconciliation on trade close ---
+async function reconcileLedgerOnClose(reason: string): Promise<void> {
+    if (!activeTradeCtx) return;
+    const ctx = activeTradeCtx;
+    activeTradeCtx = null;
+
+    try {
+        // Query broker for real post-trade balance
+        const postBalance = await broker.getCashBalance();
+        const preBalance  = ledger.getAvailableBuyingPower() + ledger.getReservedMargin();
+        const realizedPnL = postBalance - preBalance;
+
+        ledger.releaseMarginAndApplyPnL(ctx.margin, realizedPnL);
+
+        const pnlStr = realizedPnL >= 0 ? `+$${realizedPnL.toFixed(2)}` : `-$${Math.abs(realizedPnL).toFixed(2)}`;
+        const duration = ((Date.now() - ctx.entryTs) / 60000).toFixed(1);
+        console.log(
+            `[M.o.M] ${realizedPnL >= 0 ? '✅' : '❌'} Trade Closed | ${ctx.symbol} ${ctx.direction} | ` +
+            `Entry: ${ctx.entryPrice} | PnL: ${pnlStr} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
+        );
+
+        void db.logTelemetry('Core4', 'Execution',
+            `CLOSED: ${ctx.symbol} ${ctx.direction} | Entry: ${ctx.entryPrice} | PnL: ${pnlStr} | Qty: ${ctx.qty} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
+        );
+    } catch (err: any) {
+        // Fallback: release margin with 0 PnL, ghost sync will correct
+        ledger.releaseMarginAndApplyPnL(ctx.margin, 0);
+        console.warn(`[M.o.M] Ledger reconcile failed: ${err.message} - ghost sync will correct.`);
+    }
 }
 
 // ─── Trade command dispatcher ────────────────────────────────────────────────
@@ -122,6 +166,13 @@ async function handleTradeCommand(
             const marginPerContract = sizing.symbolRoot === 'ES' ? ES_DAY_MARGIN : MES_DAY_MARGIN;
             ledger.reserveMargin(sizing.qty * marginPerContract);
 
+            // Store trade context for PnL reconciliation on close
+            activeTradeCtx = {
+                symbol, direction: side, entryPrice: price,
+                qty: sizing.qty, margin: sizing.qty * marginPerContract,
+                source: src, entryTs: Date.now(),
+            };
+
             await executionEngine.executeBracket(symbol, price, side, sizing.qty);
             if (positionMonitor) clearInterval(positionMonitor);
             positionMonitor = setInterval(async () => {
@@ -130,6 +181,7 @@ async function handleTradeCommand(
                     if (net === 0) {
                         clearInterval(positionMonitor!); positionMonitor = null;
                         console.log(`[M.o.M] ✅ Position FLAT — bracket filled.`);
+                        await reconcileLedgerOnClose('NATURAL_BRACKET_FILL');
                         momWorker.postMessage({ type: 'position_closed', reason: 'NATURAL_BRACKET_FILL' });
                     }
                 } catch (e: any) {
@@ -147,6 +199,7 @@ async function handleTradeCommand(
             if (symbol) {
                 await executionEngine.flattenPosition(symbol);
                 momWorker.postMessage({ type: 'position_closed', reason: reason ?? 'MANUAL_FLATTEN' });
+                await reconcileLedgerOnClose(reason ?? 'MANUAL_FLATTEN');
             } else {
                 await broker.cancelAllWorkingOrders();
             }
@@ -248,33 +301,10 @@ async function boot(): Promise<void> {
     console.log(`  Buying Power: $${ledger.getAvailableBuyingPower().toFixed(0)}`);
     console.log('==========================================');
 
-    // 4. Zero-Gap Hydration: wait for Databento historical to catch up
-    //    Databento has ~15 min processing delay. We wait 16 min from feed start,
-    //    then fetch historical ending at feed start time. Live candles cover
-    //    from feed start to now. Result = ZERO GAP.
-    const DATABENTO_DELAY_MS = 16 * 60_000; // 15 min delay + 1 min buffer
-    oracleWorker.postMessage({ type: 'GET_FEED_START_TIME' });
-
-    const feedStartTime = await new Promise<number>((resolve) => {
-        const handler = (msg: any) => {
-            if (msg.type === 'FEED_START_TIME') {
-                oracleWorker.off('message', handler);
-                resolve(msg.feedStartTime as number);
-            }
-        };
-        oracleWorker.on('message', handler);
-    });
-
-    const elapsed = Date.now() - feedStartTime;
-    const waitMs  = Math.max(0, DATABENTO_DELAY_MS - elapsed);
-
-    if (waitMs > 0) {
-        const waitMin = (waitMs / 60_000).toFixed(1);
-        console.log(`[M.o.M] ⏳ Building live candles... hydration in ${waitMin}min (Databento sync)`);
-        await new Promise(r => setTimeout(r, waitMs));
-    }
-
-    console.log('[M.o.M] 💧 Hydrating historical data...');
+    // 4. Zero-Gap Hydration: OracleWorker polls Databento metadata
+    //    until both CME and CFE have data up to firstTickTimestamp.
+    //    Live candles build during the wait. Result = ZERO GAP.
+    console.log('[M.o.M] ⏳ Waiting for Databento data sync (live candles building)...');
     oracleWorker.postMessage({ type: 'TRIGGER_HYDRATION' });
 
     await new Promise<void>((resolve) => {

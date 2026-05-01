@@ -15,6 +15,49 @@ import axios from 'axios';
 const HIST_BASE_URL = 'https://hist.databento.com/v0';
 const PRICE_SCALE   = 1e-9;
 
+/**
+ * Polls Databento metadata.get_dataset_range until the dataset's available
+ * end time covers our target timestamp. Guarantees zero-gap hydration.
+ *
+ * @param dataset  - GLBX.MDP3 or XCBF.PITCH
+ * @param targetMs - epoch ms we need data up to (firstTickTimestamp)
+ * @param timeoutMs - max wait before giving up (default 25 min)
+ * @returns true if data is available, false if timed out
+ */
+export async function waitForDataAvailability(
+    dataset: string,
+    targetMs: number,
+    timeoutMs: number = 25 * 60_000,
+): Promise<boolean> {
+    const apiKey = (process.env.DATABENTO_API_KEY || '').trim();
+    if (!apiKey) return false;
+
+    const target = new Date(targetMs);
+    const deadline = Date.now() + timeoutMs;
+    const POLL_INTERVAL = 30_000; // check every 30 seconds
+
+    while (Date.now() < deadline) {
+        try {
+            const res = await axios.get(`${HIST_BASE_URL}/metadata.get_dataset_range`, {
+                auth: { username: apiKey, password: '' },
+                params: { dataset },
+                timeout: 10_000,
+            });
+            const availableEnd = new Date(res.data?.end ?? 0);
+            if (availableEnd >= target) {
+                return true;
+            }
+            const gap = ((target.getTime() - availableEnd.getTime()) / 60_000).toFixed(1);
+            console.log(`[Hydration] ${dataset}: available up to ${availableEnd.toISOString()} (need ${target.toISOString()}, gap: ${gap}min)`);
+        } catch {
+            // API error — continue polling
+        }
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
+    }
+    console.warn(`[Hydration] ${dataset}: timed out waiting for data availability.`);
+    return false;
+}
+
 /** A single historical 1-minute OHLCV bar enriched with dataset + symbol. */
 export interface HydrationCandle {
     open:      number;

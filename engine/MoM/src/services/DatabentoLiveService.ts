@@ -1,7 +1,7 @@
 import * as net    from 'net';
 import * as crypto from 'crypto';
 import { Tick }    from '../market/CandleAggregator';
-import { hydrate, HydrationPayload } from './DatabentoHistoricalService';
+import { hydrate, waitForDataAvailability, HydrationPayload } from './DatabentoHistoricalService';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -264,15 +264,26 @@ export class DatabentoLiveService {
 
     /**
      * Phase 2: Fetch historical data and return it.
-     * Called AFTER the test trade succeeds. Uses the first CME tick timestamp
-     * as the stitch point so there is zero gap.
+     * Called AFTER the test trade succeeds. Polls Databento metadata until
+     * both CME and CFE have data up to firstTickTimestamp, then fetches.
+     * Live candles have been building since firstTickTimestamp → ZERO GAP.
      */
     public async hydrateGap(): Promise<HydrationPayload> {
         const endTime = this.firstTickTimestamp || Date.now();
 
+        // Wait until Databento has processed data up to our stitch point
+        console.log('[Hydration] Waiting for Databento to process data up to feed start...');
+        const [cmeReady, cfeReady] = await Promise.all([
+            waitForDataAvailability(CME_DATASET, endTime),
+            waitForDataAvailability(CFE_DATASET, endTime),
+        ]);
+
+        if (!cmeReady) console.warn('[Hydration] CME data not available in time — starting cold.');
+        if (!cfeReady) console.warn('[Hydration] CFE data not available in time — starting cold.');
+
         const [cmeCandles, cfeCandles] = await Promise.all([
-            hydrate(CME_DATASET, CME_CONFIG.symbols, 60, endTime),
-            hydrate(CFE_DATASET, CFE_CONFIG.symbols, 60, endTime),
+            cmeReady ? hydrate(CME_DATASET, CME_CONFIG.symbols, 60, endTime) : Promise.resolve([]),
+            cfeReady ? hydrate(CFE_DATASET, CFE_CONFIG.symbols, 60, endTime) : Promise.resolve([]),
         ]);
 
         cmeCandles.sort((a, b) => a.timestamp - b.timestamp);

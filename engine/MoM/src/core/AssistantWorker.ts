@@ -414,14 +414,15 @@ function onMomMessage(msg: { type: string; [key: string]: unknown }): void {
             lastSweepReason = (msg.payload as any).reason || 'UNKNOWN';
             console.log(`[M.o.M] 🧹 Triple-Sweep P2 — verifying ${sweep.symbol}...`);
 
-            // Request a position check from Main (Core 4) which holds the broker
-            parentPort!.postMessage({
-                type:   'VERIFY_FLAT',
-                phase:  2,
-                symbol: sweep.symbol,
-                from:   'AssistantWorker',
-            });
-
+            // Wait 5s for Phase 1 flatten to settle before verifying
+            setTimeout(() => {
+                parentPort!.postMessage({
+                    type:   'VERIFY_FLAT',
+                    phase:  2,
+                    symbol: sweep.symbol,
+                    from:   'AssistantWorker',
+                });
+            }, 5000);
             // VERIFY_FLAT_RESULT is handled in the parentPort listener below
             break;
         }
@@ -499,6 +500,8 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             }
             break;
         }
+
+        case 'HUNTING_ACTIVE': break;  // Acknowledged — MomWorker gates trades
 
         case 'shutdown': {
             console.log('[AssistantWorker] Shutting down…');

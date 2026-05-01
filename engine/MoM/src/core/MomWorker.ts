@@ -123,6 +123,10 @@ function initiateTripleSweepPhase1(reason: string): void {
 
     const trade = activeTrade;
     console.log(`[MomWorker] 🧹 Triple-Sweep PHASE 1 initiated | Reason: ${reason}`);
+    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+        source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
+        message: `EXIT: ${trade.symbol} ${trade.direction} | Entry: ${trade.entryPrice} | Reason: ${reason}`
+    }});
 
     // Cancel Wilderness scratch timer if running
     if (trade.scratchTimer) clearTimeout(trade.scratchTimer);
@@ -209,6 +213,10 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
                     activeTrade.beTriggered = true;
                     activeTrade.stopPrice   = activeTrade.entryPrice;
                     console.log(`[MomWorker] 🏔️  Short Leash: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
+                    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                        source: 'MoM', regime: 'Wilderness',
+                        message: `BE_TRIGGER: ${activeTrade.symbol} trailing stop to breakeven @ ${activeTrade.entryPrice}`
+                    }});
                     parentPort!.postMessage({
                         type:    'trade_command',
                         payload: { action: 'MOVE_STOP_TO_BE', symbol: activeTrade.symbol, stopPrice: activeTrade.entryPrice },
@@ -297,6 +305,10 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
             }
 
             console.log(`[MomWorker] 🟢 GREEN_LIGHT from Oracle — proceeding with ${setup.symbol} ${setup.direction}.`);
+            parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                source: 'MoM', regime: inWilderness ? 'Wilderness' : 'Killzone',
+                message: `ENTER_ORB: ${setup.symbol} ${setup.direction} @ ${setup.breakoutPrice} | Vol: ${setup.volumeRatio.toFixed(2)}x`
+            }});
 
             // ── WILDERNESS SHORT LEASH ────────────────────────────────────────
             let slDistance = SL_NORMAL_POINTS;
@@ -332,6 +344,10 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
                 activeTrade.scratchTimer = setTimeout(() => {
                     if (activeTrade && !activeTrade.beTriggered) {
                         console.warn(`[MomWorker] 🌲 Wilderness scratch — no displacement after ${WILDERNESS_SCRATCH_MS / 60000} min. Exiting.`);
+                        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                            source: 'MoM', regime: 'Wilderness',
+                            message: `CHOKED: ${activeTrade.symbol} no displacement. Auto-scratch.`
+                        }});
                         parentPort!.postMessage({
                             type:    'trade_command',
                             payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
@@ -471,6 +487,10 @@ async function processSmcSignal(candle: Candle): Promise<void> {
     // DEFCON RED gate: indicators stay primed but no new entries
     if (isDefconRed) {
         console.log(`[MomWorker] SMC ${signal.action} blocked — DEFCON RED active.`);
+        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+            source: 'MoM', regime: 'DEFCON',
+            message: `DEFCON_RED: SMC ${signal.action} blocked. Conf=${signal.confidence}. ${signal.reason}`
+        }});
         return;
     }
 
@@ -513,6 +533,10 @@ async function processSmcSignal(candle: Candle): Promise<void> {
     }
 
     console.log(`[MomWorker] 🟢 GREEN_LIGHT — executing ${tradeSymbol} ${direction}.`);
+    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+        source: 'MoM', regime: inWilderness ? 'Wilderness' : 'Killzone',
+        message: `ENTER_SMC: ${tradeSymbol} ${direction} @ ${candle.close} | Conf: ${signal.confidence}/8 | ${signal.reason}`
+    }});
 
     // ── DYNAMIC STOP LOSS (ATR-based with Wilderness override) ────────────────
     const atr = smcExpert.getATR();
@@ -548,6 +572,10 @@ async function processSmcSignal(candle: Candle): Promise<void> {
         activeTrade.scratchTimer = setTimeout(() => {
             if (activeTrade && !activeTrade.beTriggered) {
                 console.warn('[MomWorker] 🌲 SMC Wilderness scratch — no displacement.');
+                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                    source: 'MoM', regime: 'Wilderness',
+                    message: `CHOKED: ${activeTrade.symbol} no displacement. Auto-scratch.`
+                }});
                 parentPort!.postMessage({
                     type:    'trade_command',
                     payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
