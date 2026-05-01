@@ -50,14 +50,14 @@ export class MarketClock {
 
     /**
      * Returns true if the given timestamp falls within the PM Killzone.
-     * PM Killzone: 13:30 – 15:45 ET (inclusive)
-     * Cuts off 15 minutes before the 4:00 PM close to avoid MOC (Market On Close) imbalances.
+     * PM Killzone: 13:30 – 16:15 ET (inclusive)
+     * Cuts off 30 minutes before the 16:45 EOD flatten to avoid late entries.
      *
      * @param timestampMs - UNIX epoch in milliseconds
      */
     public static isPMKillzone(timestampMs: number): boolean {
         const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
-        return totalMinutes >= 810 && totalMinutes <= 945; // 13:30 (810) – 15:45 (945)
+        return totalMinutes >= 810 && totalMinutes <= 975; // 13:30 (810) – 16:15 (975)
     }
 
     /**
@@ -73,8 +73,8 @@ export class MarketClock {
         // AM Killzone: 09:30 ET (570) to 11:30 ET (690) -> NO buffer (open is prime time)
         const isAM = totalMinutes >= 570 && totalMinutes < 690;
 
-        // PM Killzone: 13:30 ET (810) to 15:45 ET (945) -> No buffer needed, early cutoff
-        const isPM = totalMinutes >= 810 && totalMinutes < 945;
+        // PM Killzone: 13:30 ET (810) to 16:15 ET (975) -> 30min before EOD flatten
+        const isPM = totalMinutes >= 810 && totalMinutes < 975;
 
         return isLondon || isAM || isPM;
     }
@@ -91,12 +91,13 @@ export class MarketClock {
     }
 
     /**
-     * Returns true if the US equities session is open: 09:30–16:00 ET.
+     * Returns true if the CME futures session is open: 09:30–17:00 ET.
      * Used to define the outer boundary of the "Wilderness" zone.
+     * Note: Tradovate session close is 17:00 ET. Intraday margin ends at 16:45 ET.
      */
     public static isMarketOpen(timestampMs: number): boolean {
         const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
-        return totalMinutes >= 570 && totalMinutes < 960; // 09:30 (570) – 16:00 (960)
+        return totalMinutes >= 570 && totalMinutes < 1020; // 09:30 (570) – 17:00 (1020)
     }
 
     /**
@@ -110,19 +111,28 @@ export class MarketClock {
 
     /**
      * Returns true if the given timestamp falls within the EOD flatten window.
-     * Used to force-close any open positions before the market close.
+     * Used to force-close any open positions before Tradovate's margin deadline.
      *
-     * ONLY triggers strictly between 15:55 and 15:59 ET.
-     * Once 16:00 hits, this returns false and stops the sweep.
+     * Tradovate auto-liquidates at 16:45 ET (15 min before 17:00 session close).
+     * We flatten at 16:30 ET — giving us a 15-minute buffer before their auto-liquidation.
+     *
+     * Triggers between 16:30 and 16:44 ET.
+     * Once 16:45 hits, this returns false (Tradovate takes over).
      *
      * @param timestamp - UNIX epoch in milliseconds
      */
     public static isEndOfDayFlatten(timestamp: number): boolean {
-        const { hour, minute } = MarketClock.getEasternHM(timestamp);
+        const { totalMinutes } = MarketClock.getEasternHM(timestamp);
+        return totalMinutes >= 990 && totalMinutes < 1005; // 16:30 (990) – 16:44 (1004)
+    }
 
-        // ONLY trigger the rolling sweeper strictly between 15:55 and 15:59 ET.
-        // Once 16:00 hits, this returns false and stops the sweep.
-        return hour === 15 && minute >= 55;
+    /**
+     * Hard entry cutoff — no new trades after 16:15 ET.
+     * Gives 15 min of breathing room before EOD flatten at 16:30.
+     */
+    public static isPastEntryCutoff(timestampMs: number): boolean {
+        const { totalMinutes } = MarketClock.getEasternHM(timestampMs);
+        return totalMinutes >= 975; // 16:15 ET
     }
 
     /**

@@ -568,12 +568,12 @@ function updateMarketClock() {
     // Killzone classification (matches engine MarketClock exactly)
     //   London KZ: 02:15–05:00 ET
     //   NY AM:     09:30–11:30 ET
-    //   NY PM:     13:30–15:45 ET
-    //   Wilderness = equity market open (09:30–16:00) but outside all killzones
+    //   NY PM:     13:30–16:15 ET
+    //   Wilderness = futures session open (09:30–17:00) but outside all killzones
     const isLondonKZ   = totalMinutes >= 135 && totalMinutes < 300;   // 02:15–05:00
     const isNYAM       = totalMinutes >= 570 && totalMinutes < 690;   // 09:30–11:30
-    const isNYPM       = totalMinutes >= 810 && totalMinutes < 945;   // 13:30–15:45
-    const isMarketOpen = totalMinutes >= 570 && totalMinutes < 960;   // 09:30–16:00
+    const isNYPM       = totalMinutes >= 810 && totalMinutes < 975;   // 13:30–16:15
+    const isMarketOpen = totalMinutes >= 570 && totalMinutes < 1020;  // 09:30–17:00
 
     if (isLondonKZ) {
         kzText = 'Killzone: London'; kzColor = 'green';

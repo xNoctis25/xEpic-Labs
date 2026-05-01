@@ -191,6 +191,8 @@ async function handleTradeCommand(
             await executionEngine.executeBracket(symbol, price, side, sizing.qty, payload.stopPrice as number | undefined);
             if (positionMonitor) clearInterval(positionMonitor);
             let failsafeInjected = false;
+            const monitorStartTs = Date.now();
+            const FAILSAFE_GRACE_MS = 15_000;  // 15s grace for OSO stops to propagate
             positionMonitor = setInterval(async () => {
                 try {
                     const net = await broker.getNetPositionQty(symbol);
@@ -209,6 +211,9 @@ async function handleTradeCommand(
 
                     // NAKED: position exists but no stops
                     if (failsafeInjected) return;  // already injected, waiting to register
+
+                    // Grace period: OSO stops take time to propagate on Tradovate
+                    if (Date.now() - monitorStartTs < FAILSAFE_GRACE_MS) return;
 
                     const exitAction: 'Buy' | 'Sell' = side === 'BUY' ? 'Sell' : 'Buy';
                     const stopPrice = side === 'BUY'

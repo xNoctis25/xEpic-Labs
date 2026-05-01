@@ -123,16 +123,16 @@ export class EvaluationEngine {
 
     /**
      * Starts both scheduled cron jobs:
-     *   1. 16:00 ET (Mon-Fri) — State machine evaluation
+     *   1. 16:45 ET (Mon-Fri) — State machine evaluation (after EOD flatten at 16:30)
      *   2. 17:15 ET (Mon-Fri) — EoDR generation during CME maintenance
      */
     public startSchedulers(
         getSessionPnL: () => number,
         ledger: SessionLedger,
     ): void {
-        // 16:00 ET — State Machine Evaluation
-        cron.schedule('0 16 * * 1-5', async () => {
-            console.log(`\n⏰ [EvaluationEngine] - 16:00 ET EOD evaluation trigger fired.`);
+        // 16:45 ET — State Machine Evaluation (runs after 16:30 EOD flatten)
+        cron.schedule('45 16 * * 1-5', async () => {
+            console.log(`\n⏰ [EvaluationEngine] - 16:45 ET EOD evaluation trigger fired.`);
             const sessionPnL = getSessionPnL();
             await this.evaluateEndOfDay(sessionPnL);
         }, {
@@ -147,6 +147,6 @@ export class EvaluationEngine {
             timezone: 'America/New_York',
         });
 
-        console.log('🏛️ [EvaluationEngine] - Crons scheduled: 16:00 ET (evaluation) + 17:15 ET (EoDR).');
+        console.log('🏛️ [EvaluationEngine] - Crons scheduled: 16:45 ET (evaluation) + 17:15 ET (EoDR).');
     }
 }

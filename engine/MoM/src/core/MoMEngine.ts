@@ -280,11 +280,16 @@ function initiateTripleSweepPhase1(reason: string): void {
     if (!activeTrade) return;
 
     const trade = activeTrade;
+    const isTestTrade = reason.includes('TEST_TRADE');
     console.log(`[MoMEngine] 🧹 Triple-Sweep PHASE 1 initiated | Reason: ${reason}`);
-    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-        source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
-        message: `EXIT: ${trade.symbol} ${trade.direction} | Entry: ${trade.entryPrice} | Reason: ${reason}`
-    }});
+
+    // Only log telemetry for real trades — test trades are internal preflight
+    if (!isTestTrade) {
+        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+            source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
+            message: `EXIT: ${trade.symbol} ${trade.direction} | Entry: ${trade.entryPrice} | Reason: ${reason}`
+        }});
+    }
 
     // Cancel Wilderness scratch timer if running
     if (trade.scratchTimer) clearTimeout(trade.scratchTimer);
@@ -650,19 +655,19 @@ export function notifyTradeClosed(symbol: string, pnl: number): void {
  * Function declaration ensures hoisting (safe for aggregator constructor reference above).
  */
 function onCandleComplete(candle: Candle): void {
-    // ── EOD 15:55 Rolling Sweep ──────────────────────────────────────────
+    // ── EOD 16:30 Rolling Sweep (15min before Tradovate margin deadline) ──
     if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
         if (activeTrade) {
-            console.log(`[MoMEngine] 🕐 EOD SWEEP — flattening ${activeTrade.symbol} at 15:55 ET.`);
+            console.log(`[MoMEngine] 🕐 EOD SWEEP — flattening ${activeTrade.symbol} at 16:30 ET.`);
             parentPort!.postMessage({ type: 'TELEMETRY', payload: {
                 source: 'MoM', regime: 'EOD',
-                message: `EOD_FLATTEN: ${activeTrade.symbol} ${activeTrade.direction} forced exit at 15:55 ET.`
+                message: `EOD_FLATTEN: ${activeTrade.symbol} ${activeTrade.direction} forced exit at 16:30 ET.`
             }});
             parentPort!.postMessage({
                 type: 'trade_command',
-                payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'EOD_FLATTEN_1555' },
+                payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'EOD_FLATTEN_1630' },
             });
-            initiateTripleSweepPhase1('EOD_FLATTEN_1555');
+            initiateTripleSweepPhase1('EOD_FLATTEN_1630');
         }
         return;  // No new signals during EOD window
     }
