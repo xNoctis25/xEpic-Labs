@@ -61,6 +61,7 @@ interface ActiveTradeCtx {
     symbol:     string;
     direction:  'BUY' | 'SELL';
     entryPrice: number;
+    stopPrice:  number;
     qty:        number;
     margin:     number;
     source:     string;   // SMC or ORB
@@ -117,6 +118,18 @@ async function reconcileLedgerOnClose(reason: string): Promise<void> {
         void db.logTelemetry('Core4', 'Execution',
             `CLOSED: ${ctx.symbol} ${ctx.direction} | Entry: ${ctx.entryPrice} | PnL: ${pnlStr} | Qty: ${ctx.qty} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
         );
+
+        // Journal the trade to Neon (skip test trades)
+        if (!reason.includes('TEST_TRADE')) {
+            const dollarPerPoint = ctx.symbol.startsWith('MES') ? 5 : 50;
+            const exitPrice = ctx.direction === 'BUY'
+                ? ctx.entryPrice + (realizedPnL / (ctx.qty * dollarPerPoint))
+                : ctx.entryPrice - (realizedPnL / (ctx.qty * dollarPerPoint));
+            const durationSeconds = Math.round((Date.now() - ctx.entryTs) / 1000);
+            const initialRiskPerContract = Math.abs(ctx.entryPrice - ctx.stopPrice) * dollarPerPoint;
+            const initialRiskTotal = initialRiskPerContract * ctx.qty;
+            await executionEngine.gradeAndJournalTrade(exitPrice, realizedPnL, durationSeconds, initialRiskTotal);
+        }
     } catch (err: any) {
         // Fallback: release margin with 0 PnL, ghost sync will correct
         ledger.releaseMarginAndApplyPnL(ctx.margin, 0);
@@ -184,6 +197,7 @@ async function handleTradeCommand(
             // Store trade context for PnL reconciliation on close
             activeTradeCtx = {
                 symbol, direction: side, entryPrice: price,
+                stopPrice: (payload.stopPrice as number) || (side === 'BUY' ? price - 20 : price + 20),
                 qty: sizing.qty, margin: sizing.qty * marginPerContract,
                 source: src, entryTs: Date.now(),
             };

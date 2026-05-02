@@ -21,11 +21,23 @@ import { Candle } from '../market/CandleAggregator';
  *   Trailing Stop: pegDifference = -SL_POINTS
  */
 
+export interface BracketLeg {
+    label:  string;        // 'TP1', 'TP2', 'Runner'
+    qty:    number;
+    target: number | null; // TP price (null for runner)
+    stop:   number | null; // SL price (null for runner)
+    trailingPts: number | null; // Trailing stop distance (only for runner)
+}
+
 export interface ActiveTradeExcursion {
     side: 'BUY' | 'SELL';
+    symbol: string;
     entryPrice: number;
+    stopPrice: number;
+    totalQty: number;
     highestHigh: number;  // Highest price seen during the trade
     lowestLow: number;    // Lowest price seen during the trade
+    legs: BracketLeg[];   // Full scale-out plan
 }
 
 export class ExecutionEngine {
@@ -153,11 +165,30 @@ export class ExecutionEngine {
             console.log(`✅ [ExecutionEngine] - All scale-out legs transmitted. Primary Order ID: ${primaryOrderId}`);
 
             // Initialize excursion tracking for this trade
+            const legs: BracketLeg[] = [];
+            if (qty === 1) {
+                legs.push({ label: 'Runner', qty: 1, target: null, stop: null, trailingPts: slDistance });
+            } else if (qty === 2) {
+                legs.push({ label: 'TP1', qty: 1, target: tp1Price, stop: slPrice, trailingPts: null });
+                legs.push({ label: 'Runner', qty: 1, target: null, stop: null, trailingPts: slDistance });
+            } else {
+                const runnerQty = Math.floor(qty / 3);
+                const tp1Qty = Math.ceil((qty - runnerQty) / 2);
+                const tp2Qty = qty - runnerQty - tp1Qty;
+                legs.push({ label: 'TP1', qty: tp1Qty, target: tp1Price, stop: slPrice, trailingPts: null });
+                legs.push({ label: 'TP2', qty: tp2Qty, target: tp2Price, stop: slPrice, trailingPts: null });
+                legs.push({ label: 'Runner', qty: runnerQty, target: null, stop: null, trailingPts: slDistance });
+            }
+
             this.tradeExcursion = {
                 side,
+                symbol,
                 entryPrice: currentPrice,
+                stopPrice: slPrice,
+                totalQty: qty,
                 highestHigh: currentPrice,
                 lowestLow: currentPrice,
+                legs,
             };
 
             return primaryOrderId;
@@ -260,29 +291,43 @@ export class ExecutionEngine {
      *   C: PnL == 0                 (Break-even stop triggered)
      *   F: PnL < 0                  (Stopped out for loss)
      *
-     * @param exitPrice - The price at which the position was closed
-     * @param pnl       - The realized dollar P&L of the trade
+     * @param exitPrice        - The blended exit price of the position
+     * @param pnl              - The realized dollar P&L of the trade
+     * @param durationSeconds  - How long the trade was open in seconds
+     * @param initialRiskTotal - The initial dollar risk of the entire position (stop distance × qty × $/pt)
      */
-    public async gradeAndJournalTrade(exitPrice: number, pnl: number): Promise<void> {
+    public async gradeAndJournalTrade(exitPrice: number, pnl: number, durationSeconds: number, initialRiskTotal: number): Promise<void> {
         if (!this.tradeExcursion) return;
 
-        const { side, entryPrice, highestHigh, lowestLow } = this.tradeExcursion;
+        const { side, symbol, entryPrice, stopPrice, totalQty, highestHigh, lowestLow, legs } = this.tradeExcursion;
 
-        // Calculate MFE and MAE in dollar terms
-        let mfeDollars: number;
-        let maeDollars: number;
+        // ── Per-contract point calculations ────────────────────────────────
+        const initialRiskPoints = Math.abs(entryPrice - stopPrice);
+
+        let mfePoints: number;   // Per-contract MFE in points
+        let maePoints: number;   // Per-contract MAE in points (negative = adverse)
+        let pointsCaptured: number;  // Per-contract points won/lost
 
         if (side === 'BUY') {
-            // LONG: MFE = how far price went UP from entry, MAE = how far DOWN
-            mfeDollars = (highestHigh - entryPrice) * this.DOLLAR_PER_POINT;
-            maeDollars = (lowestLow - entryPrice) * this.DOLLAR_PER_POINT; // Negative = adverse
+            mfePoints = highestHigh - entryPrice;
+            maePoints = lowestLow - entryPrice;      // Negative = heat
+            pointsCaptured = exitPrice - entryPrice;
         } else {
-            // SHORT: MFE = how far price went DOWN from entry, MAE = how far UP
-            mfeDollars = (entryPrice - lowestLow) * this.DOLLAR_PER_POINT;
-            maeDollars = (entryPrice - highestHigh) * this.DOLLAR_PER_POINT; // Negative = adverse
+            mfePoints = entryPrice - lowestLow;
+            maePoints = entryPrice - highestHigh;     // Negative = heat
+            pointsCaptured = entryPrice - exitPrice;
         }
 
-        // Assign grade
+        // ── Total dollar calculations (per-contract × $5/MES or $50/ES) ───
+        const mfeDollars = mfePoints * this.DOLLAR_PER_POINT;
+        const maeDollars = maePoints * this.DOLLAR_PER_POINT;
+
+        // ── R:R achieved ─────────────────────────────────────────────────
+        const rrAchieved = initialRiskTotal > 0
+            ? Math.max(-99, Math.min(99, pnl / initialRiskTotal))
+            : 0;
+
+        // ── Grade ────────────────────────────────────────────────────────
         let grade: string;
         if (pnl > 0 && maeDollars > -25) {
             grade = 'A'; // Clean winner — minimal heat
@@ -294,21 +339,72 @@ export class ExecutionEngine {
             grade = 'F'; // Loss
         }
 
-        const notes = `${side} Entry: ${entryPrice} → Exit: ${exitPrice} | MFE: $${mfeDollars.toFixed(2)} | MAE: $${maeDollars.toFixed(2)}`;
+        // ── Formatting ──────────────────────────────────────────────────
+        const durMin = Math.floor(durationSeconds / 60);
+        const durSec = durationSeconds % 60;
+        const rrStr = `${rrAchieved >= 0 ? '+' : ''}${rrAchieved.toFixed(1)}R`;
+        const notes = [
+            `${side} ${symbol} ×${totalQty}`,
+            `Entry: ${entryPrice} → Exit: ${exitPrice} | Stop: ${stopPrice}`,
+            `Points: ${pointsCaptured >= 0 ? '+' : ''}${pointsCaptured.toFixed(2)}pts/ct | Risk: ${initialRiskPoints.toFixed(2)}pts`,
+            `MFE: ${mfePoints.toFixed(2)}pts ($${mfeDollars.toFixed(2)}/ct) | MAE: ${maePoints.toFixed(2)}pts ($${maeDollars.toFixed(2)}/ct)`,
+            `R:R: ${rrStr} | Duration: ${durMin}m ${durSec}s`,
+        ].join(' | ');
 
-        console.log(`📓 [ExecutionEngine] - Trade Graded: ${grade} | P&L: $${pnl.toFixed(2)} | MFE: $${mfeDollars.toFixed(2)} | MAE: $${maeDollars.toFixed(2)}`);
+        // ── Build metadata JSONB ─────────────────────────────────────────
+        const tradeMetadata = {
+            bracketPlan: legs.map(leg => ({
+                label: leg.label,
+                qty: leg.qty,
+                targetPrice: leg.target,
+                stopPrice: leg.stop,
+                trailingPts: leg.trailingPts,
+                // Points from entry to target (planned reward)
+                targetPoints: leg.target
+                    ? (side === 'BUY' ? leg.target - entryPrice : entryPrice - leg.target)
+                    : null,
+            })),
+            perContract: {
+                dollarPerPoint: this.DOLLAR_PER_POINT,
+                pointsCaptured,
+                mfePoints,
+                maePoints,
+                initialRiskPoints,
+            },
+            totals: {
+                qty: totalQty,
+                pnl,
+                mfeDollars: mfeDollars * totalQty,
+                maeDollars: maeDollars * totalQty,
+                initialRiskDollars: initialRiskTotal,
+            },
+        };
+
+        console.log(`📓 [ExecutionEngine] - Trade Graded: ${grade} | ${symbol} ${side} ×${totalQty}`);
+        console.log(`📓   P&L: $${pnl.toFixed(2)} | R:R: ${rrStr} | Points: ${pointsCaptured >= 0 ? '+' : ''}${pointsCaptured.toFixed(2)}pts/ct`);
+        console.log(`📓   MFE: ${mfePoints.toFixed(2)}pts ($${mfeDollars.toFixed(2)}/ct) | MAE: ${maePoints.toFixed(2)}pts ($${maeDollars.toFixed(2)}/ct) | Duration: ${durMin}m ${durSec}s`);
 
         // Journal to Neon Postgres
         try {
             await this.db.insertTradeJournal({
+                symbol,
                 side,
+                qty: totalQty,
                 entryPrice,
                 exitPrice,
+                stopPrice,
                 pnl,
+                pointsCaptured,
+                initialRiskPoints,
+                mfePoints,
+                maePoints,
                 mfeExcursion: mfeDollars,
                 maeExcursion: maeDollars,
+                durationSeconds,
+                rrAchieved,
                 grade,
                 notes,
+                tradeMetadata,
             });
         } catch (error: any) {
             console.error(`🔴 [ExecutionEngine] - Failed to journal trade:`, error.message);

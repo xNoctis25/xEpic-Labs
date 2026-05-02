@@ -95,16 +95,42 @@ export class NeonDatabase {
             CREATE TABLE IF NOT EXISTS trade_journal (
                 id SERIAL PRIMARY KEY,
                 timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+                symbol VARCHAR(20) NOT NULL DEFAULT 'MESM6',
                 side VARCHAR(4) NOT NULL,
+                qty INT NOT NULL DEFAULT 1,
                 entry_price NUMERIC(12, 2) NOT NULL,
                 exit_price NUMERIC(12, 2) NOT NULL,
+                stop_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
                 pnl NUMERIC(12, 2) NOT NULL,
+                points_captured NUMERIC(8, 2) NOT NULL DEFAULT 0.00,
+                initial_risk_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00,
+                mfe_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00,
+                mae_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00,
                 mfe_excursion NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
                 mae_excursion NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+                duration_seconds INT NOT NULL DEFAULT 0,
+                rr_achieved NUMERIC(6, 2) NOT NULL DEFAULT 0.00,
                 grade VARCHAR(2) NOT NULL DEFAULT 'F',
-                notes TEXT
+                notes TEXT,
+                trade_metadata JSONB DEFAULT '{}'
             );
         `);
+        // Migrate: add new columns if missing (existing deployments)
+        const migrations = [
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS duration_seconds INT NOT NULL DEFAULT 0`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS rr_achieved NUMERIC(6, 2) NOT NULL DEFAULT 0.00`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS symbol VARCHAR(20) NOT NULL DEFAULT 'MESM6'`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS qty INT NOT NULL DEFAULT 1`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS stop_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS points_captured NUMERIC(8, 2) NOT NULL DEFAULT 0.00`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS initial_risk_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS mfe_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS mae_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00`,
+            `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS trade_metadata JSONB DEFAULT '{}'`,
+        ];
+        for (const sql of migrations) {
+            await this.pool.query(sql);
+        }
 
         // Create the daily_reports table — End of Day Report (EoDR) summaries
         await this.pool.query(`
@@ -225,24 +251,45 @@ export class NeonDatabase {
     // Trade Journal — Per-Trade Self-Graded Records
     // ==========================================
     /**
-     * Inserts a self-graded trade record into the journal.
+     * Inserts an institutional-grade trade record into the journal.
      */
     public async insertTradeJournal(trade: {
+        symbol: string;
         side: string;
+        qty: number;
         entryPrice: number;
         exitPrice: number;
+        stopPrice: number;
         pnl: number;
+        pointsCaptured: number;
+        initialRiskPoints: number;
+        mfePoints: number;
+        maePoints: number;
         mfeExcursion: number;
         maeExcursion: number;
+        durationSeconds: number;
+        rrAchieved: number;
         grade: string;
         notes: string;
+        tradeMetadata: Record<string, unknown>;
     }): Promise<void> {
         await this.pool.query(
-            `INSERT INTO trade_journal (side, entry_price, exit_price, pnl, mfe_excursion, mae_excursion, grade, notes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [trade.side, trade.entryPrice, trade.exitPrice, trade.pnl, trade.mfeExcursion, trade.maeExcursion, trade.grade, trade.notes]
+            `INSERT INTO trade_journal (
+                symbol, side, qty, entry_price, exit_price, stop_price, pnl,
+                points_captured, initial_risk_points, mfe_points, mae_points,
+                mfe_excursion, mae_excursion, duration_seconds, rr_achieved,
+                grade, notes, trade_metadata
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb)`,
+            [
+                trade.symbol, trade.side, trade.qty, trade.entryPrice, trade.exitPrice, trade.stopPrice, trade.pnl,
+                trade.pointsCaptured, trade.initialRiskPoints, trade.mfePoints, trade.maePoints,
+                trade.mfeExcursion, trade.maeExcursion, trade.durationSeconds, trade.rrAchieved,
+                trade.grade, trade.notes, JSON.stringify(trade.tradeMetadata),
+            ]
         );
-        console.log(`📓 [NeonDB] - Trade journaled: ${trade.side} | P&L: $${trade.pnl.toFixed(2)} | Grade: ${trade.grade}`);
+        const durMin = Math.floor(trade.durationSeconds / 60);
+        const durSec = trade.durationSeconds % 60;
+        console.log(`📓 [NeonDB] - Trade journaled: ${trade.symbol} ${trade.side} ×${trade.qty} | P&L: $${trade.pnl.toFixed(2)} | Grade: ${trade.grade} | R:R: ${trade.rrAchieved >= 0 ? '+' : ''}${trade.rrAchieved.toFixed(1)}R | Duration: ${durMin}m ${durSec}s`);
     }
 
     // ==========================================
