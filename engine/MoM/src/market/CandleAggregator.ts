@@ -1,5 +1,5 @@
-export interface Tick { price: number; volume: number; timestamp: number; }
-export interface Candle { open: number; high: number; low: number; close: number; volume: number; timestamp: number; }
+export interface Tick { price: number; volume: number; timestamp: number; side?: 'A' | 'B' | 'N'; }
+export interface Candle { open: number; high: number; low: number; close: number; volume: number; buyVolume: number; sellVolume: number; timestamp: number; }
 
 export class CandleAggregator {
     private currentCandle: Candle | null = null;
@@ -23,7 +23,10 @@ export class CandleAggregator {
             // Start a new candle
             this.currentCandle = {
                 open: tick.price, high: tick.price, low: tick.price, close: tick.price,
-                volume: tick.volume, timestamp: candleStart
+                volume: tick.volume,
+                buyVolume:  tick.side === 'A' ? tick.volume : 0,
+                sellVolume: tick.side === 'B' ? tick.volume : 0,
+                timestamp: candleStart
             };
         } else {
             // Update the current candle with the incoming tick
@@ -31,6 +34,8 @@ export class CandleAggregator {
             this.currentCandle.low = Math.min(this.currentCandle.low, tick.price);
             this.currentCandle.close = tick.price;
             this.currentCandle.volume += tick.volume;
+            if (tick.side === 'A') this.currentCandle.buyVolume  += tick.volume;
+            if (tick.side === 'B') this.currentCandle.sellVolume += tick.volume;
         }
     }
 

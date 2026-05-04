@@ -53,7 +53,9 @@ export class DataLoader {
                 high: Number(record.high) / 1e9,
                 low: Number(record.low) / 1e9,
                 close: Number(record.close) / 1e9,
-                volume: Number(record.volume)
+                volume: Number(record.volume),
+                buyVolume: 0,
+                sellVolume: 0,
             });
         }
 

@@ -19,6 +19,7 @@ export const CFE_DATASET = 'XCBF.PITCH';   // VX  (CBOE Futures Exchange / CFE)
 export interface EnrichedTick extends Tick {
     dataset: string;   // 'GLBX.MDP3' | 'XCBT.MDP3'
     symbol:  string;   // e.g. 'ES.c.0', 'VX.c.0'
+    side:    'A' | 'B' | 'N';  // Aggressor side: A=buyer hit ask, B=seller hit bid, N=unknown
 }
 
 export interface FeedConfig {
@@ -185,6 +186,8 @@ class SingleFeedConnection {
                 const tsEventNs  = record.readBigUInt64LE(8);
                 const priceRaw   = record.readBigInt64LE(16);
                 const size       = record.readUInt32LE(24);
+                const sideChar   = String.fromCharCode(record[29]) as 'A' | 'B' | 'N';
+                const side       = (sideChar === 'A' || sideChar === 'B') ? sideChar : 'N';
                 const priceFloat = Number(priceRaw) * PRICE_SCALE;
                 const tsMs       = Number(tsEventNs / BigInt(1_000_000));
 
@@ -196,6 +199,7 @@ class SingleFeedConnection {
                     volume:    size,
                     timestamp: tsMs,
                     dataset,
+                    side,
                     // Resolve the primary trading symbol from the subscription
                     symbol: symbols[0],
                 });

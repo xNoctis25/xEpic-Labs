@@ -271,18 +271,11 @@ export class SMC {
                         gapAtrRatio:           gapRatio,
                     };
                     this.fvgRegistry.push(fvg);
-                    console.log(
-                        `[SMC] 🟢 Bullish FVG REGISTERED | Zone: [${c1.high.toFixed(2)}, ${c3.low.toFixed(2)}] | ` +
-                        `Gap: ${gapSize.toFixed(2)} pts (ATR min: ${minGap.toFixed(2)}) | Disp: ${bodyRatio.toFixed(2)}× ATR | VWAP: ${vwapConfluence}`
-                    );
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY) {
                         const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
                         const probability = this.calculateProbability(currentCandle, fvg, vwap, 'BUY', htfScore);
-                        console.log(
-                            `[SMC] ⚡ BULLISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
-                        );
                         displacementSignal = {
                             action:     'BUY',
                             confidence: probability.total,
@@ -321,18 +314,11 @@ export class SMC {
                         gapAtrRatio:           gapRatio,
                     };
                     this.fvgRegistry.push(fvg);
-                    console.log(
-                        `[SMC] 🔴 Bearish FVG REGISTERED | Zone: [${c3.high.toFixed(2)}, ${c1.low.toFixed(2)}] | ` +
-                        `Gap: ${gapSize.toFixed(2)} pts | Disp: ${bodyRatio.toFixed(2)}× ATR | VWAP: ${vwapConfluence}`
-                    );
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY && !displacementSignal) {
                         const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
                         const probability = this.calculateProbability(currentCandle, fvg, vwap, 'SELL', htfScore);
-                        console.log(
-                            `[SMC] ⚡ BEARISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
-                        );
                         displacementSignal = {
                             action:     'SELL',
                             confidence: probability.total,
@@ -408,11 +394,6 @@ export class SMC {
                 // Mark as mitigated (no double-tapping)
                 fvg.isActive = false;
 
-                console.log(
-                    `[SMC] 🎯 BULLISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
-                    `Age: ${age} candles | Probability: ${probability.total}%`
-                );
-
                 return {
                     action:     'BUY',
                     confidence: probability.total,
@@ -430,11 +411,6 @@ export class SMC {
                 const probability = this.calculateProbability(candle, fvg, vwap, 'SELL', htfScore);
 
                 fvg.isActive = false;
-
-                console.log(
-                    `[SMC] 🎯 BEARISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
-                    `Age: ${age} candles | Probability: ${probability.total}%`
-                );
 
                 return {
                     action:     'SELL',
@@ -468,13 +444,17 @@ export class SMC {
                         : fvg.displacementBodyRatio >= 1.5 ? 15
                         : fvg.displacementBodyRatio >= 1.0 ? 5 : 0;
 
-        // ── Factor 3: Volume (max 20) ────────────────────────────────────
-        // candle volume ÷ median volume — is volume confirming the move
-        const medianVol = this.getMedianVolume();
-        const volRatio = medianVol > 0 ? candle.volume / medianVol : 0;
-        const volScore = volRatio >= 2.0 ? 20
-                       : volRatio >= 1.5 ? 15
-                       : volRatio >= 1.2 ? 10 : 0;
+        // ── Factor 3: Delta Confirmation (max 20) ─────────────────────────
+        // Measures directional aggression: is institutional money behind this move?
+        // Delta = buyVolume - sellVolume (positive = buyers dominating)
+        const delta = candle.buyVolume - candle.sellVolume;
+        const totalSidedVol = candle.buyVolume + candle.sellVolume;
+        const deltaRatio = totalSidedVol > 0 ? Math.abs(delta) / totalSidedVol : 0;
+        const deltaAligned = (action === 'BUY' && delta > 0) || (action === 'SELL' && delta < 0);
+        const deltaScore = !deltaAligned ? 0                // wrong side = 0
+                         : deltaRatio >= 0.40 ? 20          // 70%+ one-sided = max
+                         : deltaRatio >= 0.25 ? 15          // 62%+ one-sided = strong
+                         : deltaRatio >= 0.10 ? 10 : 5;     // slight lean = partial
 
         // ── Factor 4: VWAP Alignment (max 15) ────────────────────────────
         // price vs volume-weighted average price — is price on the right side of value
@@ -489,8 +469,8 @@ export class SMC {
         // gap ÷ ATR ratio — larger gaps = more institutional activity
         const gapScore = fvg.gapAtrRatio >= 1.0 ? 10 : fvg.gapAtrRatio >= 0.5 ? 5 : 0;
 
-        const total = htfScore + dispScore + volScore + vwapScore + gapScore;
-        const breakdown = `HTF:${htfScore}/30|Disp:${dispScore}/25|Vol:${volScore}/20|VWAP:${vwapScore}/15|Gap:${gapScore}/10`;
+        const total = htfScore + dispScore + deltaScore + vwapScore + gapScore;
+        const breakdown = `HTF:${htfScore}/30|Disp:${dispScore}/25|Delta:${deltaScore}/20|VWAP:${vwapScore}/15|Gap:${gapScore}/10`;
 
         return { total, breakdown };
     }

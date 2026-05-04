@@ -196,14 +196,18 @@ export class MultiTimeframeAnalyzer {
                 low:       candle1m.low,
                 close:     candle1m.close,
                 volume:    candle1m.volume,
+                buyVolume: candle1m.buyVolume,
+                sellVolume: candle1m.sellVolume,
                 timestamp: candleStart,
             };
         } else {
-            // Same TF candle — update OHLCV
+            // Same TF candle — update OHLCV + delta
             tf.currentCandle.high   = Math.max(tf.currentCandle.high, candle1m.high);
             tf.currentCandle.low    = Math.min(tf.currentCandle.low,  candle1m.low);
             tf.currentCandle.close  = candle1m.close;
-            tf.currentCandle.volume += candle1m.volume;
+            tf.currentCandle.volume    += candle1m.volume;
+            tf.currentCandle.buyVolume  += candle1m.buyVolume;
+            tf.currentCandle.sellVolume += candle1m.sellVolume;
         }
     }
 
@@ -264,13 +268,6 @@ export class MultiTimeframeAnalyzer {
         // Classify trend from last 2 swing highs and last 2 swing lows
         const prevTrend = tf.trend;
         tf.trend = this.classifyTrend(swingHighs, swingLows);
-
-        if (!silent && prevTrend !== tf.trend) {
-            console.log(
-                `[MTF] 📊 ${tf.label} TREND SHIFT: ${prevTrend} → ${tf.trend} | ` +
-                `SwH: ${tf.swingHigh?.toFixed(2) ?? '—'} | SwL: ${tf.swingLow?.toFixed(2) ?? '—'}`
-            );
-        }
     }
 
     /**

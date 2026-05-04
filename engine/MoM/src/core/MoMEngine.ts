@@ -419,7 +419,7 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             // Hydrate MTF analyzer with full session data (builds 1H/15M/5M candles)
             const hydrationCandles: Candle[] = cmeCandles.map((c: any) => ({
                 open: c.open, high: c.high, low: c.low, close: c.close,
-                volume: c.volume, timestamp: c.timestamp,
+                volume: c.volume, buyVolume: 0, sellVolume: 0, timestamp: c.timestamp,
             }));
             mtfAnalyzer.hydrateFrom1mCandles(hydrationCandles);
 
@@ -435,7 +435,7 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
 
             // Hydrate SMC expert with the 1m candles (indicators only — don't fire signals)
             for (const c of cmeCandles) {
-                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp }, true);
+                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, buyVolume: 0, sellVolume: 0, timestamp: c.timestamp }, true);
                 aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
             }
             break;
@@ -593,7 +593,6 @@ function onCandleComplete(candle: Candle): void {
 
 /**
  * Full SMC signal evaluation + Handshake + Wilderness gate + entry dispatch.
- * Mirrors the ORB_SETUP flow so both signal sources share the same execution path.
  */
 async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void> {
     if (signal.action === 'HOLD') return;
