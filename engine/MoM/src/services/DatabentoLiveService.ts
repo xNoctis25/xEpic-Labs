@@ -263,13 +263,36 @@ export class DatabentoLiveService {
     }
 
     /**
-     * Phase 2: Fetch historical data and return it.
+     * Phase 2: Fetch historical data from CME Globex session open (6 PM ET).
      * Called AFTER the test trade succeeds. Polls Databento metadata until
      * both CME and CFE have data up to firstTickTimestamp, then fetches.
      * Live candles have been building since firstTickTimestamp → ZERO GAP.
+     *
+     * The full session window provides 900+ 1-minute candles — enough for
+     * multi-timeframe analysis (1H: ~15 candles, 15M: ~62, 5M: ~186).
      */
     public async hydrateGap(): Promise<HydrationPayload> {
         const endTime = this.firstTickTimestamp || Date.now();
+
+        // Calculate minutes from CME Globex session open (6:00 PM ET previous day)
+        // This gives us the full overnight + morning session for HTF analysis
+        const etFormatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/New_York',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', hour12: false,
+        });
+        const parts = etFormatter.formatToParts(new Date(endTime));
+        const etHour = parseInt(parts.find(p => p.type === 'hour')!.value);
+        const etDate = new Date(new Date(endTime).toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        // Session opens at 6 PM ET. If we're before 6 PM, session started yesterday.
+        const sessionOpenET = new Date(etDate);
+        sessionOpenET.setHours(18, 0, 0, 0);
+        if (etHour < 18) sessionOpenET.setDate(sessionOpenET.getDate() - 1);
+        // Convert session open back to UTC for comparison
+        const sessionOpenUTC = new Date(sessionOpenET.toLocaleString('en-US', { timeZone: 'UTC' }));
+        const minutesSinceOpen = Math.max(60, Math.floor((endTime - sessionOpenUTC.getTime()) / 60_000));
+
+        console.log(`[Hydration] Requesting ${minutesSinceOpen} minutes of data (from 6 PM ET session open)...`);
 
         // Wait until Databento has processed data up to our stitch point
         console.log('[Hydration] Waiting for Databento to process data up to feed start...');
@@ -282,8 +305,8 @@ export class DatabentoLiveService {
         if (!cfeReady) console.warn('[Hydration] CFE data not available in time — starting cold.');
 
         const [cmeCandles, cfeCandles] = await Promise.all([
-            cmeReady ? hydrate(CME_DATASET, CME_CONFIG.symbols, 60, endTime) : Promise.resolve([]),
-            cfeReady ? hydrate(CFE_DATASET, CFE_CONFIG.symbols, 60, endTime) : Promise.resolve([]),
+            cmeReady ? hydrate(CME_DATASET, CME_CONFIG.symbols, minutesSinceOpen, endTime) : Promise.resolve([]),
+            cfeReady ? hydrate(CFE_DATASET, CFE_CONFIG.symbols, minutesSinceOpen, endTime) : Promise.resolve([]),
         ]);
 
         cmeCandles.sort((a, b) => a.timestamp - b.timestamp);

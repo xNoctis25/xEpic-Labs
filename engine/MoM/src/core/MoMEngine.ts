@@ -22,6 +22,7 @@ import { parentPort, MessagePort } from 'worker_threads';
 import { MarketClock }             from './MarketClock';
 import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
 import { SMC, SmcSignal }    from '../experts/SMC';
+import { MultiTimeframeAnalyzer } from '../experts/MultiTimeframeAnalyzer';
 import { ContractBuilder }         from '../utils/ContractBuilder';
 import { config }                  from '../config/env';
 
@@ -38,8 +39,9 @@ let isTestingTrade = true;  // Armed immediately — test trade fires on first t
 let isHuntingActive = false; // Warmup gate: blocks ALL trade signals until hydration completes
 
 // ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
-const smcExpert  = new SMC();
-const aggregator = new CandleAggregator(1, onCandleComplete);  // hoisted fn ref
+const smcExpert     = new SMC();
+const mtfAnalyzer   = new MultiTimeframeAnalyzer();
+const aggregator    = new CandleAggregator(1, onCandleComplete);  // hoisted fn ref
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WILDERNESS SHORT LEASH CONSTANTS
@@ -412,6 +414,25 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
         case 'HYDRATION': {
             const p = data.payload as any;
             const cmeCandles = p.cmeCandles || [];
+
+            // Hydrate MTF analyzer with full session data (builds 1H/15M/5M candles)
+            const hydrationCandles: Candle[] = cmeCandles.map((c: any) => ({
+                open: c.open, high: c.high, low: c.low, close: c.close,
+                volume: c.volume, timestamp: c.timestamp,
+            }));
+            mtfAnalyzer.hydrateFrom1mCandles(hydrationCandles);
+
+            // Print MTF bias after hydration
+            const snap = mtfAnalyzer.getSnapshot();
+            console.log(
+                `[M.o.M] 📊 Multi-Timeframe Analysis Complete\n` +
+                `         1H: ${snap.tf1h.trend} (${snap.tf1h.candleCount} candles) | ` +
+                `15M: ${snap.tf15m.trend} (${snap.tf15m.candleCount} candles) | ` +
+                `5M: ${snap.tf5m.trend} (${snap.tf5m.candleCount} candles)\n` +
+                `         Dominant Bias: ${snap.dominantBias} | Alignment: ${snap.alignmentScore}/3 | Ready: ${snap.isReady ? '✅' : '❌'}`
+            );
+
+            // Hydrate SMC expert with the 1m candles (indicators only — don't fire signals)
             for (const c of cmeCandles) {
                 smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp }, true);
                 aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
@@ -674,13 +695,16 @@ function onCandleComplete(candle: Candle): void {
         return;  // No new signals during EOD window
     }
 
+    // Feed 1m candle to MTF analyzer (builds 5m/15m/1h candles)
+    mtfAnalyzer.analyze(candle);
+
     // ── Analyze candle for SMC structure (used by both ATM + signal pipeline)
     // Indicators-only mode: update ATR/VWAP/FVG registry but don't consume
     // FVGs via tap scanning. Activated when:
     //   1. Engine is IN_TRADE (can't act on signals)
     //   2. Hunting not yet active (warmup / race window)
     const indicatorsOnly = !isHuntingActive || (engineState === 'IN_TRADE' && !!activeTrade);
-    const signal: SmcSignal = smcExpert.analyze(candle, indicatorsOnly);
+    const signal: SmcSignal = smcExpert.analyze(candle, indicatorsOnly, mtfAnalyzer.isReady() ? mtfAnalyzer : undefined);
 
     // ── Active Trade Monitor (per-candle while IN_TRADE) ─────────────────
     if (engineState === 'IN_TRADE' && activeTrade) {

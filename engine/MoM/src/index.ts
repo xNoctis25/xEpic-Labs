@@ -374,11 +374,9 @@ async function boot(): Promise<void> {
     console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
     console.log(`  Buying Power: $${ledger.getAvailableBuyingPower().toFixed(0)}`);
     console.log('==========================================');
-
-    // 4. Zero-Gap Hydration: OracleWorker polls Databento metadata
-    //    until both CME and CFE have data up to firstTickTimestamp.
-    //    Live candles build during the wait. Result = ZERO GAP.
-    console.log('[M.o.M] ⏳ Waiting for Databento data sync (live candles building)...');
+    // 4. Start warm up sequence
+    console.log('\n[M.o.M] 🔄 Starting Warm Up...');
+    console.log('[M.o.M] 📡 Requesting Hydration (from 6 PM ET session open)...');
     oracleWorker.postMessage({ type: 'TRIGGER_HYDRATION' });
 
     await new Promise<void>((resolve) => {
@@ -390,15 +388,17 @@ async function boot(): Promise<void> {
                              : vix < 25 ? '📊 Normal — standard volatility'
                              : vix < 30 ? '⚠️  Elevated — rising fear, wider swings'
                              :            '🔴 Extreme Fear — hedging frenzy, expect chaos';
-                console.log(`[M.o.M] ✅ Hydrated: ${msg.cmeCount} CME + ${msg.cfeCount} CFE candles | VIX: ${vix.toFixed(2)} (${vixTag})`);
+                console.log(`[M.o.M] ✅ Hydration Complete — ${msg.cmeCount} CME + ${msg.cfeCount} CFE candles | VIX: ${vix.toFixed(2)} (${vixTag})`);
                 resolve();
             }
         };
         oracleWorker.on('message', handler);
     });
 
+    console.log('[M.o.M] ✅ Warm Up Complete — all experts have minimum 20 candles');
+
+    // 5. Flip the warmup gate — allow real trades
     console.log('\n==========================================');
-    // 5. Flip the warmup gate -- allow real trades
     momWorker.postMessage({ type: 'HUNTING_ACTIVE' });
     assistantWorker.postMessage({ type: 'HUNTING_ACTIVE' });
 

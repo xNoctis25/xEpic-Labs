@@ -1,5 +1,6 @@
 import { Candle } from '../market/CandleAggregator';
 import { MarketClock } from '../core/MarketClock';
+import { MultiTimeframeAnalyzer } from './MultiTimeframeAnalyzer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -51,7 +52,7 @@ const MAX_FVG_AGE_CANDLES     = 60;           // Invalidate FVGs older than 60 c
 const MAX_CANDLES             = 100;          // Ring buffer size — trim older candles
 const CME_SESSION_RESET_HOUR  = 18;           // 6:00 PM ET = CME Globex session open
 const DISPLACEMENT_MIN_BODY   = 1.5;          // Displacement entry: candle body >= 1.5× ATR
-const MIN_WARMUP_CANDLES      = 15;           // Hard gate: ATR-14 + volume median need real data
+const MIN_WARMUP_CANDLES      = 20;           // Hard gate: 20 candles for all experts
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SMC — Institutional Grade FVG + MSS Signal Engine
@@ -77,6 +78,9 @@ export class SMC {
     public dailyRejectedSetups: string[] = [];
     private rejectionDay = -1;
 
+    // --- Multi-Timeframe Analyzer ref (set per analyze cycle) ---
+    private currentMtf?: MultiTimeframeAnalyzer;
+
     // --- Debug Heartbeat Snapshot ---
     public lastHeartbeat: HeartbeatSnapshot = {
         trend: 'Neutral', fvg: 'None', decision: 'HOLD', activeFvgCount: 0, atr: 0,
@@ -86,7 +90,8 @@ export class SMC {
     // Main Analysis — called every 1-minute candle
     // ─────────────────────────────────────────────────────────────────────────
 
-    public analyze(candle: Candle, indicatorsOnly: boolean = false): SmcSignal {
+    public analyze(candle: Candle, indicatorsOnly: boolean = false, mtf?: MultiTimeframeAnalyzer): SmcSignal {
+        this.currentMtf = mtf;
         this.candles.push(candle);
         this.candleCount++;
 
@@ -273,7 +278,8 @@ export class SMC {
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY) {
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'BUY');
+                        const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'BUY', htfScore);
                         console.log(
                             `[SMC] ⚡ BULLISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
                         );
@@ -322,7 +328,8 @@ export class SMC {
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY && !displacementSignal) {
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'SELL');
+                        const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'SELL', htfScore);
                         console.log(
                             `[SMC] ⚡ BEARISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
                         );
@@ -395,7 +402,8 @@ export class SMC {
                 if (!tapped) continue;
 
                 const age = this.candleCount - fvg.formationIdx;
-                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'BUY');
+                const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
+                const probability = this.calculateProbability(candle, fvg, vwap, 'BUY', htfScore);
 
                 // Mark as mitigated (no double-tapping)
                 fvg.isActive = false;
@@ -418,7 +426,8 @@ export class SMC {
                 if (!tapped) continue;
 
                 const age = this.candleCount - fvg.formationIdx;
-                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'SELL');
+                const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
+                const probability = this.calculateProbability(candle, fvg, vwap, 'SELL', htfScore);
 
                 fvg.isActive = false;
 
@@ -445,73 +454,45 @@ export class SMC {
 
     private calculateProbability(
         candle: Candle, fvg: FvgZone, vwap: number,
-        trend: HeartbeatSnapshot['trend'], action: 'BUY' | 'SELL',
+        action: 'BUY' | 'SELL', mtfScore: number,
     ): { total: number; breakdown: string } {
 
-        // ── Tier 1: Structural Edge (max 50) ─────────────────────────────
-        // Trend alignment (20pts): last 20 candles directional bias
-        const trendScore = this.scoreTrendAlignment(action);
-        // Displacement strength (30pts): FVG displacement candle body vs ATR
-        const dispScore = fvg.displacementBodyRatio >= 2.0 ? 30
-                        : fvg.displacementBodyRatio >= 1.5 ? 20
-                        : fvg.displacementBodyRatio >= 1.0 ? 10 : 0;
+        // ── Factor 1: HTF Alignment (max 30) ─────────────────────────────
+        // Scored by MultiTimeframeAnalyzer.scoreAlignment()
+        // 1H aligned: +15 | 15M aligned: +10 | 5M aligned: +5
+        const htfScore = mtfScore;
 
-        // ── Tier 2: Confluence (max 30) ──────────────────────────────────
-        // VWAP alignment (20pts): 10 for price side, 10 for trend side
-        const priceVwapOk = vwap > 0 && (
+        // ── Factor 2: Displacement Strength (max 25) ─────────────────────
+        // body ÷ ATR ratio — how strong was the institutional candle
+        const dispScore = fvg.displacementBodyRatio >= 2.0 ? 25
+                        : fvg.displacementBodyRatio >= 1.5 ? 15
+                        : fvg.displacementBodyRatio >= 1.0 ? 5 : 0;
+
+        // ── Factor 3: Volume (max 20) ────────────────────────────────────
+        // candle volume ÷ median volume — is volume confirming the move
+        const medianVol = this.getMedianVolume();
+        const volRatio = medianVol > 0 ? candle.volume / medianVol : 0;
+        const volScore = volRatio >= 2.0 ? 20
+                       : volRatio >= 1.5 ? 15
+                       : volRatio >= 1.2 ? 10 : 0;
+
+        // ── Factor 4: VWAP Alignment (max 15) ────────────────────────────
+        // price vs volume-weighted average price — is price on the right side of value
+        const vwapAligned = vwap > 0 && (
             (action === 'BUY' && candle.close > vwap) ||
             (action === 'SELL' && candle.close < vwap)
         );
-        const trendVwapOk = (action === 'BUY' && trend === 'Bullish') ||
-                            (action === 'SELL' && trend === 'Bearish');
-        const vwapScore = (priceVwapOk ? 10 : 0) + (trendVwapOk ? 10 : 0);
+        const vwapNeutral = vwap > 0 && Math.abs(candle.close - vwap) / vwap < 0.001; // within 0.1%
+        const vwapScore = vwapAligned ? 15 : vwapNeutral ? 5 : 0;
 
-        // Volume on tap (10pts)
-        const medianVol = this.getMedianVolume();
-        const volScore = medianVol > 0 && candle.volume >= medianVol * 1.2 ? 10 : 0;
-
-        // ── Tier 3: Protection (max 20) ─────────────────────────────────
-        // Gap size (10pts)
+        // ── Factor 5: Gap Size (max 10) ──────────────────────────────────
+        // gap ÷ ATR ratio — larger gaps = more institutional activity
         const gapScore = fvg.gapAtrRatio >= 1.0 ? 10 : fvg.gapAtrRatio >= 0.5 ? 5 : 0;
 
-        // Counter-trend protection (10pts)
-        const momentumScore = this.scoreCounterTrendProtection(action);
-
-        const total = trendScore + dispScore + vwapScore + volScore + gapScore + momentumScore;
-        const breakdown = `Trend:${trendScore}/20|Disp:${dispScore}/30|VWAP:${vwapScore}/20|Vol:${volScore}/10|Gap:${gapScore}/10|Momentum:${momentumScore}/10`;
+        const total = htfScore + dispScore + volScore + vwapScore + gapScore;
+        const breakdown = `HTF:${htfScore}/30|Disp:${dispScore}/25|Vol:${volScore}/20|VWAP:${vwapScore}/15|Gap:${gapScore}/10`;
 
         return { total, breakdown };
-    }
-
-    /** Trend alignment: % of last 20 candles closing in trade direction. */
-    private scoreTrendAlignment(action: 'BUY' | 'SELL'): number {
-        const lookback = Math.min(20, this.candles.length - 1);
-        if (lookback < 5) return 0;
-
-        let aligned = 0;
-        for (let i = this.candles.length - lookback; i < this.candles.length; i++) {
-            const c = this.candles[i];
-            if (action === 'BUY' && c.close > c.open) aligned++;
-            if (action === 'SELL' && c.close < c.open) aligned++;
-        }
-        const pct = aligned / lookback;
-        return pct > 0.6 ? 20 : pct >= 0.5 ? 10 : 0;
-    }
-
-    /** Counter-trend protection: 0 if 3+ consecutive HH/LL against direction in last 5 candles. */
-    private scoreCounterTrendProtection(action: 'BUY' | 'SELL'): number {
-        const lookback = Math.min(5, this.candles.length);
-        if (lookback < 3) return 10; // not enough data, give benefit of doubt
-
-        let consecutive = 0;
-        for (let i = this.candles.length - lookback + 1; i < this.candles.length; i++) {
-            const prev = this.candles[i - 1];
-            const curr = this.candles[i];
-            if (action === 'SELL' && curr.high > prev.high) consecutive++;
-            else if (action === 'BUY' && curr.low < prev.low) consecutive++;
-            else consecutive = 0;
-        }
-        return consecutive >= 3 ? 0 : 10;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
