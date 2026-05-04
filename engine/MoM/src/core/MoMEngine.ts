@@ -412,7 +412,7 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             const p = data.payload as any;
             const cmeCandles = p.cmeCandles || [];
             for (const c of cmeCandles) {
-                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp });
+                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, timestamp: c.timestamp }, true);
                 aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
             }
             break;
