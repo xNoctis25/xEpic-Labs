@@ -51,6 +51,7 @@ const MAX_FVG_AGE_CANDLES     = 60;           // Invalidate FVGs older than 60 c
 const MAX_CANDLES             = 100;          // Ring buffer size — trim older candles
 const CME_SESSION_RESET_HOUR  = 18;           // 6:00 PM ET = CME Globex session open
 const DISPLACEMENT_MIN_BODY   = 1.5;          // Displacement entry: candle body >= 1.5× ATR
+const MIN_WARMUP_CANDLES      = 15;           // Hard gate: ATR-14 + volume median need real data
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SMC — Institutional Grade FVG + MSS Signal Engine
@@ -145,8 +146,8 @@ export class SMC {
 
         const holdSignal: SmcSignal = { action: 'HOLD', confidence: 0 };
 
-        // Need enough data for FVG detection (at least 4 candles)
-        if (len < 4 || this.currentATR <= 0) {
+        // Hard warmup gate — no analysis until ATR + volume median have enough data
+        if (len < MIN_WARMUP_CANDLES) {
             this.lastHeartbeat = { trend, fvg: 'None', decision: 'HOLD', activeFvgCount: activeFvgs.length, atr: this.currentATR };
             return holdSignal;
         }
@@ -272,7 +273,7 @@ export class SMC {
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY) {
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'BUY', 0);
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'BUY');
                         console.log(
                             `[SMC] ⚡ BULLISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
                         );
@@ -321,7 +322,7 @@ export class SMC {
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY && !displacementSignal) {
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'SELL', 0);
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'SELL');
                         console.log(
                             `[SMC] ⚡ BEARISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
                         );
@@ -394,7 +395,7 @@ export class SMC {
                 if (!tapped) continue;
 
                 const age = this.candleCount - fvg.formationIdx;
-                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'BUY', age);
+                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'BUY');
 
                 // Mark as mitigated (no double-tapping)
                 fvg.isActive = false;
@@ -417,7 +418,7 @@ export class SMC {
                 if (!tapped) continue;
 
                 const age = this.candleCount - fvg.formationIdx;
-                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'SELL', age);
+                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'SELL');
 
                 fvg.isActive = false;
 
@@ -444,7 +445,7 @@ export class SMC {
 
     private calculateProbability(
         candle: Candle, fvg: FvgZone, vwap: number,
-        trend: HeartbeatSnapshot['trend'], action: 'BUY' | 'SELL', age: number,
+        trend: HeartbeatSnapshot['trend'], action: 'BUY' | 'SELL',
     ): { total: number; breakdown: string } {
 
         // ── Tier 1: Structural Edge (max 50) ─────────────────────────────
@@ -456,17 +457,14 @@ export class SMC {
                         : fvg.displacementBodyRatio >= 1.0 ? 10 : 0;
 
         // ── Tier 2: Confluence (max 30) ──────────────────────────────────
-        // VWAP alignment (10pts)
+        // VWAP alignment (20pts): 10 for price side, 10 for trend side
         const priceVwapOk = vwap > 0 && (
             (action === 'BUY' && candle.close > vwap) ||
             (action === 'SELL' && candle.close < vwap)
         );
         const trendVwapOk = (action === 'BUY' && trend === 'Bullish') ||
                             (action === 'SELL' && trend === 'Bearish');
-        const vwapScore = (priceVwapOk && trendVwapOk) ? 10 : (priceVwapOk || trendVwapOk) ? 5 : 0;
-
-        // FVG freshness (10pts)
-        const freshScore = age <= 10 ? 10 : age <= 30 ? 5 : 0;
+        const vwapScore = (priceVwapOk ? 10 : 0) + (trendVwapOk ? 10 : 0);
 
         // Volume on tap (10pts)
         const medianVol = this.getMedianVolume();
@@ -479,8 +477,8 @@ export class SMC {
         // Counter-trend protection (10pts)
         const momentumScore = this.scoreCounterTrendProtection(action);
 
-        const total = trendScore + dispScore + vwapScore + freshScore + volScore + gapScore + momentumScore;
-        const breakdown = `Trend:${trendScore}/20|Disp:${dispScore}/30|VWAP:${vwapScore}/10|Fresh:${freshScore}/10|Vol:${volScore}/10|Gap:${gapScore}/10|Momentum:${momentumScore}/10`;
+        const total = trendScore + dispScore + vwapScore + volScore + gapScore + momentumScore;
+        const breakdown = `Trend:${trendScore}/20|Disp:${dispScore}/30|VWAP:${vwapScore}/20|Vol:${volScore}/10|Gap:${gapScore}/10|Momentum:${momentumScore}/10`;
 
         return { total, breakdown };
     }
