@@ -48,7 +48,7 @@ const SL_NORMAL_POINTS      = 20;         // standard stop-loss distance (pts)
 const SL_WILDERNESS_PCT     = 0.50;       // cut SL by 50% in Wilderness
 const BE_TRIGGER_POINTS     = 5;          // trail to BE once profit hits this many pts
 const WILDERNESS_SCRATCH_MS = 3 * 60_000; // auto-scratch after 3 min if no displacement
-const MIN_SMC_CONFIDENCE    = 5;          // minimum confluence score (out of 8) to take a trade
+const MIN_SMC_PROBABILITY   = 80;          // minimum probability score (0-100%) to take a trade
 
 // DEFCON state (received from OracleWorker)
 let isDefconRed = false;
@@ -107,6 +107,7 @@ interface ActiveTradeContext {
     isWilderness:  boolean;
     scratchTimer?: ReturnType<typeof setTimeout>;
     beTriggered:   boolean;
+    tradeId:       string;  // telemetry correlation key
     // ── ATM Monitoring State ──
     candlesSinceEntry: number;
     volumeHistory:     number[];
@@ -151,9 +152,9 @@ function monitorActiveTrade(candle: Candle, signal: SmcSignal): void {
                         || (trade.direction === 'SHORT' && signal.action === 'BUY');
         if (isOpposing) {
             console.log(`[MoMEngine] 🔄 STRUCTURAL INVALIDATION: ${trade.direction} vs confirmed ${signal.action}`);
-            parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
-                message: `CHOKED: ${trade.symbol} structural invalidation. ${trade.direction} vs ${signal.action}. PnL: ${profitPoints.toFixed(1)}pts`
+            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                tradeId: trade.tradeId,
+                event: `CHOKED: structural invalidation. ${trade.direction} vs ${signal.action}. PnL: ${profitPoints.toFixed(1)}pts`
             }});
             parentPort!.postMessage({
                 type: 'trade_command',
@@ -167,9 +168,9 @@ function monitorActiveTrade(candle: Candle, signal: SmcSignal): void {
     // ── System 3a: Time Decay ────────────────────────────────────────────
     if (trade.candlesSinceEntry > TIME_DECAY_CANDLES && profitPoints <= FLAT_TOLERANCE_POINTS) {
         console.log(`[MoMEngine] ⏰ TIME DECAY: ${trade.candlesSinceEntry} candles, PnL: ${profitPoints.toFixed(2)}pts — momentum dead.`);
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
-            message: `CHOKED: ${trade.symbol} time decay. ${trade.candlesSinceEntry} candles, PnL: ${profitPoints.toFixed(2)}pts`
+        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+            tradeId: trade.tradeId,
+            event: `CHOKED: time decay. ${trade.candlesSinceEntry} candles, PnL: ${profitPoints.toFixed(2)}pts`
         }});
         parentPort!.postMessage({
             type: 'trade_command',
@@ -188,9 +189,9 @@ function monitorActiveTrade(candle: Candle, signal: SmcSignal): void {
 
         if (profitPoints <= 0) {
             // Losing + exhausted → exit
-            parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
-                message: `CHOKED: ${trade.symbol} exhaustion (negative PnL: ${profitPoints.toFixed(1)}pts). Flattening.`
+            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                tradeId: trade.tradeId,
+                event: `CHOKED: exhaustion (negative PnL: ${profitPoints.toFixed(1)}pts). Flattening.`
             }});
             parentPort!.postMessage({
                 type: 'trade_command',
@@ -256,9 +257,9 @@ function engageChokeHold(trade: ActiveTradeContext, currentPrice: number, profit
         ` (${CHOKE_DISTANCE_POINTS}pts behind @ $${currentPrice}) | Profit: ${profitPoints.toFixed(1)}pts`
     );
 
-    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-        source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
-        message: `CHOKE_HOLD_${label}: ${trade.symbol} stop → $${tightStop}. Profit: ${profitPoints.toFixed(1)}pts`
+    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+        tradeId: trade.tradeId,
+        event: `CHOKE_HOLD_${label}: stop → $${tightStop}. Profit: ${profitPoints.toFixed(1)}pts`
     }});
 
     parentPort!.postMessage({
@@ -285,9 +286,9 @@ function initiateTripleSweepPhase1(reason: string): void {
 
     // Only log telemetry for real trades — test trades are internal preflight
     if (!isTestTrade) {
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source: 'MoM', regime: trade.isWilderness ? 'Wilderness' : 'Killzone',
-            message: `EXIT: ${trade.symbol} ${trade.direction} | Entry: ${trade.entryPrice} | Reason: ${reason}`
+        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+            tradeId: trade.tradeId,
+            event: `EXIT: ${trade.direction} | Entry: ${trade.entryPrice} | Reason: ${reason}`
         }});
     }
 
@@ -354,7 +355,7 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
                 engineState = 'IN_TRADE';
                 const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
 
-                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: enriched.price, stopPrice: enriched.price - 100, entryTs: enriched.timestamp, isWilderness: false, beTriggered: false, candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false };
+                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: enriched.price, stopPrice: enriched.price - 100, entryTs: enriched.timestamp, isWilderness: false, beTriggered: false, tradeId: `TEST-${Date.now()}`, candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false };
 
                 parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol: tradeSymbol, price: enriched.price } });
 
@@ -366,8 +367,8 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             // Always feed aggregator so SMC indicators stay aligned
             aggregator.processTick(tick);
 
-            // Short Leash: trail to BE monitoring (Wilderness trades only)
-            if (activeTrade && activeTrade.isWilderness && !activeTrade.beTriggered) {
+            // Breakeven trailing: move stop to entry once profit hits trigger threshold
+            if (activeTrade && !activeTrade.beTriggered) {
                 const profit = activeTrade.direction === 'LONG'
                     ? tick.price - activeTrade.entryPrice
                     : activeTrade.entryPrice - tick.price;
@@ -375,10 +376,10 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
                 if (profit >= BE_TRIGGER_POINTS) {
                     activeTrade.beTriggered = true;
                     activeTrade.stopPrice   = activeTrade.entryPrice;
-                    console.log(`[MoMEngine] 🏔️  Short Leash: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
-                    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                        source: 'MoM', regime: 'Wilderness',
-                        message: `BE_TRIGGER: ${activeTrade.symbol} trailing stop to breakeven @ ${activeTrade.entryPrice}`
+                    console.log(`[MoMEngine] 🏔️  Breakeven: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
+                    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                        tradeId: activeTrade.tradeId,
+                        event: `BE_TRIGGER: trailing stop to breakeven @ ${activeTrade.entryPrice}`
                     }});
                     parentPort!.postMessage({
                         type:    'trade_command',
@@ -515,6 +516,7 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
                 entryTs:      setup.ts,
                 isWilderness: inWilderness,
                 beTriggered:  false,
+                tradeId:      `${setup.symbol}-${Date.now()}`,
                 candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false,
             };
 
@@ -523,9 +525,9 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
                 activeTrade.scratchTimer = setTimeout(() => {
                     if (activeTrade && !activeTrade.beTriggered) {
                         console.warn(`[MoMEngine] 🌲 Wilderness scratch — no displacement after ${WILDERNESS_SCRATCH_MS / 60000} min. Exiting.`);
-                        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                            source: 'MoM', regime: 'Wilderness',
-                            message: `CHOKED: ${activeTrade.symbol} no displacement. Auto-scratch.`
+                        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                            tradeId: activeTrade!.tradeId,
+                            event: `CHOKED: no displacement. Auto-scratch.`
                         }});
                         parentPort!.postMessage({
                             type:    'trade_command',
@@ -711,16 +713,15 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
         return;
     }
 
-    // Minimum confidence gate — only high-probability setups
-    if (signal.confidence < MIN_SMC_CONFIDENCE) {
+    // Minimum probability gate — only high-probability setups
+    if (signal.confidence < MIN_SMC_PROBABILITY) {
         console.log(
-            `[MoMEngine] SMC ${signal.action} below confidence threshold ` +
-            `(${signal.confidence}/${MIN_SMC_CONFIDENCE}). Skipping. Reason: ${signal.reason}`
+            `[MoMEngine] ❌ SMC ${signal.action} rejected (${signal.confidence}%) — below ${MIN_SMC_PROBABILITY}% threshold. ${signal.reason}`
         );
         parentPort!.postMessage({ type: 'TELEMETRY', payload: {
             source: 'MoM',
             regime: 'Killzone',
-            message: `LOW_CONF: ${signal.reason} — conf=${signal.confidence} (min=${MIN_SMC_CONFIDENCE})`,
+            message: `REJECTED: ${signal.action} @ ${candle.close} (${signal.confidence}%) | ${signal.reason}`,
         }});
         return;
     }
@@ -732,7 +733,7 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
 
     console.log(
         `[MoMEngine] 📊 SMC Signal | ${tradeSymbol} ${direction} | ` +
-        `Zone: ${zoneLabel} | C: ${candle.close} | Confidence: ${signal.confidence}/8 | ${signal.reason}`
+        `Zone: ${zoneLabel} | C: ${candle.close} | Probability: ${signal.confidence}% | ${signal.reason}`
     );
 
     // ── ORACLE HANDSHAKE ──────────────────────────────────────────────────────
@@ -749,10 +750,12 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
         return;
     }
 
+    const tradeId = `${tradeSymbol}-${Date.now()}`;
+
     console.log(`[MoMEngine] 🟢 GREEN_LIGHT — executing ${tradeSymbol} ${direction}.`);
-    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-        source: 'MoM', regime: inWilderness ? 'Wilderness' : 'Killzone',
-        message: `ENTER_SMC: ${tradeSymbol} ${direction} @ ${candle.close} | Conf: ${signal.confidence}/8 | ${signal.reason}`
+    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_OPEN', payload: {
+        source: 'MoM', regime: inWilderness ? 'Wilderness' : 'Killzone', tradeId,
+        message: `ENTER_SMC: ${tradeSymbol} ${direction} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`
     }});
 
     // ── DYNAMIC STOP LOSS (ATR-based with Wilderness override) ────────────────
@@ -783,6 +786,7 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
         entryTs:      candle.timestamp,
         isWilderness: inWilderness,
         beTriggered:  false,
+        tradeId,
         candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false,
     };
 
@@ -790,9 +794,9 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
         activeTrade.scratchTimer = setTimeout(() => {
             if (activeTrade && !activeTrade.beTriggered) {
                 console.warn('[MoMEngine] 🌲 SMC Wilderness scratch — no displacement.');
-                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                    source: 'MoM', regime: 'Wilderness',
-                    message: `CHOKED: ${activeTrade.symbol} no displacement. Auto-scratch.`
+                parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                    tradeId: activeTrade.tradeId,
+                    event: `CHOKED: no displacement. Auto-scratch.`
                 }});
                 parentPort!.postMessage({
                     type:    'trade_command',

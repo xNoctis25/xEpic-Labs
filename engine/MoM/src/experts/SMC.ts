@@ -26,12 +26,14 @@ export interface FvgZone {
     formationIdx:  number;     // candle index when formed
     isActive:      boolean;    // false once mitigated/invalidated
     vwapConfluence: boolean;   // true if FVG overlaps session VWAP
+    displacementBodyRatio: number;  // displacement candle body size / ATR (strength)
+    gapAtrRatio:           number;  // gap size / ATR (institutional grade)
 }
 
 /** Rich signal output from SMC — carries confidence metadata. */
 export interface SmcSignal {
     action:     'BUY' | 'SELL' | 'HOLD';
-    confidence: number;        // 0-10 confluence score
+    confidence: number;        // 0-100 probability score
     fvgZone?:   FvgZone;       // the FVG that triggered the signal (if any)
     reason?:    string;        // human-readable explanation
 }
@@ -229,6 +231,7 @@ export class SMC {
                 } else {
                     // Valid FVG — add to persistent registry
                     const vwapConfluence = vwap > 0 && c3.low <= vwap * 1.002 && c1.high >= vwap * 0.998;
+                    const body = Math.abs(c2.close - c2.open);
                     this.fvgRegistry.push({
                         direction:     'BULLISH',
                         top:           c3.low,
@@ -237,6 +240,8 @@ export class SMC {
                         formationIdx:  this.candleCount - 2,
                         isActive:      true,
                         vwapConfluence,
+                        displacementBodyRatio: this.currentATR > 0 ? body / this.currentATR : 0,
+                        gapAtrRatio:           this.currentATR > 0 ? gapSize / this.currentATR : 0,
                     });
                     console.log(
                         `[SMC] 🟢 Bullish FVG REGISTERED | Zone: [${c1.high.toFixed(2)}, ${c3.low.toFixed(2)}] | ` +
@@ -258,6 +263,7 @@ export class SMC {
                     this.dailyRejectedSetups.push(`${timeStr}: Bearish FVG rejected (MSS failed — no recent swing low break).`);
                 } else {
                     const vwapConfluence = vwap > 0 && c3.high >= vwap * 0.998 && c1.low <= vwap * 1.002;
+                    const body = Math.abs(c2.close - c2.open);
                     this.fvgRegistry.push({
                         direction:     'BEARISH',
                         top:           c1.low,
@@ -266,6 +272,8 @@ export class SMC {
                         formationIdx:  this.candleCount - 2,
                         isActive:      true,
                         vwapConfluence,
+                        displacementBodyRatio: this.currentATR > 0 ? body / this.currentATR : 0,
+                        gapAtrRatio:           this.currentATR > 0 ? gapSize / this.currentATR : 0,
                     });
                     console.log(
                         `[SMC] 🔴 Bearish FVG REGISTERED | Zone: [${c3.high.toFixed(2)}, ${c1.low.toFixed(2)}] | ` +
@@ -327,59 +335,142 @@ export class SMC {
         for (const fvg of activeFvgs) {
 
             if (fvg.direction === 'BULLISH') {
-                // Tap: candle's low dips into the FVG zone, candle closes above the bottom
                 const tapped = candle.low <= fvg.top && candle.close > fvg.bottom;
                 if (!tapped) continue;
 
-                // ── Confluence Scoring ────────────────────────────────────
-                let confidence = 3; // Base: valid FVG tap
-                if (trend === 'Bullish')      confidence += 2; // VWAP trend aligned
-                if (fvg.vwapConfluence)        confidence += 2; // FVG at VWAP = premium
-                if (vwap > 0 && candle.close > vwap) confidence += 1; // Price above VWAP
+                const age = this.candleCount - fvg.formationIdx;
+                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'BUY', age);
 
                 // Mark as mitigated (no double-tapping)
                 fvg.isActive = false;
 
                 console.log(
                     `[SMC] 🎯 BULLISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
-                    `Age: ${this.candleCount - fvg.formationIdx} candles | Confidence: ${confidence}/8`
+                    `Age: ${age} candles | Probability: ${probability.total}%`
                 );
 
                 return {
                     action:     'BUY',
-                    confidence,
+                    confidence: probability.total,
                     fvgZone:    fvg,
-                    reason:     `Bullish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | conf=${confidence}`,
+                    reason:     `Bullish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | prob=${probability.total}% | ${probability.breakdown}`,
                 };
             }
 
             if (fvg.direction === 'BEARISH') {
-                // Tap: candle's high reaches into the FVG zone, candle closes below the top
                 const tapped = candle.high >= fvg.bottom && candle.close < fvg.top;
                 if (!tapped) continue;
 
-                let confidence = 3;
-                if (trend === 'Bearish')      confidence += 2;
-                if (fvg.vwapConfluence)        confidence += 2;
-                if (vwap > 0 && candle.close < vwap) confidence += 1;
+                const age = this.candleCount - fvg.formationIdx;
+                const probability = this.calculateProbability(candle, fvg, vwap, trend, 'SELL', age);
 
                 fvg.isActive = false;
 
                 console.log(
                     `[SMC] 🎯 BEARISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
-                    `Age: ${this.candleCount - fvg.formationIdx} candles | Confidence: ${confidence}/8`
+                    `Age: ${age} candles | Probability: ${probability.total}%`
                 );
 
                 return {
                     action:     'SELL',
-                    confidence,
+                    confidence: probability.total,
                     fvgZone:    fvg,
-                    reason:     `Bearish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | conf=${confidence}`,
+                    reason:     `Bearish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | prob=${probability.total}% | ${probability.breakdown}`,
                 };
             }
         }
 
         return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Probability Model — Weighted 0-100% scoring
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private calculateProbability(
+        candle: Candle, fvg: FvgZone, vwap: number,
+        trend: HeartbeatSnapshot['trend'], action: 'BUY' | 'SELL', age: number,
+    ): { total: number; breakdown: string } {
+
+        // ── Tier 1: Structural Edge (max 40) ─────────────────────────────
+        // Trend alignment (20pts): last 20 candles directional bias
+        const trendScore = this.scoreTrendAlignment(action);
+        // Displacement strength (20pts): FVG displacement candle body vs ATR
+        const dispScore = fvg.displacementBodyRatio >= 2.0 ? 20
+                        : fvg.displacementBodyRatio >= 1.5 ? 10 : 0;
+
+        // ── Tier 2: Confluence (max 30) ──────────────────────────────────
+        // VWAP alignment (10pts)
+        const priceVwapOk = vwap > 0 && (
+            (action === 'BUY' && candle.close > vwap) ||
+            (action === 'SELL' && candle.close < vwap)
+        );
+        const trendVwapOk = (action === 'BUY' && trend === 'Bullish') ||
+                            (action === 'SELL' && trend === 'Bearish');
+        const vwapScore = (priceVwapOk && trendVwapOk) ? 10 : (priceVwapOk || trendVwapOk) ? 5 : 0;
+
+        // FVG freshness (10pts)
+        const freshScore = age <= 10 ? 10 : age <= 30 ? 5 : 0;
+
+        // Volume on tap (10pts)
+        const medianVol = this.getMedianVolume();
+        const volScore = medianVol > 0 && candle.volume >= medianVol * 1.2 ? 10 : 0;
+
+        // ── Tier 3: Context (max 30) ─────────────────────────────────────
+        // Session quality (10pts)
+        const sessionScore = this.scoreSession(candle.timestamp);
+
+        // Gap size (10pts)
+        const gapScore = fvg.gapAtrRatio >= 1.0 ? 10 : fvg.gapAtrRatio >= 0.5 ? 5 : 0;
+
+        // Counter-trend protection (10pts)
+        const momentumScore = this.scoreCounterTrendProtection(action);
+
+        const total = trendScore + dispScore + vwapScore + freshScore + volScore + sessionScore + gapScore + momentumScore;
+        const breakdown = `Trend:${trendScore}/20|Disp:${dispScore}/20|VWAP:${vwapScore}/10|Fresh:${freshScore}/10|Vol:${volScore}/10|Session:${sessionScore}/10|Gap:${gapScore}/10|Momentum:${momentumScore}/10`;
+
+        return { total, breakdown };
+    }
+
+    /** Trend alignment: % of last 20 candles closing in trade direction. */
+    private scoreTrendAlignment(action: 'BUY' | 'SELL'): number {
+        const lookback = Math.min(20, this.candles.length - 1);
+        if (lookback < 5) return 0;
+
+        let aligned = 0;
+        for (let i = this.candles.length - lookback; i < this.candles.length; i++) {
+            const c = this.candles[i];
+            if (action === 'BUY' && c.close > c.open) aligned++;
+            if (action === 'SELL' && c.close < c.open) aligned++;
+        }
+        const pct = aligned / lookback;
+        return pct > 0.6 ? 20 : pct >= 0.5 ? 10 : 0;
+    }
+
+    /** Session quality: AM killzone = 10, London/PM = 5, Wilderness = 0. */
+    private scoreSession(timestamp: number): number {
+        if (MarketClock.isAMKillzone(timestamp)) return 10;
+        if (MarketClock.isPMKillzone(timestamp)) return 5;
+        const { totalMinutes } = MarketClock.getEasternHM(timestamp);
+        const isLondon = totalMinutes >= 135 && totalMinutes < 300;
+        if (isLondon) return 5;
+        return 0;
+    }
+
+    /** Counter-trend protection: 0 if 3+ consecutive HH/LL against direction in last 5 candles. */
+    private scoreCounterTrendProtection(action: 'BUY' | 'SELL'): number {
+        const lookback = Math.min(5, this.candles.length);
+        if (lookback < 3) return 10; // not enough data, give benefit of doubt
+
+        let consecutive = 0;
+        for (let i = this.candles.length - lookback + 1; i < this.candles.length; i++) {
+            const prev = this.candles[i - 1];
+            const curr = this.candles[i];
+            if (action === 'SELL' && curr.high > prev.high) consecutive++;
+            else if (action === 'BUY' && curr.low < prev.low) consecutive++;
+            else consecutive = 0;
+        }
+        return consecutive >= 3 ? 0 : 10;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -330,7 +330,7 @@ export class BacktestEngine {
                         : sizing.qty === 2
                             ? 'The Split'
                             : `Institutional (TP1×${tiers[0].qty} + TP2×${tiers[1].qty} + Runner×${tiers[2].qty})`;
-                    console.log(`[Backtest] ${signal.action} @ ${candle.close} | ${tierLabel} | Conf: ${signal.confidence}/8`);
+                    console.log(`[Backtest] ${signal.action} @ ${candle.close} | ${tierLabel} | Prob: ${signal.confidence}%`);
 
                     activePosition = {
                         entryPrice: candle.close,

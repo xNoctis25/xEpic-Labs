@@ -166,8 +166,14 @@ export class NeonDatabase {
                 source    VARCHAR(50),
                 regime    VARCHAR(50),
                 message   TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                trade_id  VARCHAR(50),
+                timestamp TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
             );
+        `);
+
+        // Add trade_id column if it doesn't exist (migration for existing DBs)
+        await this.pool.query(`
+            ALTER TABLE mom_telemetry_logs ADD COLUMN IF NOT EXISTS trade_id VARCHAR(50);
         `);
 
         // Ensure row 1 exists (seed the initial state if the table is empty)
@@ -405,12 +411,44 @@ export class NeonDatabase {
     public async logTelemetry(source: string, regime: string, message: string): Promise<void> {
         try {
             await this.pool.query(
-                `INSERT INTO mom_telemetry_logs (source, regime, message) VALUES ($1, $2, $3)`,
+                `INSERT INTO mom_telemetry_logs (source, regime, message, timestamp) VALUES ($1, $2, $3, CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')`,
                 [source, regime, message]
             );
         } catch (err: any) {
             // Silently swallow — telemetry must never crash the engine
             console.warn(`[NeonDB] Telemetry write failed: ${err.message}`);
+        }
+    }
+
+    /**
+     * Creates a telemetry row for a new trade, returning the row id.
+     * All subsequent events for this trade are appended via appendTradeEvent().
+     */
+    public async logTradeEntry(source: string, regime: string, message: string, tradeId: string): Promise<number | null> {
+        try {
+            const result = await this.pool.query(
+                `INSERT INTO mom_telemetry_logs (source, regime, message, trade_id, timestamp) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York') RETURNING id`,
+                [source, regime, message, tradeId]
+            );
+            return result.rows[0]?.id ?? null;
+        } catch (err: any) {
+            console.warn(`[NeonDB] Trade entry telemetry failed: ${err.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Appends an event line to an existing trade's telemetry row.
+     * Each event is prefixed with an ET timestamp for play-by-play readability.
+     */
+    public async appendTradeEvent(tradeId: string, event: string): Promise<void> {
+        try {
+            await this.pool.query(
+                `UPDATE mom_telemetry_logs SET message = message || E'\n' || $1 WHERE trade_id = $2`,
+                [event, tradeId]
+            );
+        } catch (err: any) {
+            console.warn(`[NeonDB] Trade event append failed: ${err.message}`);
         }
     }
 

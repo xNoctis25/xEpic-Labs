@@ -546,17 +546,20 @@ export class TradovateBroker {
             );
             const orders = orderRes.data || [];
 
-            // Find ALL working stop-type orders for this contract
+            // Find ALL working/accepted stop-type orders for this contract
+            // OSO bracket stops use 'Accepted' status, standalone stops use 'Working'
             const stopTypes = ['Stop', 'TrailingStop', 'StopLimit'];
+            const activeStatuses = ['Working', 'Accepted'];
             const workingStops = orders.filter((o: any) =>
                 o.contractId === contractId &&
-                o.ordStatus === 'Working' &&
+                activeStatuses.includes(o.ordStatus) &&
                 stopTypes.includes(o.ordType)
             );
 
             if (workingStops.length === 0) {
-                console.warn(`⚠️ [TradovateBroker] - modifyStopWithVerification: No working stops found for ${symbol}. Nothing to modify.`);
-                return false;
+                console.warn(`⚠️ [TradovateBroker] - modifyStopWithVerification: No stops found for ${symbol}. Falling back to placeProtectiveStop.`);
+                const result = await this.placeProtectiveStop(symbol, exitAction, qty, newStopPrice);
+                return result !== null;
             }
 
             console.log(

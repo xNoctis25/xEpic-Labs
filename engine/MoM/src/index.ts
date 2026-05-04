@@ -66,6 +66,7 @@ interface ActiveTradeCtx {
     margin:     number;
     source:     string;   // SMC or ORB
     entryTs:    number;
+    tradeId?:   string;   // correlation key for telemetry consolidation
 }
 let activeTradeCtx: ActiveTradeCtx | null = null;
 
@@ -115,9 +116,16 @@ async function reconcileLedgerOnClose(reason: string): Promise<void> {
             `Entry: ${ctx.entryPrice} | PnL: ${pnlStr} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
         );
 
-        void db.logTelemetry('Core4', 'Execution',
-            `CLOSED: ${ctx.symbol} ${ctx.direction} | Entry: ${ctx.entryPrice} | PnL: ${pnlStr} | Qty: ${ctx.qty} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
-        );
+        const etTime = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false });
+        if (ctx.tradeId) {
+            void db.appendTradeEvent(ctx.tradeId,
+                `[${etTime} ET] CLOSED: PnL: ${pnlStr} | Qty: ${ctx.qty} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
+            );
+        } else {
+            void db.logTelemetry('Core4', 'Execution',
+                `CLOSED: ${ctx.symbol} ${ctx.direction} | Entry: ${ctx.entryPrice} | PnL: ${pnlStr} | Qty: ${ctx.qty} | Duration: ${duration}min | Reason: ${reason} | Src: ${ctx.source}`
+            );
+        }
 
         // Journal the trade to Neon (skip test trades)
         if (!reason.includes('TEST_TRADE')) {
@@ -174,7 +182,7 @@ async function handleTradeCommand(
             const src       = payload.source as string || 'SMC';
             const conf      = payload.confidence as number || 0;
 
-            console.log(`[M.o.M] 🔥 ENTER ${side} ${symbol} @ ${price} | Src: ${src} | Conf: ${conf}/8`);
+            console.log(`[M.o.M] 🔥 ENTER ${side} ${symbol} @ ${price} | Src: ${src} | Prob: ${conf}%`);
 
             // RiskEngine daily halt gate
             if (!riskEngine.canTrade()) {
@@ -194,12 +202,15 @@ async function handleTradeCommand(
             const marginPerContract = sizing.symbolRoot === 'ES' ? ES_DAY_MARGIN : MES_DAY_MARGIN;
             ledger.reserveMargin(sizing.qty * marginPerContract);
 
+            // Generate trade ID for telemetry consolidation
+            const tradeId = `${symbol}-${Date.now()}`;
+
             // Store trade context for PnL reconciliation on close
             activeTradeCtx = {
                 symbol, direction: side, entryPrice: price,
                 stopPrice: (payload.stopPrice as number) || (side === 'BUY' ? price - 20 : price + 20),
                 qty: sizing.qty, margin: sizing.qty * marginPerContract,
-                source: src, entryTs: Date.now(),
+                source: src, entryTs: Date.now(), tradeId,
             };
 
             await executionEngine.executeBracket(symbol, price, side, sizing.qty, payload.stopPrice as number | undefined);
@@ -235,7 +246,12 @@ async function handleTradeCommand(
                         : price + 20;
 
                     console.warn(`🛡️ [FAILSAFE] Naked position! ${net}x ${symbol}, 0 stops. Injecting emergency stop @ ${stopPrice}`);
-                    void db.logTelemetry('Core4', 'Risk', `NAKED_FAILSAFE: ${symbol} ${net}x — injecting stop @ ${stopPrice}`);
+                    if (activeTradeCtx?.tradeId) {
+                        const etNow = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false });
+                        void db.appendTradeEvent(activeTradeCtx.tradeId, `[${etNow} ET] FAILSAFE: Naked ${net}x — injecting stop @ ${stopPrice}`);
+                    } else {
+                        void db.logTelemetry('Core4', 'Risk', `NAKED_FAILSAFE: ${symbol} ${net}x — injecting stop @ ${stopPrice}`);
+                    }
                     await broker.placeProtectiveStop(symbol, exitAction, Math.abs(net), stopPrice);
                     failsafeInjected = true;
                 } catch (e: any) {
@@ -405,6 +421,16 @@ function wireMomHandler(): void {
             case 'TELEMETRY': {
                 const p = msg.payload as { source: string; regime: string; message: string };
                 void db.logTelemetry(p.source, p.regime, p.message);
+                break;
+            }
+            case 'TELEMETRY_TRADE_OPEN': {
+                const p = msg.payload as { source: string; regime: string; message: string; tradeId: string };
+                void db.logTradeEntry(p.source, p.regime, p.message, p.tradeId);
+                break;
+            }
+            case 'TELEMETRY_TRADE_UPDATE': {
+                const p = msg.payload as { tradeId: string; event: string };
+                void db.appendTradeEvent(p.tradeId, p.event);
                 break;
             }
             default: break;
