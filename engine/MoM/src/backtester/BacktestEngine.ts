@@ -1,42 +1,47 @@
 import { Candle } from '../market/CandleAggregator';
 import { BacktestResult, TradeRecord } from './types';
-import { SMC, SmcSignal } from '../experts/SMC';
+import { TradingCore, TradeAction, ActiveTradeContext } from '../core/TradingCore';
+import { PositionSizer } from '../core/PositionSizer';
 import { MarketClock } from '../core/MarketClock';
-import { PositionSizer, SizingResult } from '../core/PositionSizer';
 import { config } from '../config/env';
 
 /**
- * BacktestEngine — True Cash Account Backtester with Dynamic Scale-Out
+ * BacktestEngine — Fill Simulator Using TradingCore
  *
- * Uses PositionSizer for dynamic qty sizing and simulates the 3-tier
- * scale-out bracket logic from ExecutionEngine:
+ * Uses the EXACT SAME TradingCore class as the live MoMEngine.
+ * This engine only handles:
+ *   1. Feeding candles to TradingCore
+ *   2. Simulating bracket fills (TP/SL) against candle OHLC
+ *   3. Position sizing via PositionSizer
+ *   4. Equity tracking and trade recording
  *
- *   qty === 1 → The Pure Runner (trailing stop only)
- *   qty === 2 → The Split (TP1 at 1:1 + runner trailing)
- *   qty >= 3  → The Institutional (TP1 1:1 + TP2 1:2 + runner trailing)
- *
- * Each tier tracks partial P&L independently as exits are hit intrabar.
+ * ALL trading logic (signals, stops, BE, choke, exhaustion) lives in TradingCore.
  */
 
-// ─── Internal Tier Tracking ─────────────────────────────────────────
+// ─── Fill Simulation State ──────────────────────────────────────────────────
 
-interface TierLeg {
+interface BracketLeg {
     qty: number;
-    tpPrice: number | null;   // null = no TP (runner)
-    slPrice: number;          // Initial stop-loss
-    trailingStop: boolean;    // Is this a trailing stop leg?
-    trailPrice: number;       // Current trail price (updated per candle)
-    filled: boolean;          // Has this leg been exited?
-    pnl: number;              // Realized P&L for this leg
+    tpPrice: number | null;
+    slPrice: number;
+    trailingStop: boolean;
+    trailDistance: number;
+    trailPrice: number;
+    filled: boolean;
+    pnl: number;
 }
 
-interface ActiveBacktestPosition {
+interface SimulatedPosition {
     entryPrice: number;
     isLong: boolean;
     entryTime: number;
     totalQty: number;
-    dollarPerPoint: number;   // $5 for MES, $50 for ES
-    tiers: TierLeg[];
+    dollarPerPoint: number;
+    riskR: number;
+    confidence: number;
+    entryReason: string;
+    tradeId: string;
+    legs: BracketLeg[];
 }
 
 export class BacktestEngine {
@@ -47,136 +52,94 @@ export class BacktestEngine {
     }
 
     /**
-     * Determines the active ICT Silver Bullet window based on Eastern Time.
-     * Uses MarketClock to guarantee correct ET regardless of host timezone.
+     * Build scale-out legs mirroring ExecutionEngine's 3-tier bracket logic.
+     * Uses the structural stop (riskR) for R-based TP targets.
      */
-    private getTradingSession(timestamp: number): 'AM_KILLZONE' | 'CLOSED' {
-        if (MarketClock.isAMKillzone(timestamp)) return 'AM_KILLZONE';
-        return 'CLOSED';
-    }
-
-    /**
-     * Builds the multi-tier leg structure based on qty (mirrors ExecutionEngine).
-     */
-    private buildTiers(
+    private buildLegs(
         entryPrice: number,
         isLong: boolean,
         qty: number,
-        slPoints: number,
-    ): TierLeg[] {
-        const slPrice = isLong
-            ? entryPrice - slPoints
-            : entryPrice + slPoints;
-
+        riskR: number,
+        stopPrice: number,
+    ): BracketLeg[] {
         const tp1Price = isLong
-            ? entryPrice + slPoints       // 1:1 RR
-            : entryPrice - slPoints;
+            ? entryPrice + riskR       // 1:1 RR
+            : entryPrice - riskR;
 
         const tp2Price = isLong
-            ? entryPrice + (slPoints * 2)  // 1:2 RR
-            : entryPrice - (slPoints * 2);
+            ? entryPrice + (riskR * 2)  // 1:2 RR
+            : entryPrice - (riskR * 2);
 
-        // ── qty === 1: The Pure Runner ──
+        // qty === 1: Pure Runner
         if (qty === 1) {
             return [{
-                qty: 1,
-                tpPrice: null,
-                slPrice,
-                trailingStop: true,
-                trailPrice: slPrice,
-                filled: false,
-                pnl: 0,
+                qty: 1, tpPrice: null, slPrice: stopPrice,
+                trailingStop: true, trailDistance: riskR, trailPrice: stopPrice,
+                filled: false, pnl: 0,
             }];
         }
 
-        // ── qty === 2: The Split ──
+        // qty === 2: The Split
         if (qty === 2) {
             return [
                 {
-                    qty: 1,
-                    tpPrice: tp1Price,
-                    slPrice,
-                    trailingStop: false,
-                    trailPrice: slPrice,
-                    filled: false,
-                    pnl: 0,
+                    qty: 1, tpPrice: tp1Price, slPrice: stopPrice,
+                    trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
+                    filled: false, pnl: 0,
                 },
                 {
-                    qty: 1,
-                    tpPrice: null,
-                    slPrice,
-                    trailingStop: true,
-                    trailPrice: slPrice,
-                    filled: false,
-                    pnl: 0,
+                    qty: 1, tpPrice: null, slPrice: stopPrice,
+                    trailingStop: true, trailDistance: riskR, trailPrice: stopPrice,
+                    filled: false, pnl: 0,
                 },
             ];
         }
 
-        // ── qty >= 3: The Institutional 3-Tier ──
+        // qty >= 3: Institutional 3-Tier
         const runnerQty = Math.floor(qty / 3);
         const tp1Qty = Math.ceil((qty - runnerQty) / 2);
         const tp2Qty = qty - runnerQty - tp1Qty;
 
         return [
             {
-                qty: tp1Qty,
-                tpPrice: tp1Price,
-                slPrice,
-                trailingStop: false,
-                trailPrice: slPrice,
-                filled: false,
-                pnl: 0,
+                qty: tp1Qty, tpPrice: tp1Price, slPrice: stopPrice,
+                trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
+                filled: false, pnl: 0,
             },
             {
-                qty: tp2Qty,
-                tpPrice: tp2Price,
-                slPrice,
-                trailingStop: false,
-                trailPrice: slPrice,
-                filled: false,
-                pnl: 0,
+                qty: tp2Qty, tpPrice: tp2Price, slPrice: stopPrice,
+                trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
+                filled: false, pnl: 0,
             },
             {
-                qty: runnerQty,
-                tpPrice: null,
-                slPrice,
-                trailingStop: true,
-                trailPrice: slPrice,
-                filled: false,
-                pnl: 0,
+                qty: runnerQty, tpPrice: null, slPrice: stopPrice,
+                trailingStop: true, trailDistance: riskR, trailPrice: stopPrice,
+                filled: false, pnl: 0,
             },
         ];
     }
 
     /**
-     * Runs a standard backtest over a given set of candles.
-     *
-     * Uses SMC (FVG + MSS) as the sole signal source.
-     * PositionSizer determines dynamic qty per trade.
-     * 3-tier scale-out simulates ExecutionEngine's bracket logic.
-     *
-     * Silver Bullet: Only opens trades during AM Killzone (09:30-11:00 ET).
-     * Intrabar Slippage: Checks candle.high/low for TP/SL fills.
-     * EOD Flatten: Open tiers run until TP/SL or forced exit at 15:55 ET.
+     * Runs backtest using TradingCore — the exact same logic as live.
      */
     public async runStandardBacktest(candles: Candle[], symbol: string): Promise<BacktestResult> {
         console.log(`[BacktestEngine] Running backtest on ${candles.length} candles for ${symbol}...`);
-        console.log(`[BacktestEngine] Expert: SMC (FVG + MSS) | Silver Bullet: AM Killzone 09:30-11:00 ET`);
-        console.log(`[BacktestEngine] Scale-Out: Dynamic 3-Tier (PositionSizer + TrailingStop simulation)`);
+        console.log(`[BacktestEngine] Expert: TradingCore (SMC + structural stops + R-based management)`);
+        console.log(`[BacktestEngine] Scale-Out: Dynamic 3-Tier (PositionSizer + R-based trailing)`);
 
-        const smc = new SMC();
+        const core = new TradingCore(symbol);
+        core.isHuntingActive = true;  // Backtest starts immediately — no warmup needed
 
-        const SL_POINTS = 20;
-        const COOLDOWN_MS = 3 * 60 * 1000; // 3-minute cooldown after each trade
+        const COOLDOWN_MS = 3 * 60 * 1000;
 
         let equity = this.initialCapital;
         let peakEquity = this.initialCapital;
         let maxDrawdown = 0;
         const trades: TradeRecord[] = [];
 
-        let activePosition: ActiveBacktestPosition | null = null;
+        let position: SimulatedPosition | null = null;
         let cooldownUntil = 0;
+        let pendingEntry: TradeAction | null = null;
 
         for (let i = 0; i < candles.length; i++) {
             if (i > 0 && i % 10000 === 0) {
@@ -184,196 +147,276 @@ export class BacktestEngine {
             }
 
             const candle = candles[i];
-            const session = this.getTradingSession(candle.timestamp);
 
-            // Trailing Max Drawdown Calculation
+            // Trailing Max Drawdown
             if (equity > peakEquity) peakEquity = equity;
             const currentDrawdown = ((peakEquity - equity) / peakEquity) * 100;
             if (currentDrawdown > maxDrawdown) maxDrawdown = currentDrawdown;
 
-            // Feed every candle to the Expert (indicators must stay in sync)
-            const signal = smc.analyze(candle);
+            // ── SIMULATE FILLS on existing position (before TradingCore sees the candle) ──
+            if (position) {
+                const { entryPrice, isLong, legs, dollarPerPoint } = position;
 
-            // ==========================================
-            // EXIT LOGIC — Multi-Tier Scale-Out Simulation
-            // ==========================================
-            if (activePosition) {
-                const { entryPrice, isLong, tiers, dollarPerPoint } = activePosition;
-                let allTiersFilled = true;
+                for (const leg of legs) {
+                    if (leg.filled) continue;
 
-                for (const tier of tiers) {
-                    if (tier.filled) continue;
-                    allTiersFilled = false;
-
-                    // ── Update Trailing Stop ──
-                    if (tier.trailingStop) {
+                    // Update trailing stop
+                    if (leg.trailingStop) {
                         if (isLong) {
-                            // Trail up: new trail = max(current trail, candle.high - SL_POINTS)
-                            const newTrail = candle.high - SL_POINTS;
-                            if (newTrail > tier.trailPrice) {
-                                tier.trailPrice = newTrail;
-                            }
-                            tier.slPrice = tier.trailPrice;
+                            const newTrail = candle.high - leg.trailDistance;
+                            if (newTrail > leg.trailPrice) leg.trailPrice = newTrail;
+                            leg.slPrice = leg.trailPrice;
                         } else {
-                            // Trail down: new trail = min(current trail, candle.low + SL_POINTS)
-                            const newTrail = candle.low + SL_POINTS;
-                            if (newTrail < tier.trailPrice) {
-                                tier.trailPrice = newTrail;
-                            }
-                            tier.slPrice = tier.trailPrice;
+                            const newTrail = candle.low + leg.trailDistance;
+                            if (newTrail < leg.trailPrice) leg.trailPrice = newTrail;
+                            leg.slPrice = leg.trailPrice;
                         }
                     }
 
-                    // ── Check TP hit ──
+                    // Check TP hit
                     let hitTP = false;
-                    if (tier.tpPrice !== null) {
+                    if (leg.tpPrice !== null) {
                         hitTP = isLong
-                            ? candle.high >= tier.tpPrice
-                            : candle.low <= tier.tpPrice;
+                            ? candle.high >= leg.tpPrice
+                            : candle.low <= leg.tpPrice;
                     }
 
-                    // ── Check SL hit ──
+                    // Check SL hit
                     const hitSL = isLong
-                        ? candle.low <= tier.slPrice
-                        : candle.high >= tier.slPrice;
+                        ? candle.low <= leg.slPrice
+                        : candle.high >= leg.slPrice;
 
-                    // ── Resolve exits ──
+                    // Resolve exits (conservative: SL wins on ambiguous candles)
                     if (hitSL && hitTP) {
-                        // Conservative: assume SL was hit first
                         const slPnl = isLong
-                            ? (tier.slPrice - entryPrice) * dollarPerPoint * tier.qty
-                            : (entryPrice - tier.slPrice) * dollarPerPoint * tier.qty;
-                        tier.pnl = slPnl;
-                        tier.filled = true;
+                            ? (leg.slPrice - entryPrice) * dollarPerPoint * leg.qty
+                            : (entryPrice - leg.slPrice) * dollarPerPoint * leg.qty;
+                        leg.pnl = slPnl;
+                        leg.filled = true;
                         equity += slPnl;
                     } else if (hitSL) {
                         const slPnl = isLong
-                            ? (tier.slPrice - entryPrice) * dollarPerPoint * tier.qty
-                            : (entryPrice - tier.slPrice) * dollarPerPoint * tier.qty;
-                        tier.pnl = slPnl;
-                        tier.filled = true;
+                            ? (leg.slPrice - entryPrice) * dollarPerPoint * leg.qty
+                            : (entryPrice - leg.slPrice) * dollarPerPoint * leg.qty;
+                        leg.pnl = slPnl;
+                        leg.filled = true;
                         equity += slPnl;
-                    } else if (hitTP && tier.tpPrice !== null) {
+                    } else if (hitTP && leg.tpPrice !== null) {
                         const tpPnl = isLong
-                            ? (tier.tpPrice - entryPrice) * dollarPerPoint * tier.qty
-                            : (entryPrice - tier.tpPrice) * dollarPerPoint * tier.qty;
-                        tier.pnl = tpPnl;
-                        tier.filled = true;
+                            ? (leg.tpPrice - entryPrice) * dollarPerPoint * leg.qty
+                            : (entryPrice - leg.tpPrice) * dollarPerPoint * leg.qty;
+                        leg.pnl = tpPnl;
+                        leg.filled = true;
                         equity += tpPnl;
                     }
                 }
 
-                // ── EOD Flatten at 15:55 ET — close all remaining tiers ──
+                // EOD flatten remaining legs
                 if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
-                    for (const tier of tiers) {
-                        if (tier.filled) continue;
+                    for (const leg of legs) {
+                        if (leg.filled) continue;
                         const flatPnl = isLong
-                            ? (candle.close - entryPrice) * dollarPerPoint * tier.qty
-                            : (entryPrice - candle.close) * dollarPerPoint * tier.qty;
-                        tier.pnl = flatPnl;
-                        tier.filled = true;
+                            ? (candle.close - entryPrice) * dollarPerPoint * leg.qty
+                            : (entryPrice - candle.close) * dollarPerPoint * leg.qty;
+                        leg.pnl = flatPnl;
+                        leg.filled = true;
                         equity += flatPnl;
                     }
-                    allTiersFilled = true;
                 }
 
-                // ── All tiers closed — record the trade ──
-                // Re-check after potential EOD flatten
-                const allClosed = tiers.every(t => t.filled);
-                if (allClosed) {
-                    const totalPnl = tiers.reduce((sum, t) => sum + t.pnl, 0);
+                // All legs closed → record trade
+                if (legs.every(l => l.filled)) {
+                    const totalPnl = legs.reduce((sum, l) => sum + l.pnl, 0);
+                    const rMultiple = position.riskR > 0
+                        ? totalPnl / (position.riskR * dollarPerPoint * position.totalQty)
+                        : 0;
+
                     trades.push({
-                        entryTime: activePosition.entryTime,
+                        entryTime: position.entryTime,
                         exitTime: candle.timestamp,
-                        entryPrice: activePosition.entryPrice,
+                        entryPrice: position.entryPrice,
                         exitPrice: candle.close,
-                        isLong: activePosition.isLong,
+                        isLong: position.isLong,
                         pnl: totalPnl,
+                        riskR: position.riskR,
+                        rMultiple,
+                        confidence: position.confidence,
+                        entryReason: position.entryReason,
+                        exitReason: 'BRACKET_FILL',
                     });
-                    activePosition = null;
+
+                    core.resetTradeState();
+                    position = null;
                     cooldownUntil = candle.timestamp + COOLDOWN_MS;
                 }
             }
 
-            // ==========================================
-            // ENTRY LOGIC — Silver Bullet + PositionSizer
-            // ==========================================
-            if (!activePosition && session === 'AM_KILLZONE' && candle.timestamp >= cooldownUntil) {
-                if (signal.action === 'BUY' || signal.action === 'SELL') {
-                    // Call PositionSizer with current equity
-                    const sizing = PositionSizer.calculate(equity, SL_POINTS, config.INDICES);
+            // ── FEED CANDLE TO TRADING CORE ──
+            const actions = core.onCandle(candle);
 
-                    if (!sizing) {
-                        // Account cannot afford the trade
-                        if (config.VERBOSE_SMC_LOGGING) {
-                            console.log(`[Backtest] Trade Rejected: Insufficient Risk Budget. Equity: $${equity.toFixed(2)}`);
-                        }
-                        continue;
+            for (const action of actions) {
+                switch (action.type) {
+                    case 'ENTER': {
+                        // Respect cooldown
+                        if (position || candle.timestamp < cooldownUntil) break;
+
+                        // Position sizing
+                        const sizing = PositionSizer.calculate(equity, action.riskR!, config.INDICES);
+                        if (!sizing) break;
+
+                        const dollarPerPoint = sizing.symbolRoot === 'ES' ? 50 : 5;
+
+                        // Confirm entry in TradingCore
+                        core.confirmEntry(action);
+
+                        // Build bracket legs
+                        const isLong = action.direction === 'LONG';
+                        const legs = this.buildLegs(
+                            action.price!, isLong, sizing.qty,
+                            action.riskR!, action.stopPrice!,
+                        );
+
+                        position = {
+                            entryPrice: action.price!,
+                            isLong,
+                            entryTime: candle.timestamp,
+                            totalQty: sizing.qty,
+                            dollarPerPoint,
+                            riskR: action.riskR!,
+                            confidence: action.confidence ?? 0,
+                            entryReason: action.reason,
+                            tradeId: action.tradeId!,
+                            legs,
+                        };
+
+                        console.log(
+                            `[Backtest] ${action.direction} @ ${action.price} | ` +
+                            `SL: ${action.stopPrice!.toFixed(2)} (${action.riskR!.toFixed(1)}R) | ` +
+                            `Prob: ${action.confidence}% | ${sizing.qty}x ${sizing.symbolRoot}`
+                        );
+                        break;
                     }
 
-                    // Determine dollar-per-point based on sizer output
-                    const dollarPerPoint = sizing.symbolRoot === 'ES' ? 50 : 5;
+                    case 'EXIT': {
+                        if (!position) break;
+                        // Force-close all remaining legs at candle close
+                        for (const leg of position.legs) {
+                            if (leg.filled) continue;
+                            const flatPnl = position.isLong
+                                ? (candle.close - position.entryPrice) * position.dollarPerPoint * leg.qty
+                                : (position.entryPrice - candle.close) * position.dollarPerPoint * leg.qty;
+                            leg.pnl = flatPnl;
+                            leg.filled = true;
+                            equity += flatPnl;
+                        }
 
-                    console.log(
-                        `[Backtest] Sizing: $${equity.toFixed(2)} Capital` +
-                        ` | Risk: ${config.RISK}%` +
-                        ` | Budget: $${sizing.riskBudget.toFixed(2)}` +
-                        ` | Buying ${sizing.qty} ${sizing.symbolRoot}`
-                    );
+                        const totalPnl = position.legs.reduce((sum, l) => sum + l.pnl, 0);
+                        const rMultiple = position.riskR > 0
+                            ? totalPnl / (position.riskR * position.dollarPerPoint * position.totalQty)
+                            : 0;
 
-                    const isLong = signal.action === 'BUY';
-                    const tiers = this.buildTiers(candle.close, isLong, sizing.qty, SL_POINTS);
+                        trades.push({
+                            entryTime: position.entryTime,
+                            exitTime: candle.timestamp,
+                            entryPrice: position.entryPrice,
+                            exitPrice: candle.close,
+                            isLong: position.isLong,
+                            pnl: totalPnl,
+                            riskR: position.riskR,
+                            rMultiple,
+                            confidence: position.confidence,
+                            entryReason: position.entryReason,
+                            exitReason: action.reason,
+                        });
 
-                    // Log tier allocation
-                    const tierLabel = sizing.qty === 1
-                        ? 'Pure Runner'
-                        : sizing.qty === 2
-                            ? 'The Split'
-                            : `Institutional (TP1×${tiers[0].qty} + TP2×${tiers[1].qty} + Runner×${tiers[2].qty})`;
-                    console.log(`[Backtest] ${signal.action} @ ${candle.close} | ${tierLabel} | Prob: ${signal.confidence}%`);
+                        core.resetTradeState();
+                        position = null;
+                        cooldownUntil = candle.timestamp + COOLDOWN_MS;
+                        break;
+                    }
 
-                    activePosition = {
-                        entryPrice: candle.close,
-                        isLong,
-                        entryTime: candle.timestamp,
-                        totalQty: sizing.qty,
-                        dollarPerPoint,
-                        tiers,
-                    };
+                    case 'MOVE_STOP':
+                    case 'TIGHTEN_STOP': {
+                        if (!position) break;
+                        // Update all non-filled leg stops
+                        for (const leg of position.legs) {
+                            if (leg.filled) continue;
+                            if (action.stopPrice! > leg.slPrice && position.isLong) {
+                                leg.slPrice = action.stopPrice!;
+                                if (leg.trailingStop) leg.trailPrice = action.stopPrice!;
+                            } else if (action.stopPrice! < leg.slPrice && !position.isLong) {
+                                leg.slPrice = action.stopPrice!;
+                                if (leg.trailingStop) leg.trailPrice = action.stopPrice!;
+                            }
+                        }
+                        break;
+                    }
+
+                    case 'REJECTED':
+                        // Logged but no action needed in backtest
+                        break;
                 }
             }
         }
 
         // ── Force-close any position still open at end of data ──
-        if (activePosition) {
+        if (position) {
             const lastCandle = candles[candles.length - 1];
-            for (const tier of activePosition.tiers) {
-                if (tier.filled) continue;
-                const flatPnl = activePosition.isLong
-                    ? (lastCandle.close - activePosition.entryPrice) * activePosition.dollarPerPoint * tier.qty
-                    : (activePosition.entryPrice - lastCandle.close) * activePosition.dollarPerPoint * tier.qty;
-                tier.pnl = flatPnl;
-                tier.filled = true;
+            for (const leg of position.legs) {
+                if (leg.filled) continue;
+                const flatPnl = position.isLong
+                    ? (lastCandle.close - position.entryPrice) * position.dollarPerPoint * leg.qty
+                    : (position.entryPrice - lastCandle.close) * position.dollarPerPoint * leg.qty;
+                leg.pnl = flatPnl;
+                leg.filled = true;
                 equity += flatPnl;
             }
-            const totalPnl = activePosition.tiers.reduce((sum, t) => sum + t.pnl, 0);
+            const totalPnl = position.legs.reduce((sum, l) => sum + l.pnl, 0);
+            const rMultiple = position.riskR > 0
+                ? totalPnl / (position.riskR * position.dollarPerPoint * position.totalQty)
+                : 0;
             trades.push({
-                entryTime: activePosition.entryTime,
+                entryTime: position.entryTime,
                 exitTime: lastCandle.timestamp,
-                entryPrice: activePosition.entryPrice,
+                entryPrice: position.entryPrice,
                 exitPrice: lastCandle.close,
-                isLong: activePosition.isLong,
+                isLong: position.isLong,
                 pnl: totalPnl,
+                riskR: position.riskR,
+                rMultiple,
+                confidence: position.confidence,
+                entryReason: position.entryReason,
+                exitReason: 'END_OF_DATA',
             });
-            activePosition = null;
         }
 
+        // ── Stats ──
         const winningTrades = trades.filter(t => t.pnl > 0).length;
         const losingTrades = trades.filter(t => t.pnl <= 0).length;
         const totalTrades = trades.length;
         const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
-        console.log(`[BacktestEngine] Backtest complete. ${totalTrades} trades executed.`);
+        const avgWin = winningTrades > 0
+            ? trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0) / winningTrades
+            : 0;
+        const avgLoss = losingTrades > 0
+            ? Math.abs(trades.filter(t => t.pnl <= 0).reduce((s, t) => s + t.pnl, 0)) / losingTrades
+            : 0;
+        const avgRMult = totalTrades > 0
+            ? trades.reduce((s, t) => s + t.rMultiple, 0) / totalTrades
+            : 0;
+
+        console.log(`\n[BacktestEngine] ═══════════════════════════════════════`);
+        console.log(`[BacktestEngine]  Backtest Complete — ${totalTrades} trades`);
+        console.log(`[BacktestEngine] ═══════════════════════════════════════`);
+        console.log(`[BacktestEngine]  Win Rate:     ${winRate.toFixed(1)}% (${winningTrades}W / ${losingTrades}L)`);
+        console.log(`[BacktestEngine]  Net Profit:   $${(equity - this.initialCapital).toFixed(2)}`);
+        console.log(`[BacktestEngine]  Max Drawdown: ${maxDrawdown.toFixed(2)}%`);
+        console.log(`[BacktestEngine]  Avg Win:      $${avgWin.toFixed(2)}`);
+        console.log(`[BacktestEngine]  Avg Loss:     $${avgLoss.toFixed(2)}`);
+        console.log(`[BacktestEngine]  Avg R-Mult:   ${avgRMult.toFixed(2)}R`);
+        console.log(`[BacktestEngine]  Equity:       $${this.initialCapital.toFixed(0)} → $${equity.toFixed(2)}`);
+        console.log(`[BacktestEngine] ═══════════════════════════════════════\n`);
 
         return {
             totalTrades,
@@ -386,13 +429,5 @@ export class BacktestEngine {
             endingEquity: equity,
             trades,
         };
-    }
-
-    /**
-     * Walk-Forward Optimization (WFO) Orchestrator
-     */
-    public async runWalkForwardOptimization(symbol: string): Promise<void> {
-        console.log(`[BacktestEngine] Initiating Walk-Forward Optimization for ${symbol}...`);
-        console.log(`[BacktestEngine] WFO Architecture Ready. Waiting for expert injection.`);
     }
 }

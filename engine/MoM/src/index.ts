@@ -22,6 +22,7 @@ import { SessionLedger }                    from './services/SessionLedger';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './core/PositionSizer';
 import { RiskEngine }                    from './core/RiskEngine';
 import { EvaluationEngine }              from './core/EvaluationEngine';
+import { MarketClock }                   from './core/MarketClock';
 import { config }                           from './config/env';
 
 dotenv.config();
@@ -297,8 +298,26 @@ async function handleTradeCommand(
     }
 }
 
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
 // ─── BOOT SEQUENCE ───────────────────────────────────────────────────────────
 async function boot(): Promise<void> {
+
+    // 0. Market Guard — sleep until CME Globex is open
+    const calendarWarning = MarketClock.checkHolidayCalendarExpiry();
+    if (calendarWarning) console.warn(`[M.o.M] ${calendarWarning}`);
+
+    while (MarketClock.isMarketClosed()) {
+        const et = MarketClock.formatET();
+        const reason = MarketClock.isWeekend()
+            ? 'Weekend'
+            : MarketClock.isHoliday()
+                ? 'CME Holiday'
+                : 'CME Maintenance';
+        console.log(`[M.o.M] 🌙 Market closed (${reason}) — ${et} ET — sleeping 5 min...`);
+        await sleep(5 * 60_000);
+    }
+    console.log(`[M.o.M] ✅ Market open — ${MarketClock.formatET()} ET`);
 
     // 1. Core Services
     await db.initialize();

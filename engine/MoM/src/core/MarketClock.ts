@@ -1,4 +1,23 @@
 import { toZonedTime } from 'date-fns-tz';
+import * as path from 'path';
+import * as fs from 'fs';
+
+/** CME holiday entry from cme-holidays.json */
+interface CmeHoliday {
+    date: string;          // YYYY-MM-DD
+    name: string;
+    type: 'CLOSED' | 'EARLY_CLOSE';
+    closeTimeET?: string;  // HH:MM format (ET) for early close
+}
+
+// Load holidays once at module init
+const holidayPath = path.join(__dirname, '..', 'config', 'cme-holidays.json');
+let cmeHolidays: CmeHoliday[] = [];
+try {
+    cmeHolidays = JSON.parse(fs.readFileSync(holidayPath, 'utf-8')) as CmeHoliday[];
+} catch (err: any) {
+    console.warn(`[MarketClock] ⚠️ Could not load CME holiday calendar: ${err.message}`);
+}
 
 /**
  * MarketClock — Eastern Atomic Clock
@@ -157,5 +176,107 @@ export class MarketClock {
         const m = String(et.getMonth() + 1).padStart(2, '0');
         const d = String(et.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MARKET CLOSED DETECTION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Returns true if we're in the CME Globex weekend closure.
+     * Globex closes Friday at 5:00 PM ET and reopens Sunday at 5:00 PM ET (actually 6 PM but 5PM is safe).
+     *
+     * Day 0 = Sunday, 5 = Friday, 6 = Saturday.
+     */
+    public static isWeekend(timestampMs?: number): boolean {
+        const et = MarketClock.getEasternTime(timestampMs);
+        const day = et.getDay();   // 0=Sun, 5=Fri, 6=Sat
+        const hour = et.getHours();
+
+        // Saturday: always closed
+        if (day === 6) return true;
+
+        // Sunday before 6 PM ET: closed
+        if (day === 0 && hour < 18) return true;
+
+        // Friday after 5 PM ET: closed
+        if (day === 5 && hour >= 17) return true;
+
+        return false;
+    }
+
+    /**
+     * Returns true during the daily CME Globex maintenance window.
+     * Maintenance: 5:00 PM – 6:00 PM ET (Mon-Thu).
+     * Friday 5 PM is handled by isWeekend().
+     */
+    public static isCMEMaintenance(timestampMs?: number): boolean {
+        const et = MarketClock.getEasternTime(timestampMs);
+        const day = et.getDay();
+        const hour = et.getHours();
+
+        // Mon(1) through Thu(4): 5 PM – 6 PM ET is maintenance
+        if (day >= 1 && day <= 4 && hour >= 17 && hour < 18) return true;
+
+        return false;
+    }
+
+    /**
+     * Returns true if today is a CME holiday (fully closed or past early close time).
+     * Reads from cme-holidays.json.
+     */
+    public static isHoliday(timestampMs?: number): boolean {
+        const et = MarketClock.getEasternTime(timestampMs);
+        const todayStr = `${et.getFullYear()}-${String(et.getMonth() + 1).padStart(2, '0')}-${String(et.getDate()).padStart(2, '0')}`;
+
+        const holiday = cmeHolidays.find(h => h.date === todayStr);
+        if (!holiday) return false;
+
+        if (holiday.type === 'CLOSED') return true;
+
+        // EARLY_CLOSE: market is open until the specified time
+        if (holiday.type === 'EARLY_CLOSE' && holiday.closeTimeET) {
+            const [closeH, closeM] = holiday.closeTimeET.split(':').map(Number);
+            const closeMinutes = closeH * 60 + closeM;
+            const nowMinutes = et.getHours() * 60 + et.getMinutes();
+            return nowMinutes >= closeMinutes;
+        }
+
+        return false;
+    }
+
+    /**
+     * Master check: is the CME Globex session currently closed?
+     * Combines weekend, daily maintenance, and holiday checks.
+     */
+    public static isMarketClosed(timestampMs?: number): boolean {
+        return MarketClock.isWeekend(timestampMs)
+            || MarketClock.isCMEMaintenance(timestampMs)
+            || MarketClock.isHoliday(timestampMs);
+    }
+
+    /**
+     * Checks if the holiday calendar is about to expire.
+     * Returns a warning message if the last holiday entry is within 60 days, null otherwise.
+     * Should be called once at startup.
+     */
+    public static checkHolidayCalendarExpiry(): string | null {
+        if (cmeHolidays.length === 0) {
+            return '⚠️ CME holiday calendar is EMPTY — update cme-holidays.json';
+        }
+
+        const lastDate = new Date(cmeHolidays[cmeHolidays.length - 1].date + 'T00:00:00');
+        const now = new Date();
+        const daysUntilExpiry = Math.floor((lastDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (daysUntilExpiry < 0) {
+            return `⚠️ CME holiday calendar EXPIRED — last entry was ${cmeHolidays[cmeHolidays.length - 1].date}. Update cme-holidays.json`;
+        }
+
+        if (daysUntilExpiry < 60) {
+            return `⚠️ CME holiday calendar expires in ${daysUntilExpiry} days (last: ${cmeHolidays[cmeHolidays.length - 1].date}). Update cme-holidays.json soon.`;
+        }
+
+        return null;
     }
 }

@@ -5,6 +5,11 @@ export interface TradeRecord {
     exitPrice: number;
     isLong: boolean;
     pnl: number;
+    riskR: number;         // 1R distance (structural stop size)
+    rMultiple: number;     // P&L expressed as R multiples (pnl / riskR / dollarPerPoint)
+    confidence: number;    // SMC probability at entry
+    entryReason: string;   // why we entered
+    exitReason: string;    // why we exited
 }
 
 export interface BacktestResult {
