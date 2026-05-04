@@ -99,12 +99,11 @@ function initiateTripleSweepPhase1(reason: string): void {
             payload: { symbol: trade.symbol, direction: trade.direction, entryPrice: trade.entryPrice, reason },
         });
 
-        if (!isTestTrade) {
-            parentPort!.postMessage({
-                type: 'SWEEP_PHASE_1_COMPLETE',
-                payload: { symbol: trade.symbol, direction: trade.direction, entryPrice: trade.entryPrice, reason },
-            });
-        }
+        // Notify parentPort → triggers Phase 2 (AssistantWorker) → Phase 3 (Oracle) → system_reset
+        parentPort!.postMessage({
+            type: 'SWEEP_PHASE_1_COMPLETE',
+            payload: { symbol: trade.symbol, direction: trade.direction, entryPrice: trade.entryPrice, reason },
+        });
     }
 
     // Clear wilderness timer
