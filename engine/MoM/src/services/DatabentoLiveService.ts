@@ -298,25 +298,21 @@ export class DatabentoLiveService {
 
         console.log(`[Hydration] Requesting ${minutesSinceOpen} minutes of data (from 6 PM ET session open)...`);
 
-        // Wait until Databento has processed data up to our stitch point
-        console.log('[Hydration] Waiting for Databento to process data up to feed start...');
-        const [cmeReady, cfeReady] = await Promise.all([
-            waitForDataAvailability(CME_DATASET, endTime),
-            waitForDataAvailability(CFE_DATASET, endTime),
-        ]);
+        // Wait until Databento has processed CME data up to our stitch point
+        // CFE historical data is NOT requested — live VX ticks already provide
+        // real-time VIX for the DEFCON circuit breaker before hydration starts.
+        console.log('[Hydration] Waiting for Databento to process CME data up to feed start...');
+        const cmeReady = await waitForDataAvailability(CME_DATASET, endTime);
 
         if (!cmeReady) console.warn('[Hydration] CME data not available in time — starting cold.');
-        if (!cfeReady) console.warn('[Hydration] CFE data not available in time — starting cold.');
 
-        const [cmeCandles, cfeCandles] = await Promise.all([
-            cmeReady ? hydrate(CME_DATASET, CME_CONFIG.symbols, minutesSinceOpen, endTime) : Promise.resolve([]),
-            cfeReady ? hydrate(CFE_DATASET, CFE_CONFIG.symbols, minutesSinceOpen, endTime) : Promise.resolve([]),
-        ]);
+        const cmeCandles = cmeReady
+            ? await hydrate(CME_DATASET, CME_CONFIG.symbols, minutesSinceOpen, endTime)
+            : [];
 
         cmeCandles.sort((a, b) => a.timestamp - b.timestamp);
-        cfeCandles.sort((a, b) => a.timestamp - b.timestamp);
 
-        return { cmeCandles, cfeCandles };
+        return { cmeCandles, cfeCandles: [] };
     }
 
     /** Gracefully tears down both TCP connections. */

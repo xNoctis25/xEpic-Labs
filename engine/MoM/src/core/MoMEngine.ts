@@ -45,13 +45,13 @@ const mtfAnalyzer   = new MultiTimeframeAnalyzer();
 const aggregator    = new CandleAggregator(1, onCandleComplete);  // hoisted fn ref
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WILDERNESS SHORT LEASH CONSTANTS
+// STRUCTURAL STOP + R-BASED MANAGEMENT
 // ─────────────────────────────────────────────────────────────────────────────
-const SL_NORMAL_POINTS      = 20;         // standard stop-loss distance (pts)
-const SL_WILDERNESS_PCT     = 0.50;       // cut SL by 50% in Wilderness
-const BE_TRIGGER_POINTS     = 5;          // trail to BE once profit hits this many pts
-const WILDERNESS_SCRATCH_MS = 3 * 60_000; // auto-scratch after 3 min if no displacement
-const MIN_SMC_PROBABILITY   = 80;          // minimum probability score (0-100%) to take a trade
+const SL_BUFFER_TICKS        = 2;          // buffer beyond FVG edge (2 ticks = 0.50 pts MES)
+const SL_MAX_ATR_MULT        = 2.5;        // reject setup if structural stop exceeds 2.5× ATR
+const SL_WILDERNESS_PCT      = 0.50;       // cut SL by 50% in Wilderness
+const WILDERNESS_SCRATCH_MS  = 3 * 60_000; // auto-scratch after 3 min if no displacement
+const MIN_SMC_PROBABILITY    = 80;          // minimum probability score (0-100%) to take a trade
 
 // DEFCON state (received from OracleWorker)
 let isDefconRed = false;
@@ -106,6 +106,7 @@ interface ActiveTradeContext {
     direction:     'LONG' | 'SHORT';
     entryPrice:    number;
     stopPrice:     number;
+    riskR:         number;  // 1R distance in points (structural stop distance)
     entryTs:       number;
     isWilderness:  boolean;
     scratchTimer?: ReturnType<typeof setTimeout>;
@@ -125,7 +126,6 @@ let activeTrade: ActiveTradeContext | null = null;
 const TIME_DECAY_CANDLES      = 5;      // scratch after N candles with no momentum
 const FLAT_TOLERANCE_POINTS   = 0.50;   // ≈ 2 ticks on MES
 const VOLUME_DECLINE_COUNT    = 3;      // consecutive declining volume candles
-const CHOKE_DISTANCE_POINTS   = 3;      // tight stop distance during choke hold
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACTIVE TRADE MONITOR — Embedded Systems 2, 3, 4
@@ -237,11 +237,12 @@ function checkPriceStalled(trade: ActiveTradeContext): boolean {
     }
 }
 
-/** System 4: Tightens stop to CHOKE_DISTANCE_POINTS behind market. */
+/** System 4: Tightens stop to 0.5R behind current price. */
 function engageChokeHold(trade: ActiveTradeContext, currentPrice: number, profitPoints: number): void {
+    const chokeDistance = Math.max(1, trade.riskR * 0.5);  // trail at half-R, min 1pt
     let tightStop = trade.direction === 'LONG'
-        ? currentPrice - CHOKE_DISTANCE_POINTS
-        : currentPrice + CHOKE_DISTANCE_POINTS;
+        ? currentPrice - chokeDistance
+        : currentPrice + chokeDistance;
 
     // Ensure choke stop locks in profit (must be better than entry)
     const locksProfit = trade.direction === 'LONG'
@@ -257,12 +258,12 @@ function engageChokeHold(trade: ActiveTradeContext, currentPrice: number, profit
     const label = trade.isChokeActive ? 'TIGHTENED' : 'ENGAGED';
     console.log(
         `[MoMEngine] 🤏 Choke Hold ${label}: Stop → $${tightStop}` +
-        ` (${CHOKE_DISTANCE_POINTS}pts behind @ $${currentPrice}) | Profit: ${profitPoints.toFixed(1)}pts`
+        ` (0.5R=${chokeDistance.toFixed(1)}pts behind @ $${currentPrice}) | Profit: ${profitPoints.toFixed(1)}pts`
     );
 
     parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
         tradeId: trade.tradeId,
-        event: `CHOKE_HOLD_${label}: stop → $${tightStop}. Profit: ${profitPoints.toFixed(1)}pts`
+        event: `CHOKE_HOLD_${label}: stop → $${tightStop} (0.5R trail). Profit: ${profitPoints.toFixed(1)}pts`
     }});
 
     parentPort!.postMessage({
@@ -358,7 +359,7 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
                 engineState = 'IN_TRADE';
                 const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
 
-                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: enriched.price, stopPrice: enriched.price - 100, entryTs: enriched.timestamp, isWilderness: false, beTriggered: false, tradeId: `TEST-${Date.now()}`, candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false };
+                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: enriched.price, stopPrice: enriched.price - 100, riskR: 100, entryTs: enriched.timestamp, isWilderness: false, beTriggered: false, tradeId: `TEST-${Date.now()}`, candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false };
 
                 parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol: tradeSymbol, price: enriched.price } });
 
@@ -370,19 +371,19 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             // Always feed aggregator so SMC indicators stay aligned
             aggregator.processTick(tick);
 
-            // Breakeven trailing: move stop to entry once profit hits trigger threshold
+            // R-based Breakeven: move stop to entry once profit hits 1R
             if (activeTrade && !activeTrade.beTriggered) {
                 const profit = activeTrade.direction === 'LONG'
                     ? tick.price - activeTrade.entryPrice
                     : activeTrade.entryPrice - tick.price;
 
-                if (profit >= BE_TRIGGER_POINTS) {
+                if (profit >= activeTrade.riskR) {
                     activeTrade.beTriggered = true;
                     activeTrade.stopPrice   = activeTrade.entryPrice;
-                    console.log(`[MoMEngine] 🏔️  Breakeven: Trailing stop → BE @ ${activeTrade.entryPrice} (${activeTrade.symbol})`);
+                    console.log(`[MoMEngine] 🏔️  Breakeven @ 1R (${activeTrade.riskR.toFixed(1)}pts): stop → ${activeTrade.entryPrice} (${activeTrade.symbol})`);
                     parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
                         tradeId: activeTrade.tradeId,
-                        event: `BE_TRIGGER: trailing stop to breakeven @ ${activeTrade.entryPrice}`
+                        event: `BE_TRIGGER @ 1R: trailing stop to breakeven @ ${activeTrade.entryPrice} (1R = ${activeTrade.riskR.toFixed(1)}pts)`
                     }});
                     parentPort!.postMessage({
                         type:    'trade_command',
@@ -470,9 +471,10 @@ async function onAssistantMessage(data: { type: string; [key: string]: unknown }
                 `Vol: ${warn.volumeRatio.toFixed(2)}× | Δ: ${warn.priceDeltaPct.toFixed(3)}%`
             );
             if (activeTrade) {
+                const chokeR = Math.max(1, activeTrade.riskR * 0.5);
                 const tightStop = activeTrade.direction === 'LONG'
-                    ? warn.currentPrice - CHOKE_DISTANCE_POINTS
-                    : warn.currentPrice + CHOKE_DISTANCE_POINTS;
+                    ? warn.currentPrice - chokeR
+                    : warn.currentPrice + chokeR;
                 parentPort!.postMessage({
                     type:    'trade_command',
                     payload: { action: 'TIGHTEN_STOP', symbol: warn.symbol, stopPrice: tightStop, direction: activeTrade.direction, reason: 'IMMINENT_REVERSION' },
@@ -555,9 +557,9 @@ function onCandleComplete(candle: Candle): void {
     if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
         if (activeTrade) {
             console.log(`[MoMEngine] 🕐 EOD SWEEP — flattening ${activeTrade.symbol} at 16:30 ET.`);
-            parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                source: 'MoM', regime: 'EOD',
-                message: `EOD_FLATTEN: ${activeTrade.symbol} ${activeTrade.direction} forced exit at 16:30 ET.`
+            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                tradeId: activeTrade.tradeId,
+                event: `EOD_FLATTEN: Forced exit at 16:30 ET`,
             }});
             parentPort!.postMessage({
                 type: 'trade_command',
@@ -601,23 +603,28 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
 
     // DEFCON RED gate: indicators stay primed but no new entries
     if (isDefconRed) {
+        const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
+        const direction = signal.action === 'BUY' ? 'LONG' : 'SHORT';
         console.log(`[MoMEngine] SMC ${signal.action} blocked — DEFCON RED active.`);
         parentPort!.postMessage({ type: 'TELEMETRY', payload: {
             source: 'MoM', regime: 'DEFCON',
-            message: `DEFCON_RED: SMC ${signal.action} blocked. Conf=${signal.confidence}. ${signal.reason}`
+            message: `REJECTED by DEFCON | ${direction} ${tradeSymbol} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`,
         }});
         return;
     }
 
     // Minimum probability gate — only high-probability setups
     if (signal.confidence < MIN_SMC_PROBABILITY) {
+        const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
+        const direction = signal.action === 'BUY' ? 'LONG' : 'SHORT';
+        const inWilderness = MarketClock.isWilderness(candle.timestamp);
         console.log(
-            `[MoMEngine] ❌ SMC ${signal.action} rejected (${signal.confidence}%) — below ${MIN_SMC_PROBABILITY}% threshold. ${signal.reason}`
+            `[MoMEngine] ❌ SMC ${signal.action} rejected (${signal.confidence}%) — below ${MIN_SMC_PROBABILITY}% threshold.`
         );
         parentPort!.postMessage({ type: 'TELEMETRY', payload: {
             source: 'MoM',
-            regime: 'Killzone',
-            message: `REJECTED: ${signal.action} @ ${candle.close} (${signal.confidence}%) | ${signal.reason}`,
+            regime: inWilderness ? 'Wilderness' : 'Killzone',
+            message: `REJECTED by PROBABILITY_GATE | ${direction} ${tradeSymbol} @ ${candle.close} | Prob: ${signal.confidence}% (min: ${MIN_SMC_PROBABILITY}%) | ${signal.reason}`,
         }});
         return;
     }
@@ -637,10 +644,11 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
     const light = await requestTakeoff(tradeSymbol, direction);
 
     if (light === 'RED_LIGHT') {
+        console.log(`[MoMEngine] 🔴 RED_LIGHT — Oracle blocked ${tradeSymbol} ${direction}.`);
         parentPort!.postMessage({ type: 'TELEMETRY', payload: {
             source:  'MoM',
             regime:  inWilderness ? 'Wilderness' : 'Killzone',
-            message: `RED_LIGHT: Oracle blocked ${tradeSymbol} ${direction} SMC entry. Engine reset to IDLE.`,
+            message: `REJECTED by ORACLE | ${direction} ${tradeSymbol} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`,
         }});
         engineState = 'IDLE';
         return;
@@ -654,22 +662,50 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
         message: `ENTER_SMC: ${tradeSymbol} ${direction} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`
     }});
 
-    // ── DYNAMIC STOP LOSS (ATR-based with Wilderness override) ────────────────
+    // ── STRUCTURAL STOP LOSS (FVG invalidation + buffer) ────────────────────────
     const atr = smcExpert.getATR();
-    let slDistance = atr > 0 ? Math.max(5, Math.ceil(atr * 1.5)) : SL_NORMAL_POINTS;
+    const tickBuffer = SL_BUFFER_TICKS * 0.25;  // 2 ticks × 0.25 pts/tick on MES
+
+    let stopPrice: number;
+    if (signal.fvgZone) {
+        // Stop at FVG invalidation level + buffer
+        stopPrice = direction === 'LONG'
+            ? signal.fvgZone.bottom - tickBuffer
+            : signal.fvgZone.top    + tickBuffer;
+    } else {
+        // Fallback: ATR-based if no FVG zone (shouldn't happen, but safety)
+        const fallbackDist = atr > 0 ? Math.max(3, Math.ceil(atr * 1.5)) : 10;
+        stopPrice = direction === 'LONG'
+            ? candle.close - fallbackDist
+            : candle.close + fallbackDist;
+    }
+
+    let slDistance = Math.abs(candle.close - stopPrice);
+
+    // Sanity cap: reject if structural stop is too wide (setup is over-stretched)
+    if (atr > 0 && slDistance > atr * SL_MAX_ATR_MULT) {
+        console.log(`[MoMEngine] ❌ Structural stop too wide (${slDistance.toFixed(1)}pts vs ATR ${atr.toFixed(1)}) — skipping.`);
+        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+            source: 'MoM',
+            regime: inWilderness ? 'Wilderness' : 'Killzone',
+            message: `REJECTED by STRUCTURE_CAP | ${direction} ${tradeSymbol} @ ${candle.close} | SL: ${slDistance.toFixed(1)}pts exceeds ${SL_MAX_ATR_MULT}× ATR (${atr.toFixed(1)}) | ${signal.reason}`,
+        }});
+        engineState = 'IDLE';
+        return;
+    }
 
     if (inWilderness) {
         slDistance = Math.ceil(slDistance * SL_WILDERNESS_PCT);
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source:  'MoM',
-            regime:  'Wilderness',
-            message: `SMC Short Leash activated for ${tradeSymbol} ${direction}: SL → ${slDistance} pts (ATR: ${atr.toFixed(2)}).`,
+        stopPrice = direction === 'LONG'
+            ? candle.close - slDistance
+            : candle.close + slDistance;
+        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+            tradeId,
+            event: `SHORT_LEASH: Wilderness SL → ${slDistance.toFixed(1)} pts`,
         }});
     }
 
-    const stopPrice = direction === 'LONG'
-        ? candle.close - slDistance
-        : candle.close + slDistance;
+    const riskR = slDistance;  // 1R = distance from entry to stop
 
     // ── ENTER TRADE ───────────────────────────────────────────────────────────
     engineState = 'IN_TRADE';
@@ -679,6 +715,7 @@ async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void
         direction,
         entryPrice:   candle.close,
         stopPrice,
+        riskR,
         entryTs:      candle.timestamp,
         isWilderness: inWilderness,
         beTriggered:  false,

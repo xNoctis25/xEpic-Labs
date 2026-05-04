@@ -388,7 +388,7 @@ async function boot(): Promise<void> {
                              : vix < 25 ? '📊 Normal — standard volatility'
                              : vix < 30 ? '⚠️  Elevated — rising fear, wider swings'
                              :            '🔴 Extreme Fear — hedging frenzy, expect chaos';
-                console.log(`[M.o.M] ✅ Hydration Complete — ${msg.cmeCount} CME + ${msg.cfeCount} CFE candles | VIX: ${vix.toFixed(2)} (${vixTag})`);
+                console.log(`[M.o.M] ✅ Hydration Complete — ${msg.cmeCount} CME candles | VIX: ${vix.toFixed(2)} (${vixTag})`);
                 resolve();
             }
         };

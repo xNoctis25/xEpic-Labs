@@ -251,9 +251,6 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
                 for (const c of payload.cmeCandles) {
                     updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
                 }
-                for (const c of payload.cfeCandles) {
-                    updateMacroRadar({ price: c.close, volume: c.volume, timestamp: c.timestamp, dataset: c.dataset, symbol: c.symbol } as any);
-                }
 
                 parentPort!.postMessage({
                     type: 'HYDRATION_COMPLETE',
