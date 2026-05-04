@@ -499,7 +499,7 @@ function wireOracleHandler(): void {
                     clearInterval(positionMonitor);
                     positionMonitor = null;
                 }
-                if (msg.reason === 'TEST_TRADE_COMPLETE' && testTradeResolve) {
+                if (testTradeResolve) {
                     testTradeResolve();
                     testTradeResolve = null;
                 }
