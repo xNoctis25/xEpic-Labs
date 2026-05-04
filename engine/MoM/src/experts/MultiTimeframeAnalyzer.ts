@@ -267,12 +267,7 @@ export class MultiTimeframeAnalyzer {
 
         if (!silent && prevTrend !== tf.trend) {
             console.log(
-                `[MTF] 📊 ${tf.label} candle closed | Trend: ${prevTrend} → ${tf.trend} | ` +
-                `SwH: ${tf.swingHigh?.toFixed(2) ?? '—'} | SwL: ${tf.swingLow?.toFixed(2) ?? '—'}`
-            );
-        } else if (!silent) {
-            console.log(
-                `[MTF] 📊 ${tf.label} candle closed | Trend: ${tf.trend} (no change) | ` +
+                `[MTF] 📊 ${tf.label} TREND SHIFT: ${prevTrend} → ${tf.trend} | ` +
                 `SwH: ${tf.swingHigh?.toFixed(2) ?? '—'} | SwL: ${tf.swingLow?.toFixed(2) ?? '—'}`
             );
         }
