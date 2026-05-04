@@ -2,10 +2,11 @@
  * MoMEngine.ts — Core 1 (M.o.M Signal Engine)
  * ─────────────────────────────────────────────────────────────────────────────
  * Responsibilities:
- *   • Receives ORB_SETUP signals from AssistantWorker.
+ *   • SMC Signal Engine: displacement entries + FVG tap entries.
+ *   • Multi-Timeframe Analysis: 1H/15M/5M bias feeds into probability model.
  *   • HANDSHAKE: Sends REQUEST_TAKEOFF to OracleWorker before every entry.
  *     Only executes on GREEN_LIGHT — blocks on RED_LIGHT.
- *   • WILDERNESS RULES: If the ORB fires outside a Killzone, enforces the
+ *   • WILDERNESS RULES: If SMC fires outside a Killzone, enforces the
  *     "Short Leash" — 50% SL, trail-to-BE on first profit, auto-scratch timer.
  *   • TRIPLE-SWEEP PHASE 1: On exit, cancels local orders and fires
  *     SWEEP_PHASE_1_COMPLETE to AssistantWorker to begin the exit consensus.
@@ -14,7 +15,7 @@
  *
  * IPC Ports:
  *   • oraclePort – MessagePort ↔ OracleWorker  (REQUEST_TAKEOFF / GREEN_LIGHT)
- *   • assistPort – MessagePort ↔ AssistantWorker (ORB_SETUP / IMMINENT_REVERSION)
+ *   • assistPort – MessagePort ↔ AssistantWorker (IMMINENT_REVERSION)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -456,136 +457,8 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
 async function onAssistantMessage(data: { type: string; [key: string]: unknown }): Promise<void> {
     switch (data.type) {
 
-        /**
-         * ORB_SETUP — Volume-anomaly breakout confirmed by AssistantWorker.
-         * Gate sequence: IDLE check → Wilderness check → HANDSHAKE → execute.
-         */
-        case 'ORB_SETUP': {
-            const setup = data.payload as {
-                symbol: string; direction: 'LONG' | 'SHORT';
-                breakoutPrice: number; volumeRatio: number;
-                boxHigh: number; boxLow: number; ts: number;
-            };
-
-            if (engineState !== 'IDLE') {
-                console.log(`[MoMEngine] ORB_SETUP ignored — engine is ${engineState}.`);
-                return;
-            }
-            if (!isHuntingActive) return;  // Warmup gate — no trades until hydration complete
-
-            // DEFCON RED gate: suppress ORB entries (mirrors SMC pipeline gate)
-            if (isDefconRed) {
-                console.log(`[MoMEngine] ORB_SETUP blocked — DEFCON RED active.`);
-                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                    source: 'MoM', regime: 'DEFCON',
-                    message: `DEFCON_RED: ORB ${setup.direction} blocked for ${setup.symbol}. Vol: ${setup.volumeRatio.toFixed(2)}×`,
-                }});
-                return;
-            }
-
-            const inWilderness = MarketClock.isWilderness(setup.ts);
-            const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
-            console.log(
-                `[MoMEngine] 📡 ORB_SETUP | ${setup.symbol} ${setup.direction} | ` +
-                `Vol: ${setup.volumeRatio.toFixed(2)}× | Zone: ${zoneLabel}`
-            );
-
-            // ── ORACLE HANDSHAKE ──────────────────────────────────────────────
-            engineState = 'AWAITING_HANDSHAKE';
-            const light = await requestTakeoff(setup.symbol, setup.direction);
-
-            if (light === 'RED_LIGHT') {
-                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                    source:  'MoM',
-                    regime:  inWilderness ? 'Wilderness' : 'Killzone',
-                    message: `RED_LIGHT: Oracle blocked ${setup.symbol} ${setup.direction} ORB entry. Engine reset to IDLE.`,
-                }});
-                engineState = 'IDLE';
-                return;
-            }
-
-            console.log(`[MoMEngine] 🟢 GREEN_LIGHT from Oracle — proceeding with ${setup.symbol} ${setup.direction}.`);
-            parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                source: 'MoM', regime: inWilderness ? 'Wilderness' : 'Killzone',
-                message: `ENTER_ORB: ${setup.symbol} ${setup.direction} @ ${setup.breakoutPrice} | Vol: ${setup.volumeRatio.toFixed(2)}x`
-            }});
-
-            // ── WILDERNESS SHORT LEASH ────────────────────────────────────────
-            let slDistance = SL_NORMAL_POINTS;
-            if (inWilderness) {
-                slDistance = Math.ceil(SL_NORMAL_POINTS * SL_WILDERNESS_PCT);
-                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-                    source:  'MoM',
-                    regime:  'Wilderness',
-                    message: `Short Leash activated for ${setup.symbol} ${setup.direction}: SL → ${slDistance} pts. Auto-scratch in ${WILDERNESS_SCRATCH_MS / 60000} min.`,
-                }});
-            }
-
-            const stopPrice = setup.direction === 'LONG'
-                ? setup.breakoutPrice - slDistance
-                : setup.breakoutPrice + slDistance;
-
-            // ── ENTER TRADE ───────────────────────────────────────────────────
-            engineState = 'IN_TRADE';
-
-            // Build and store trade context
-            activeTrade = {
-                symbol:       setup.symbol,
-                direction:    setup.direction,
-                entryPrice:   setup.breakoutPrice,
-                stopPrice,
-                entryTs:      setup.ts,
-                isWilderness: inWilderness,
-                beTriggered:  false,
-                tradeId:      `${setup.symbol}-${Date.now()}`,
-                candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false,
-            };
-
-            // Wilderness: set auto-scratch timer
-            if (inWilderness) {
-                activeTrade.scratchTimer = setTimeout(() => {
-                    if (activeTrade && !activeTrade.beTriggered) {
-                        console.warn(`[MoMEngine] 🌲 Wilderness scratch — no displacement after ${WILDERNESS_SCRATCH_MS / 60000} min. Exiting.`);
-                        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-                            tradeId: activeTrade!.tradeId,
-                            event: `CHOKED: no displacement. Auto-scratch.`
-                        }});
-                        parentPort!.postMessage({
-                            type:    'trade_command',
-                            payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
-                        });
-                        initiateTripleSweepPhase1('WILDERNESS_NO_DISPLACEMENT');
-                    }
-                }, WILDERNESS_SCRATCH_MS);
-            }
-
-            // Notify AssistantWorker → activates Tactical Overwatch
-            assistPort?.postMessage({
-                type:    'IN_TRADE',
-                payload: {
-                    symbol:     setup.symbol,
-                    direction:  setup.direction,
-                    entryPrice: setup.breakoutPrice,
-                    entryTs:    setup.ts,
-                    stopPrice,
-                },
-            });
-
-            // Forward to Main → Broker
-            parentPort!.postMessage({
-                type:    'trade_command',
-                payload: {
-                    action:      'ENTER',
-                    symbol:      setup.symbol,
-                    direction:   setup.direction,
-                    price:       setup.breakoutPrice,
-                    stopPrice,
-                    isWilderness: inWilderness,
-                    source:      'ORB',
-                },
-            });
-            break;
-        }
+        // ORB_SETUP removed — SMC displacement entries handle breakout catching
+        // via the probability model (HTF:30 + Disp:25 + Vol:20 + VWAP:15 + Gap:10)
 
         /**
          * IMMINENT_REVERSION — Toxic opposing flow detected by Tactical Overwatch.

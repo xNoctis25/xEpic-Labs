@@ -2,7 +2,7 @@
  * index.ts — Master Thread (Core 4)
  * ─────────────────────────────────────────────────────────────────────────────
  *  Core 1 │ MoMEngine       → SMC signal evaluation + trade execution
- *  Core 2 │ AssistantWorker → ORB Hunter + Tactical Overwatch + Triple-Sweep P2
+ *  Core 2 │ AssistantWorker → Tactical Overwatch + Triple-Sweep P2
  *  Core 3 │ OracleWorker    → Databento dual-feed + Macro Radar + WSS
  *  Core 4 │ THIS FILE       → Boot, broker I/O, ExecutionEngine, lifecycle
  * ─────────────────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ interface ActiveTradeCtx {
     stopPrice:  number;
     qty:        number;
     margin:     number;
-    source:     string;   // SMC or ORB
+    source:     string;   // SMC
     entryTs:    number;
     tradeId?:   string;   // correlation key for telemetry consolidation
 }
@@ -451,9 +451,7 @@ function wireAssistantHandler(): void {
                 void handleTradeCommand(msg.payload as Record<string, unknown>, 'AssistantWorker');
                 break;
 
-            case 'orb_alert':
-                console.log('[M.o.M] 🔭 ORB Signal:', msg.payload);
-                break;
+
             case 'overwatch_alert':
                 console.log('[M.o.M] ⚠️  Overwatch:', msg.payload);
                 break;

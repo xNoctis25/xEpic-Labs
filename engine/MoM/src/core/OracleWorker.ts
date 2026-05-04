@@ -28,7 +28,6 @@ const WSS_PORT          = 8080;
 const VIX_RED_THRESHOLD = 25.0;      // VIX level that triggers DefconLevel RED (raised from 20)
 const VWAP_WINDOW_MS    = 15 * 60_000;  // 15-minute rolling time window for VWAP
 const VWAP_EMA_ALPHA    = 0.05;      // EMA decay — ~20-tick half-life (~2 min reactivity)
-const VWAP_DEAD_ZONE    = 0.5;       // Slope within ±0.5 is treated as neutral (allows trade)
 
 // ─── DefconLevel ─────────────────────────────────────────────────────────────
 type DefconLevel = 'GREEN' | 'RED';
@@ -324,22 +323,15 @@ function onMomMessage(data: { type: string; [key: string]: unknown }): void {
 
         /**
          * REQUEST_TAKEOFF — MomWorker is requesting clearance to enter a trade.
-         * Oracle evaluates DefconLevel + Macro Radar and responds GREEN or RED.
+         * Oracle checks circuit breakers only (DefconLevel + VIX).
+         * Directional bias is handled by the probability model (MTF + VWAP).
          */
         case 'REQUEST_TAKEOFF': {
             const cid       = data.correlationId as string;
             const symbol    = data.symbol as string;
             const direction = data.direction as string;
 
-            // Determine clearance based on current oracle state
             const isVixElevated = lastVixPrice > 0 && lastVixPrice >= VIX_RED_THRESHOLD;
-
-            // Dead zone: slope within ±VWAP_DEAD_ZONE is treated as neutral → allow
-            const isNeutral = Math.abs(vwapSlope) <= VWAP_DEAD_ZONE;
-            const isBiasAligned = isNeutral || (
-                (direction === 'LONG'  && vwapSlope > 0) ||
-                (direction === 'SHORT' && vwapSlope < 0)
-            );
 
             let light: 'GREEN_LIGHT' | 'RED_LIGHT';
             let reason: string;
@@ -350,12 +342,9 @@ function onMomMessage(data: { type: string; [key: string]: unknown }): void {
             } else if (isVixElevated) {
                 light  = 'RED_LIGHT';
                 reason = `VIX elevated (${lastVixPrice.toFixed(2)})`;
-            } else if (!isBiasAligned) {
-                light  = 'RED_LIGHT';
-                reason = `VWAP slope bias misaligned (slope=${vwapSlope.toFixed(4)}, direction=${direction})`;
             } else {
                 light  = 'GREEN_LIGHT';
-                reason = `DefconLevel GREEN | VIX ${lastVixPrice.toFixed(2)} | VWAP slope ${vwapSlope.toFixed(4)}`;
+                reason = `DefconLevel GREEN | VIX ${lastVixPrice.toFixed(2)}`;
             }
 
             parentPort!.postMessage({ type: 'TELEMETRY', payload: {
@@ -364,7 +353,6 @@ function onMomMessage(data: { type: string; [key: string]: unknown }): void {
                 message: `Handshake ${light} | ${symbol} ${direction} | ${reason}`,
             }});
 
-            // Respond directly on momPort (bidirectional MessagePort)
             momPort?.postMessage({ type: light, correlationId: cid, reason });
             break;
         }

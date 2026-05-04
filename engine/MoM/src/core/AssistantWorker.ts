@@ -2,21 +2,18 @@
  * AssistantWorker.ts — Core 2
  * ─────────────────────────────────────────────────────────────────────────────
  * Responsibilities:
- *   • 24/7 ORB Volume Hunter — scans every tick for volume anomalies breaking
- *     out of a tight consolidation box. Fires ORB_SETUP to MomWorker.
  *   • Tactical Overwatch — when MoM is IN_TRADE, monitors order flow for
  *     toxic reversions. Fires IMMINENT_REVERSION to MomWorker on detection.
  *   • Nova AI assistant relay — routes dashboard queries to LLM (Phase 4).
  *
  * IPC Ports (wired by Main/Core 4 via MessageChannel):
- *   • momPort    – MessagePort ↔ MomWorker    (send ORB_SETUP, IMMINENT_REVERSION)
+ *   • momPort    – MessagePort ↔ MomWorker    (send IMMINENT_REVERSION)
  *   • oraclePort – MessagePort ↔ OracleWorker (receive ticks + oracle_state)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { parentPort, MessagePort } from 'worker_threads';
 import { EnrichedTick }            from '../services/DatabentoLiveService';
-import { ORB, OrbSetup }           from '../experts/ORB';
 
 if (!parentPort) throw new Error('[AssistantWorker] Must be run as a worker thread.');
 
@@ -26,15 +23,7 @@ let oraclePort: MessagePort | null = null;
 let lastSweepReason = '';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION 1 — ORB VOLUME HUNTER (24/7)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const orbExpert = new ORB(() => {
-    parentPort!.postMessage({ type: 'WARMUP_COMPLETE' });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SECTION 2 — TACTICAL OVERWATCH
+// SECTION 1 — TACTICAL OVERWATCH
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Current position being monitored by Tactical Overwatch. */
@@ -140,13 +129,6 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
             const tick = msg.payload as EnrichedTick;
             if (!tick || tick.dataset !== 'GLBX.MDP3') return;  // CME only
 
-            // 24/7 ORB scanner
-            const setup = orbExpert.analyze(tick);
-            if (setup) {
-                momPort?.postMessage({ type: 'ORB_SETUP', payload: setup });
-                parentPort!.postMessage({ type: 'orb_alert', payload: setup });
-            }
-
             // Tactical Overwatch (only when in a live trade)
             if (overwatchMode === 'WATCHING') evaluateOverwatch(tick);
             break;
@@ -167,7 +149,6 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
         }
 
         case 'SYSTEM_RESET': {
-            orbExpert.reset();
             activePosition  = null;
             overwatchMode   = 'IDLE';
             overwatchBuffer.length = 0;
@@ -175,9 +156,7 @@ function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
         }
 
         case 'HYDRATION': {
-            const p = msg.payload as any;
-            const cmeCandles = p.cmeCandles || [];
-            orbExpert.hydrate(cmeCandles);
+            // Hydration data received — no ORB to hydrate, overwatch starts clean
             break;
         }
 
