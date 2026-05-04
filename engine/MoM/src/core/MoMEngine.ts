@@ -1,29 +1,25 @@
 /**
  * MoMEngine.ts — Core 1 (M.o.M Signal Engine)
  * ─────────────────────────────────────────────────────────────────────────────
+ * Thin IPC wrapper around TradingCore.
+ * 
  * Responsibilities:
- *   • SMC Signal Engine: displacement entries + FVG tap entries.
- *   • Multi-Timeframe Analysis: 1H/15M/5M bias feeds into probability model.
- *   • HANDSHAKE: Sends REQUEST_TAKEOFF to OracleWorker before every entry.
- *     Only executes on GREEN_LIGHT — blocks on RED_LIGHT.
- *   • WILDERNESS RULES: If SMC fires outside a Killzone, enforces the
- *     "Short Leash" — 50% SL, trail-to-BE on first profit, auto-scratch timer.
- *   • TRIPLE-SWEEP PHASE 1: On exit, cancels local orders and fires
- *     SWEEP_PHASE_1_COMPLETE to AssistantWorker to begin the exit consensus.
- *   • Broadcasts IN_TRADE / TRADE_CLOSED lifecycle to AssistantWorker.
- *   • Forwards EMERGENCY_EXIT and IMMINENT_REVERSION to broker via Main.
+ *   • Wires IPC ports (parentPort, oraclePort, assistPort)
+ *   • Feeds live ticks to TradingCore
+ *   • Translates TradeAction[] into IPC messages to broker/workers
+ *   • Handles Oracle handshake (async gate before entries)
+ *   • DEFCON state management (received from Oracle)
+ *   • Test trade sequence at boot
+ *   • Triple-Sweep Phase 1 on exit
  *
- * IPC Ports:
- *   • oraclePort – MessagePort ↔ OracleWorker  (REQUEST_TAKEOFF / GREEN_LIGHT)
- *   • assistPort – MessagePort ↔ AssistantWorker (IMMINENT_REVERSION)
+ * ALL trading logic lives in TradingCore (SMC, ATM, stops, R-based management).
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { parentPort, MessagePort } from 'worker_threads';
 import { MarketClock }             from './MarketClock';
-import { CandleAggregator, Candle, Tick } from '../market/CandleAggregator';
-import { SMC, SmcSignal }    from '../experts/SMC';
-import { MultiTimeframeAnalyzer } from '../experts/MultiTimeframeAnalyzer';
+import { Candle, Tick }            from '../market/CandleAggregator';
+import { TradingCore, TradeAction } from './TradingCore';
 import { ContractBuilder }         from '../utils/ContractBuilder';
 import { config }                  from '../config/env';
 
@@ -36,47 +32,31 @@ let assistPort: MessagePort | null = null;
 // ─── Engine state ────────────────────────────────────────────────────────────
 type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
-let isTestingTrade = true;  // Armed immediately — test trade fires on first tick (before hydration)
-let isHuntingActive = false; // Warmup gate: blocks ALL trade signals until hydration completes
+let isTestingTrade = true;  // Armed immediately — test trade fires on first tick
+let isHuntingActive = false;
 
-// ─── SMC Hunting (Core 1 signal engine) ──────────────────────────────────────
-const smcExpert     = new SMC();
-const mtfAnalyzer   = new MultiTimeframeAnalyzer();
-const aggregator    = new CandleAggregator(1, onCandleComplete);  // hoisted fn ref
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STRUCTURAL STOP + R-BASED MANAGEMENT
-// ─────────────────────────────────────────────────────────────────────────────
-const SL_BUFFER_TICKS        = 2;          // buffer beyond FVG edge (2 ticks = 0.50 pts MES)
-const SL_MAX_ATR_MULT        = 2.5;        // reject setup if structural stop exceeds 2.5× ATR
-const SL_WILDERNESS_PCT      = 0.50;       // cut SL by 50% in Wilderness
-const WILDERNESS_SCRATCH_MS  = 3 * 60_000; // auto-scratch after 3 min if no displacement
-const MIN_SMC_PROBABILITY    = 80;          // minimum probability score (0-100%) to take a trade
+// ─── TradingCore — THE BRAIN ─────────────────────────────────────────────────
+const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
+const core = new TradingCore(tradeSymbol);
 
 // DEFCON state (received from OracleWorker)
 let isDefconRed = false;
 
+// Wilderness auto-scratch timer
+const WILDERNESS_SCRATCH_MS = 3 * 60_000;
+let wildernessTimer: ReturnType<typeof setTimeout> | null = null;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ORACLE HANDSHAKE — REQUEST_TAKEOFF / GREEN_LIGHT
 // ─────────────────────────────────────────────────────────────────────────────
-const HANDSHAKE_TIMEOUT_MS = 3000;   // abort if Oracle doesn't respond in 3s
-
-/** Pending handshake promise resolvers, keyed by correlation ID. */
+const HANDSHAKE_TIMEOUT_MS = 3000;
 const pendingHandshakes = new Map<string, (light: 'GREEN_LIGHT' | 'RED_LIGHT') => void>();
 
-/**
- * Sends REQUEST_TAKEOFF to OracleWorker via the direct peer port.
- * Returns a Promise that resolves to 'GREEN_LIGHT' or 'RED_LIGHT'.
- * Times out to 'RED_LIGHT' after HANDSHAKE_TIMEOUT_MS.
- */
 function requestTakeoff(symbol: string, direction: string): Promise<'GREEN_LIGHT' | 'RED_LIGHT'> {
     return new Promise((resolve) => {
         const correlationId = `${symbol}-${Date.now()}`;
-
-        // Register the resolver — will be called when Oracle responds
         pendingHandshakes.set(correlationId, resolve);
 
-        // Safety timeout: treat no-response as RED_LIGHT
         const timer = setTimeout(() => {
             if (pendingHandshakes.has(correlationId)) {
                 pendingHandshakes.delete(correlationId);
@@ -92,240 +72,206 @@ function requestTakeoff(symbol: string, direction: string): Promise<'GREEN_LIGHT
             direction,
             ts:            Date.now(),
         });
-
-        // Keep timer ref alive (Node GC safety)
         void timer;
     });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTIVE TRADE STATE + MONITORING
-// ─────────────────────────────────────────────────────────────────────────────
-interface ActiveTradeContext {
-    symbol:        string;
-    direction:     'LONG' | 'SHORT';
-    entryPrice:    number;
-    stopPrice:     number;
-    riskR:         number;  // 1R distance in points (structural stop distance)
-    entryTs:       number;
-    isWilderness:  boolean;
-    scratchTimer?: ReturnType<typeof setTimeout>;
-    beTriggered:   boolean;
-    tradeId:       string;  // telemetry correlation key
-    // ── ATM Monitoring State ──
-    candlesSinceEntry: number;
-    volumeHistory:     number[];
-    candleHighHistory: number[];
-    candleLowHistory:  number[];
-    isChokeActive:     boolean;
-}
-
-let activeTrade: ActiveTradeContext | null = null;
-
-// ─── ATM Constants ───────────────────────────────────────────────────────────
-const TIME_DECAY_CANDLES      = 5;      // scratch after N candles with no momentum
-const FLAT_TOLERANCE_POINTS   = 0.50;   // ≈ 2 ticks on MES
-const VOLUME_DECLINE_COUNT    = 3;      // consecutive declining volume candles
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ACTIVE TRADE MONITOR — Embedded Systems 2, 3, 4
-// Runs per-candle when IN_TRADE. Uses IPC trade_commands (no broker access).
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Per-candle monitoring of the active position.
- * Priority: EOD → Structural Invalidation → Time Decay → Exhaustion/Choke
- */
-function monitorActiveTrade(candle: Candle, signal: SmcSignal): void {
-    if (!activeTrade || engineState !== 'IN_TRADE') return;
-
-    const trade = activeTrade;
-    trade.candlesSinceEntry++;
-    trade.volumeHistory.push(candle.volume);
-    trade.candleHighHistory.push(candle.high);
-    trade.candleLowHistory.push(candle.low);
-
-    const profitPoints = trade.direction === 'LONG'
-        ? candle.close - trade.entryPrice
-        : trade.entryPrice - candle.close;
-
-    // ── System 2: Structural Invalidation ────────────────────────────────
-    if (signal.action !== 'HOLD') {
-        const isOpposing = (trade.direction === 'LONG' && signal.action === 'SELL')
-                        || (trade.direction === 'SHORT' && signal.action === 'BUY');
-        if (isOpposing) {
-            console.log(`[MoMEngine] 🔄 STRUCTURAL INVALIDATION: ${trade.direction} vs confirmed ${signal.action}`);
-            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-                tradeId: trade.tradeId,
-                event: `CHOKED: structural invalidation. ${trade.direction} vs ${signal.action}. PnL: ${profitPoints.toFixed(1)}pts`
-            }});
-            parentPort!.postMessage({
-                type: 'trade_command',
-                payload: { action: 'FLATTEN_ALL', symbol: trade.symbol, reason: 'STRUCTURAL_INVALIDATION' },
-            });
-            initiateTripleSweepPhase1('STRUCTURAL_INVALIDATION');
-            return;
-        }
-    }
-
-    // ── System 3a: Time Decay ────────────────────────────────────────────
-    if (trade.candlesSinceEntry > TIME_DECAY_CANDLES && profitPoints <= FLAT_TOLERANCE_POINTS) {
-        console.log(`[MoMEngine] ⏰ TIME DECAY: ${trade.candlesSinceEntry} candles, PnL: ${profitPoints.toFixed(2)}pts — momentum dead.`);
-        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-            tradeId: trade.tradeId,
-            event: `CHOKED: time decay. ${trade.candlesSinceEntry} candles, PnL: ${profitPoints.toFixed(2)}pts`
-        }});
-        parentPort!.postMessage({
-            type: 'trade_command',
-            payload: { action: 'FLATTEN_ALL', symbol: trade.symbol, reason: 'TIME_DECAY' },
-        });
-        initiateTripleSweepPhase1('TIME_DECAY');
-        return;
-    }
-
-    // ── System 3b: Momentum Exhaustion (volume decline + price stall) ────
-    const decliningVol = checkVolumeDecline(trade);
-    const priceStalled = checkPriceStalled(trade);
-
-    if (decliningVol && priceStalled) {
-        console.log(`[MoMEngine] 📉 EXHAUSTION: Declining volume + price stalled.`);
-
-        if (profitPoints <= 0) {
-            // Losing + exhausted → exit
-            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-                tradeId: trade.tradeId,
-                event: `CHOKED: exhaustion (negative PnL: ${profitPoints.toFixed(1)}pts). Flattening.`
-            }});
-            parentPort!.postMessage({
-                type: 'trade_command',
-                payload: { action: 'FLATTEN_ALL', symbol: trade.symbol, reason: 'EXHAUSTION_NEGATIVE_PNL' },
-            });
-            initiateTripleSweepPhase1('EXHAUSTION_NEGATIVE_PNL');
-            return;
-        }
-
-        // ── System 4: Choke Hold (in profit + exhausted) ─────────────────
-        engageChokeHold(trade, candle.close, profitPoints);
-    }
-}
-
-/** System 3b helper: 3 consecutive declining volume candles. */
-function checkVolumeDecline(trade: ActiveTradeContext): boolean {
-    const h = trade.volumeHistory;
-    if (h.length < VOLUME_DECLINE_COUNT) return false;
-    for (let i = h.length - VOLUME_DECLINE_COUNT + 1; i < h.length; i++) {
-        if (h[i] >= h[i - 1]) return false;
-    }
-    const recent = h.slice(-VOLUME_DECLINE_COUNT).map(v => Math.round(v));
-    console.log(`[MoMEngine] 📉 Volume declining: [${recent.join(' → ')}]`);
-    return true;
-}
-
-/** System 3b helper: price stopped making new highs (LONG) or lows (SHORT). */
-function checkPriceStalled(trade: ActiveTradeContext): boolean {
-    if (trade.candleHighHistory.length < 3) return false;
-    const len = trade.candleHighHistory.length;
-
-    if (trade.direction === 'LONG') {
-        const curHigh = trade.candleHighHistory[len - 1];
-        const priorHigh = Math.max(trade.candleHighHistory[len - 2], trade.candleHighHistory[len - 3]);
-        return curHigh <= priorHigh;
-    } else {
-        const curLow = trade.candleLowHistory[len - 1];
-        const priorLow = Math.min(trade.candleLowHistory[len - 2], trade.candleLowHistory[len - 3]);
-        return curLow >= priorLow;
-    }
-}
-
-/** System 4: Tightens stop to 0.5R behind current price. */
-function engageChokeHold(trade: ActiveTradeContext, currentPrice: number, profitPoints: number): void {
-    const chokeDistance = Math.max(1, trade.riskR * 0.5);  // trail at half-R, min 1pt
-    let tightStop = trade.direction === 'LONG'
-        ? currentPrice - chokeDistance
-        : currentPrice + chokeDistance;
-
-    // Ensure choke stop locks in profit (must be better than entry)
-    const locksProfit = trade.direction === 'LONG'
-        ? tightStop > trade.entryPrice
-        : tightStop < trade.entryPrice;
-
-    if (!locksProfit) {
-        tightStop = trade.direction === 'LONG'
-            ? trade.entryPrice + 0.25
-            : trade.entryPrice - 0.25;
-    }
-
-    const label = trade.isChokeActive ? 'TIGHTENED' : 'ENGAGED';
-    console.log(
-        `[MoMEngine] 🤏 Choke Hold ${label}: Stop → $${tightStop}` +
-        ` (0.5R=${chokeDistance.toFixed(1)}pts behind @ $${currentPrice}) | Profit: ${profitPoints.toFixed(1)}pts`
-    );
-
-    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-        tradeId: trade.tradeId,
-        event: `CHOKE_HOLD_${label}: stop → $${tightStop} (0.5R trail). Profit: ${profitPoints.toFixed(1)}pts`
-    }});
-
-    parentPort!.postMessage({
-        type:    'trade_command',
-        payload: { action: 'TIGHTEN_STOP', symbol: trade.symbol, stopPrice: tightStop, direction: trade.direction },
-    });
-
-    trade.isChokeActive = true;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // TRIPLE-SWEEP — Phase 1
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * Called when MoM closes a trade (stop hit, target hit, IMMINENT_REVERSION, etc.).
- * Phase 1: Cancel local orders → notify AssistantWorker to begin the exit consensus.
- */
 function initiateTripleSweepPhase1(reason: string): void {
-    if (!activeTrade) return;
+    const trade = core.getActiveTrade();
+    if (!trade && !reason.includes('TEST_TRADE')) return;
 
-    const trade = activeTrade;
     const isTestTrade = reason.includes('TEST_TRADE');
     console.log(`[MoMEngine] 🧹 Triple-Sweep PHASE 1 initiated | Reason: ${reason}`);
 
-    // Only log telemetry for real trades — test trades are internal preflight
-    if (!isTestTrade) {
-        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-            tradeId: trade.tradeId,
-            event: `EXIT: ${trade.direction} | Entry: ${trade.entryPrice} | Reason: ${reason}`
-        }});
+    // Cancel local working orders
+    parentPort!.postMessage({
+        type: 'trade_command',
+        payload: { action: 'CANCEL_ALL_ORDERS' },
+    });
+
+    if (trade) {
+        // Notify AssistantWorker
+        assistPort?.postMessage({
+            type:    'TRADE_CLOSED',
+            payload: { symbol: trade.symbol, direction: trade.direction, entryPrice: trade.entryPrice, reason },
+        });
+
+        if (!isTestTrade) {
+            parentPort!.postMessage({
+                type: 'SWEEP_PHASE_1_COMPLETE',
+                payload: { symbol: trade.symbol, direction: trade.direction, entryPrice: trade.entryPrice, reason },
+            });
+        }
     }
 
-    // Cancel Wilderness scratch timer if running
-    if (trade.scratchTimer) clearTimeout(trade.scratchTimer);
+    // Clear wilderness timer
+    if (wildernessTimer) { clearTimeout(wildernessTimer); wildernessTimer = null; }
 
-    // Tell Main to cancel all working orders for this symbol
-    parentPort!.postMessage({
-        type:    'trade_command',
-        payload: { action: 'CANCEL_ALL_ORDERS', symbol: trade.symbol, reason },
-    });
-
-    // Notify AssistantWorker → begins Phase 2 verification
-    assistPort?.postMessage({
-        type:    'SWEEP_PHASE_1_COMPLETE',
-        payload: {
-            symbol:    trade.symbol,
-            direction: trade.direction,
-            reason,
-            ts:        Date.now(),
-        },
-    });
-
-    // Broadcast trade closed lifecycle event
-    assistPort?.postMessage({
-        type:    'TRADE_CLOSED',
-        payload: { symbol: trade.symbol, reason, ts: Date.now() },
-    });
-
+    // Reset TradingCore state
+    core.resetTradeState();
     engineState = 'IDLE';
-    activeTrade = null;
 
-    parentPort!.postMessage({ type: 'trade_closed', payload: { symbol: trade.symbol, reason } });
+    if (isTestTrade) {
+        console.log('[MoMEngine] ✅ Test trade complete — engine ready for live signals.');
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTION DISPATCHER — translates TradingCore actions into IPC messages
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Process actions from TradingCore and dispatch via IPC.
+ * ENTER actions go through Oracle handshake first.
+ */
+async function dispatchActions(actions: TradeAction[]): Promise<void> {
+    for (const action of actions) {
+        switch (action.type) {
+            case 'ENTER': {
+                if (engineState !== 'IDLE') break;
+
+                const symbol = ContractBuilder.getActiveContract(config.INDICES);
+                const inWilderness = action.regime === 'Wilderness';
+                const zoneLabel = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
+
+                console.log(
+                    `[MoMEngine] 📊 SMC Signal | ${symbol} ${action.direction} | ` +
+                    `Zone: ${zoneLabel} | C: ${action.price} | Probability: ${action.confidence}% | ${action.reason}`
+                );
+
+                // ── ORACLE HANDSHAKE ──
+                engineState = 'AWAITING_HANDSHAKE';
+                const light = await requestTakeoff(symbol, action.direction!);
+
+                if (light === 'RED_LIGHT') {
+                    console.log(`[MoMEngine] 🔴 RED_LIGHT — Oracle blocked ${symbol} ${action.direction}.`);
+                    parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                        source: 'MoM', regime: action.regime,
+                        message: `REJECTED by ORACLE | ${action.direction} ${symbol} @ ${action.price} | Prob: ${action.confidence}% | ${action.reason}`,
+                    }});
+                    engineState = 'IDLE';
+                    break;
+                }
+
+                // ── GREEN LIGHT — ENTER ──
+                console.log(`[MoMEngine] 🟢 GREEN_LIGHT — executing ${symbol} ${action.direction}.`);
+                core.confirmEntry(action);
+                engineState = 'IN_TRADE';
+
+                parentPort!.postMessage({ type: 'TELEMETRY_TRADE_OPEN', payload: {
+                    source: 'MoM', regime: action.regime, tradeId: action.tradeId,
+                    message: `ENTER_SMC: ${symbol} ${action.direction} @ ${action.price} | Prob: ${action.confidence}% | ${action.reason}`
+                }});
+
+                if (inWilderness) {
+                    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                        tradeId: action.tradeId,
+                        event: `SHORT_LEASH: Wilderness SL → ${action.riskR!.toFixed(1)} pts`,
+                    }});
+
+                    wildernessTimer = setTimeout(() => {
+                        const trade = core.getActiveTrade();
+                        if (trade && !trade.beTriggered) {
+                            console.warn('[MoMEngine] 🌲 SMC Wilderness scratch — no displacement.');
+                            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                                tradeId: trade.tradeId,
+                                event: `CHOKED: no displacement. Auto-scratch.`
+                            }});
+                            parentPort!.postMessage({
+                                type: 'trade_command',
+                                payload: { action: 'FLATTEN_ALL', symbol: trade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
+                            });
+                            initiateTripleSweepPhase1('WILDERNESS_NO_DISPLACEMENT');
+                        }
+                    }, WILDERNESS_SCRATCH_MS);
+                }
+
+                // Notify AssistantWorker
+                assistPort?.postMessage({
+                    type: 'IN_TRADE',
+                    payload: { symbol, direction: action.direction, entryPrice: action.price, entryTs: Date.now(), stopPrice: action.stopPrice },
+                });
+
+                // Forward to broker
+                parentPort!.postMessage({
+                    type: 'trade_command',
+                    payload: {
+                        action:      'ENTER',
+                        symbol,
+                        direction:   action.direction,
+                        price:       action.price,
+                        stopPrice:   action.stopPrice,
+                        isWilderness: inWilderness,
+                        source:      'SMC',
+                        confidence:  action.confidence,
+                    },
+                });
+                break;
+            }
+
+            case 'EXIT': {
+                const trade = core.getActiveTrade();
+                if (!trade) break;
+
+                console.log(`[MoMEngine] 🔄 EXIT: ${action.reason}`);
+                parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                    tradeId: action.tradeId ?? trade.tradeId,
+                    event: `CHOKED: ${action.reason}`
+                }});
+                parentPort!.postMessage({
+                    type: 'trade_command',
+                    payload: { action: 'FLATTEN_ALL', symbol: trade.symbol, reason: action.reason },
+                });
+                initiateTripleSweepPhase1(action.reason);
+                break;
+            }
+
+            case 'MOVE_STOP': {
+                const trade = core.getActiveTrade();
+                if (!trade) break;
+
+                console.log(`[MoMEngine] 🏔️  Breakeven @ 1R: stop → ${action.stopPrice}`);
+                parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                    tradeId: trade.tradeId,
+                    event: action.reason,
+                }});
+                parentPort!.postMessage({
+                    type: 'trade_command',
+                    payload: { action: 'MOVE_STOP_TO_BE', symbol: trade.symbol, stopPrice: action.stopPrice },
+                });
+                break;
+            }
+
+            case 'TIGHTEN_STOP': {
+                const trade = core.getActiveTrade();
+                if (!trade) break;
+
+                console.log(`[MoMEngine] 🤏 Tighten stop → ${action.stopPrice}`);
+                parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
+                    tradeId: trade.tradeId,
+                    event: action.reason,
+                }});
+                parentPort!.postMessage({
+                    type: 'trade_command',
+                    payload: { action: 'TIGHTEN_STOP', symbol: trade.symbol, stopPrice: action.stopPrice, direction: action.direction },
+                });
+                break;
+            }
+
+            case 'REJECTED': {
+                console.log(`[MoMEngine] ❌ ${action.reason}`);
+                parentPort!.postMessage({ type: 'TELEMETRY', payload: {
+                    source: 'MoM',
+                    regime: action.regime,
+                    message: action.reason,
+                }});
+                break;
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -334,7 +280,6 @@ function initiateTripleSweepPhase1(reason: string): void {
 function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
     switch (data.type) {
 
-        // ── Handshake response ────────────────────────────────────────────────
         case 'GREEN_LIGHT':
         case 'RED_LIGHT': {
             const cid = data.correlationId as string;
@@ -346,7 +291,6 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             break;
         }
 
-        // ── Live tick processing ───────────────────────────────────────────────
         case 'tick': {
             const tick = data.payload as Tick;
             const enriched = tick as any;
@@ -354,47 +298,38 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             // CRITICAL: Skip CFE/VX ticks — only process CME (ES/MES)
             if (enriched.dataset && enriched.dataset !== 'GLBX.MDP3') break;
 
+            // Test trade sequence (fires once on first tick)
             if (isTestingTrade && engineState === 'IDLE') {
                 isTestingTrade = false;
                 engineState = 'IN_TRADE';
-                const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
+                const symbol = ContractBuilder.getActiveContract(config.INDICES);
 
-                activeTrade = { symbol: tradeSymbol, direction: 'LONG', entryPrice: enriched.price, stopPrice: enriched.price - 100, riskR: 100, entryTs: enriched.timestamp, isWilderness: false, beTriggered: false, tradeId: `TEST-${Date.now()}`, candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false };
+                // Create test trade in TradingCore
+                core.confirmEntry({
+                    type: 'ENTER', direction: 'LONG',
+                    price: enriched.price, stopPrice: enriched.price - 100,
+                    riskR: 100, tradeId: `TEST-${Date.now()}`,
+                    reason: 'TEST_TRADE', regime: 'Killzone',
+                });
+                engineState = 'IN_TRADE';
 
-                parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol: tradeSymbol, price: enriched.price } });
+                parentPort!.postMessage({ type: 'trade_command', payload: { action: 'TEST_ENTER', symbol, price: enriched.price } });
 
                 setTimeout(() => {
-                    parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', symbol: tradeSymbol, reason: 'TEST_TRADE_COMPLETE' } });
+                    parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', symbol, reason: 'TEST_TRADE_COMPLETE' } });
                 }, 15000);
             }
 
-            // Always feed aggregator so SMC indicators stay aligned
-            aggregator.processTick(tick);
-
-            // R-based Breakeven: move stop to entry once profit hits 1R
-            if (activeTrade && !activeTrade.beTriggered) {
-                const profit = activeTrade.direction === 'LONG'
-                    ? tick.price - activeTrade.entryPrice
-                    : activeTrade.entryPrice - tick.price;
-
-                if (profit >= activeTrade.riskR) {
-                    activeTrade.beTriggered = true;
-                    activeTrade.stopPrice   = activeTrade.entryPrice;
-                    console.log(`[MoMEngine] 🏔️  Breakeven @ 1R (${activeTrade.riskR.toFixed(1)}pts): stop → ${activeTrade.entryPrice} (${activeTrade.symbol})`);
-                    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-                        tradeId: activeTrade.tradeId,
-                        event: `BE_TRIGGER @ 1R: trailing stop to breakeven @ ${activeTrade.entryPrice} (1R = ${activeTrade.riskR.toFixed(1)}pts)`
-                    }});
-                    parentPort!.postMessage({
-                        type:    'trade_command',
-                        payload: { action: 'MOVE_STOP_TO_BE', symbol: activeTrade.symbol, stopPrice: activeTrade.entryPrice },
-                    });
-                }
+            // Feed tick to TradingCore — get actions back
+            const actions = core.onTick(tick);
+            if (actions.length > 0) {
+                dispatchActions(actions).catch((err: Error) =>
+                    console.error('[MoMEngine] Action dispatch error:', err.message)
+                );
             }
             break;
         }
 
-        // ── Emergency exit ────────────────────────────────────────────────────
         case 'EMERGENCY_EXIT': {
             console.error('[MoMEngine] 🚨 EMERGENCY_EXIT — flattening all positions!');
             parentPort!.postMessage({ type: 'trade_command', payload: { action: 'FLATTEN_ALL', reason: data.reason } });
@@ -405,6 +340,7 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
         case 'defcon_change': {
             const level = data.level as string;
             isDefconRed = level === 'RED';
+            core.isDefconRed = isDefconRed;  // Sync to TradingCore
             if (isDefconRed) {
                 console.warn('[MoMEngine] DefconLevel RED — halting new entries (data flow continues).');
             } else {
@@ -417,15 +353,17 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
             const p = data.payload as any;
             const cmeCandles = p.cmeCandles || [];
 
-            // Hydrate MTF analyzer with full session data (builds 1H/15M/5M candles)
             const hydrationCandles: Candle[] = cmeCandles.map((c: any) => ({
                 open: c.open, high: c.high, low: c.low, close: c.close,
                 volume: c.volume, buyVolume: 0, sellVolume: 0, timestamp: c.timestamp,
             }));
-            mtfAnalyzer.hydrateFrom1mCandles(hydrationCandles);
+
+            // Hydrate TradingCore (feeds both MTF analyzer and SMC expert)
+            core.hydrate(hydrationCandles);
 
             // Print MTF bias after hydration
-            const snap = mtfAnalyzer.getSnapshot();
+            const mtf = core.getMtfAnalyzer();
+            const snap = mtf.getSnapshot();
             console.log(
                 `[M.o.M] 📊 Multi-Timeframe Analysis Complete\n` +
                 `         1H: ${snap.tf1h.trend} (${snap.tf1h.candleCount} candles) | ` +
@@ -433,18 +371,13 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
                 `5M: ${snap.tf5m.trend} (${snap.tf5m.candleCount} candles)\n` +
                 `         Dominant Bias: ${snap.dominantBias} | Alignment: ${snap.alignmentScore}/3 | Ready: ${snap.isReady ? '✅' : '❌'}`
             );
-
-            // Hydrate SMC expert with the 1m candles (indicators only — don't fire signals)
-            for (const c of cmeCandles) {
-                smcExpert.analyze({ open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume, buyVolume: 0, sellVolume: 0, timestamp: c.timestamp }, true);
-                aggregator.processTick({ price: c.close, volume: c.volume, timestamp: c.timestamp + 59_000 });
-            }
             break;
         }
 
         case 'SYSTEM_RESET': {
             console.log('[MoMEngine] SYSTEM_RESET — clearing DEFCON, resetting state.');
             isDefconRed = false;
+            core.isDefconRed = false;
             break;
         }
 
@@ -458,26 +391,17 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
 async function onAssistantMessage(data: { type: string; [key: string]: unknown }): Promise<void> {
     switch (data.type) {
 
-        // ORB_SETUP removed — SMC displacement entries handle breakout catching
-        // via the probability model (HTF:30 + Disp:25 + Vol:20 + VWAP:15 + Gap:10)
-
-        /**
-         * IMMINENT_REVERSION — Toxic opposing flow detected by Tactical Overwatch.
-         */
         case 'IMMINENT_REVERSION': {
             const warn = data.payload as { symbol: string; currentPrice: number; volumeRatio: number; priceDeltaPct: number };
             console.warn(
                 `[MoMEngine] ⚠️  IMMINENT_REVERSION | ${warn.symbol} | ` +
                 `Vol: ${warn.volumeRatio.toFixed(2)}× | Δ: ${warn.priceDeltaPct.toFixed(3)}%`
             );
-            if (activeTrade) {
-                const chokeR = Math.max(1, activeTrade.riskR * 0.5);
-                const tightStop = activeTrade.direction === 'LONG'
-                    ? warn.currentPrice - chokeR
-                    : warn.currentPrice + chokeR;
+            const reversion = core.handleImminentReversion(warn.currentPrice);
+            if (reversion) {
                 parentPort!.postMessage({
-                    type:    'trade_command',
-                    payload: { action: 'TIGHTEN_STOP', symbol: warn.symbol, stopPrice: tightStop, direction: activeTrade.direction, reason: 'IMMINENT_REVERSION' },
+                    type: 'trade_command',
+                    payload: { action: 'TIGHTEN_STOP', symbol: warn.symbol, stopPrice: reversion.stopPrice, direction: reversion.direction, reason: 'IMMINENT_REVERSION' },
                 });
             }
             break;
@@ -509,10 +433,6 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
-        /**
-         * position_closed — sent by Main after broker confirms exit.
-         * Triggers Phase 1 of the Triple-Sweep.
-         */
         case 'position_closed': {
             initiateTripleSweepPhase1(msg.reason as string ?? 'BROKER_CONFIRMED_EXIT');
             break;
@@ -520,12 +440,13 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
 
         case 'HUNTING_ACTIVE': {
             isHuntingActive = true;
+            core.isHuntingActive = true;  // Sync to TradingCore
             break;
         }
 
         case 'shutdown': {
             console.log('[MoMEngine] Shutting down…');
-            if (activeTrade?.scratchTimer) clearTimeout(activeTrade.scratchTimer);
+            if (wildernessTimer) clearTimeout(wildernessTimer);
             oraclePort?.close();
             assistPort?.close();
             process.exit(0);
@@ -545,219 +466,6 @@ export function notifyTradeClosed(symbol: string, pnl: number): void {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SMC SIGNAL PIPELINE — onCandleComplete → processSmcSignal
+// Heartbeat snapshot — used by Main for verbose logging
 // ─────────────────────────────────────────────────────────────────────────────
-/**
- * Sync callback registered with CandleAggregator.
- * Delegates to async processSmcSignal and catches unhandled rejections.
- * Function declaration ensures hoisting (safe for aggregator constructor reference above).
- */
-function onCandleComplete(candle: Candle): void {
-    // ── EOD 16:30 Rolling Sweep (15min before Tradovate margin deadline) ──
-    if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
-        if (activeTrade) {
-            console.log(`[MoMEngine] 🕐 EOD SWEEP — flattening ${activeTrade.symbol} at 16:30 ET.`);
-            parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-                tradeId: activeTrade.tradeId,
-                event: `EOD_FLATTEN: Forced exit at 16:30 ET`,
-            }});
-            parentPort!.postMessage({
-                type: 'trade_command',
-                payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'EOD_FLATTEN_1630' },
-            });
-            initiateTripleSweepPhase1('EOD_FLATTEN_1630');
-        }
-        return;  // No new signals during EOD window
-    }
-
-    // Feed 1m candle to MTF analyzer (builds 5m/15m/1h candles)
-    mtfAnalyzer.analyze(candle);
-
-    // ── Analyze candle for SMC structure (used by both ATM + signal pipeline)
-    // Indicators-only mode: update ATR/VWAP/FVG registry but don't consume
-    // FVGs via tap scanning. Activated when:
-    //   1. Engine is IN_TRADE (can't act on signals)
-    //   2. Hunting not yet active (warmup / race window)
-    const indicatorsOnly = !isHuntingActive || (engineState === 'IN_TRADE' && !!activeTrade);
-    const signal: SmcSignal = smcExpert.analyze(candle, indicatorsOnly, mtfAnalyzer.isReady() ? mtfAnalyzer : undefined);
-
-    // ── Active Trade Monitor (per-candle while IN_TRADE) ─────────────────
-    if (engineState === 'IN_TRADE' && activeTrade) {
-        monitorActiveTrade(candle, signal);
-        return;  // Don't evaluate new entries while monitoring
-    }
-
-    // ── SMC Signal Pipeline (only when IDLE + hunting) ───────────────────
-    processSmcSignal(candle, signal).catch((err: Error) =>
-        console.error('[MoMEngine] SMC pipeline error:', err.message)
-    );
-}
-
-/**
- * Full SMC signal evaluation + Handshake + Wilderness gate + entry dispatch.
- */
-async function processSmcSignal(candle: Candle, signal: SmcSignal): Promise<void> {
-    if (signal.action === 'HOLD') return;
-    if (engineState !== 'IDLE')  return;
-    if (!isHuntingActive)        return;  // Warmup gate — no trades until hydration complete
-
-    // DEFCON RED gate: indicators stay primed but no new entries
-    if (isDefconRed) {
-        const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
-        const direction = signal.action === 'BUY' ? 'LONG' : 'SHORT';
-        console.log(`[MoMEngine] SMC ${signal.action} blocked — DEFCON RED active.`);
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source: 'MoM', regime: 'DEFCON',
-            message: `REJECTED by DEFCON | ${direction} ${tradeSymbol} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`,
-        }});
-        return;
-    }
-
-    // Minimum probability gate — only high-probability setups
-    if (signal.confidence < MIN_SMC_PROBABILITY) {
-        const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
-        const direction = signal.action === 'BUY' ? 'LONG' : 'SHORT';
-        const inWilderness = MarketClock.isWilderness(candle.timestamp);
-        console.log(
-            `[MoMEngine] ❌ SMC ${signal.action} rejected (${signal.confidence}%) — below ${MIN_SMC_PROBABILITY}% threshold.`
-        );
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source: 'MoM',
-            regime: inWilderness ? 'Wilderness' : 'Killzone',
-            message: `REJECTED by PROBABILITY_GATE | ${direction} ${tradeSymbol} @ ${candle.close} | Prob: ${signal.confidence}% (min: ${MIN_SMC_PROBABILITY}%) | ${signal.reason}`,
-        }});
-        return;
-    }
-
-    const direction: 'LONG' | 'SHORT' = signal.action === 'BUY' ? 'LONG' : 'SHORT';
-    const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
-    const inWilderness = MarketClock.isWilderness(candle.timestamp);
-    const zoneLabel    = inWilderness ? '🌲 WILDERNESS' : '🎯 KILLZONE';
-
-    console.log(
-        `[MoMEngine] 📊 SMC Signal | ${tradeSymbol} ${direction} | ` +
-        `Zone: ${zoneLabel} | C: ${candle.close} | Probability: ${signal.confidence}% | ${signal.reason}`
-    );
-
-    // ── ORACLE HANDSHAKE ──────────────────────────────────────────────────────
-    engineState = 'AWAITING_HANDSHAKE';
-    const light = await requestTakeoff(tradeSymbol, direction);
-
-    if (light === 'RED_LIGHT') {
-        console.log(`[MoMEngine] 🔴 RED_LIGHT — Oracle blocked ${tradeSymbol} ${direction}.`);
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source:  'MoM',
-            regime:  inWilderness ? 'Wilderness' : 'Killzone',
-            message: `REJECTED by ORACLE | ${direction} ${tradeSymbol} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`,
-        }});
-        engineState = 'IDLE';
-        return;
-    }
-
-    const tradeId = `${tradeSymbol}-${Date.now()}`;
-
-    console.log(`[MoMEngine] 🟢 GREEN_LIGHT — executing ${tradeSymbol} ${direction}.`);
-    parentPort!.postMessage({ type: 'TELEMETRY_TRADE_OPEN', payload: {
-        source: 'MoM', regime: inWilderness ? 'Wilderness' : 'Killzone', tradeId,
-        message: `ENTER_SMC: ${tradeSymbol} ${direction} @ ${candle.close} | Prob: ${signal.confidence}% | ${signal.reason}`
-    }});
-
-    // ── STRUCTURAL STOP LOSS (FVG invalidation + buffer) ────────────────────────
-    const atr = smcExpert.getATR();
-    const tickBuffer = SL_BUFFER_TICKS * 0.25;  // 2 ticks × 0.25 pts/tick on MES
-
-    let stopPrice: number;
-    if (signal.fvgZone) {
-        // Stop at FVG invalidation level + buffer
-        stopPrice = direction === 'LONG'
-            ? signal.fvgZone.bottom - tickBuffer
-            : signal.fvgZone.top    + tickBuffer;
-    } else {
-        // Fallback: ATR-based if no FVG zone (shouldn't happen, but safety)
-        const fallbackDist = atr > 0 ? Math.max(3, Math.ceil(atr * 1.5)) : 10;
-        stopPrice = direction === 'LONG'
-            ? candle.close - fallbackDist
-            : candle.close + fallbackDist;
-    }
-
-    let slDistance = Math.abs(candle.close - stopPrice);
-
-    // Sanity cap: reject if structural stop is too wide (setup is over-stretched)
-    if (atr > 0 && slDistance > atr * SL_MAX_ATR_MULT) {
-        console.log(`[MoMEngine] ❌ Structural stop too wide (${slDistance.toFixed(1)}pts vs ATR ${atr.toFixed(1)}) — skipping.`);
-        parentPort!.postMessage({ type: 'TELEMETRY', payload: {
-            source: 'MoM',
-            regime: inWilderness ? 'Wilderness' : 'Killzone',
-            message: `REJECTED by STRUCTURE_CAP | ${direction} ${tradeSymbol} @ ${candle.close} | SL: ${slDistance.toFixed(1)}pts exceeds ${SL_MAX_ATR_MULT}× ATR (${atr.toFixed(1)}) | ${signal.reason}`,
-        }});
-        engineState = 'IDLE';
-        return;
-    }
-
-    if (inWilderness) {
-        slDistance = Math.ceil(slDistance * SL_WILDERNESS_PCT);
-        stopPrice = direction === 'LONG'
-            ? candle.close - slDistance
-            : candle.close + slDistance;
-        parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-            tradeId,
-            event: `SHORT_LEASH: Wilderness SL → ${slDistance.toFixed(1)} pts`,
-        }});
-    }
-
-    const riskR = slDistance;  // 1R = distance from entry to stop
-
-    // ── ENTER TRADE ───────────────────────────────────────────────────────────
-    engineState = 'IN_TRADE';
-
-    activeTrade = {
-        symbol:       tradeSymbol,
-        direction,
-        entryPrice:   candle.close,
-        stopPrice,
-        riskR,
-        entryTs:      candle.timestamp,
-        isWilderness: inWilderness,
-        beTriggered:  false,
-        tradeId,
-        candlesSinceEntry: 0, volumeHistory: [], candleHighHistory: [], candleLowHistory: [], isChokeActive: false,
-    };
-
-    if (inWilderness) {
-        activeTrade.scratchTimer = setTimeout(() => {
-            if (activeTrade && !activeTrade.beTriggered) {
-                console.warn('[MoMEngine] 🌲 SMC Wilderness scratch — no displacement.');
-                parentPort!.postMessage({ type: 'TELEMETRY_TRADE_UPDATE', payload: {
-                    tradeId: activeTrade.tradeId,
-                    event: `CHOKED: no displacement. Auto-scratch.`
-                }});
-                parentPort!.postMessage({
-                    type:    'trade_command',
-                    payload: { action: 'FLATTEN_ALL', symbol: activeTrade.symbol, reason: 'WILDERNESS_NO_DISPLACEMENT' },
-                });
-                initiateTripleSweepPhase1('WILDERNESS_NO_DISPLACEMENT');
-            }
-        }, WILDERNESS_SCRATCH_MS);
-    }
-
-    // Notify AssistantWorker → activate Tactical Overwatch
-    assistPort?.postMessage({
-        type:    'IN_TRADE',
-        payload: { symbol: tradeSymbol, direction, entryPrice: candle.close, entryTs: candle.timestamp, stopPrice },
-    });
-
-    // Forward to Main (Core 4) → Broker
-    parentPort!.postMessage({
-        type:    'trade_command',
-        payload: {
-            action:      'ENTER',
-            symbol:      tradeSymbol,
-            direction,
-            price:       candle.close,
-            stopPrice,
-            isWilderness: inWilderness,
-            source:      'SMC',
-            confidence:  signal.confidence,
-        },
-    });
-}
+export function getSmcExpert() { return core.getSmcExpert(); }
