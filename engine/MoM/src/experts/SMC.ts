@@ -447,12 +447,13 @@ export class SMC {
         trend: HeartbeatSnapshot['trend'], action: 'BUY' | 'SELL', age: number,
     ): { total: number; breakdown: string } {
 
-        // ── Tier 1: Structural Edge (max 40) ─────────────────────────────
+        // ── Tier 1: Structural Edge (max 50) ─────────────────────────────
         // Trend alignment (20pts): last 20 candles directional bias
         const trendScore = this.scoreTrendAlignment(action);
-        // Displacement strength (20pts): FVG displacement candle body vs ATR
-        const dispScore = fvg.displacementBodyRatio >= 2.0 ? 20
-                        : fvg.displacementBodyRatio >= 1.5 ? 10 : 0;
+        // Displacement strength (30pts): FVG displacement candle body vs ATR
+        const dispScore = fvg.displacementBodyRatio >= 2.0 ? 30
+                        : fvg.displacementBodyRatio >= 1.5 ? 20
+                        : fvg.displacementBodyRatio >= 1.0 ? 10 : 0;
 
         // ── Tier 2: Confluence (max 30) ──────────────────────────────────
         // VWAP alignment (10pts)
@@ -471,18 +472,15 @@ export class SMC {
         const medianVol = this.getMedianVolume();
         const volScore = medianVol > 0 && candle.volume >= medianVol * 1.2 ? 10 : 0;
 
-        // ── Tier 3: Context (max 30) ─────────────────────────────────────
-        // Session quality (10pts)
-        const sessionScore = this.scoreSession(candle.timestamp);
-
+        // ── Tier 3: Protection (max 20) ─────────────────────────────────
         // Gap size (10pts)
         const gapScore = fvg.gapAtrRatio >= 1.0 ? 10 : fvg.gapAtrRatio >= 0.5 ? 5 : 0;
 
         // Counter-trend protection (10pts)
         const momentumScore = this.scoreCounterTrendProtection(action);
 
-        const total = trendScore + dispScore + vwapScore + freshScore + volScore + sessionScore + gapScore + momentumScore;
-        const breakdown = `Trend:${trendScore}/20|Disp:${dispScore}/20|VWAP:${vwapScore}/10|Fresh:${freshScore}/10|Vol:${volScore}/10|Session:${sessionScore}/10|Gap:${gapScore}/10|Momentum:${momentumScore}/10`;
+        const total = trendScore + dispScore + vwapScore + freshScore + volScore + gapScore + momentumScore;
+        const breakdown = `Trend:${trendScore}/20|Disp:${dispScore}/30|VWAP:${vwapScore}/10|Fresh:${freshScore}/10|Vol:${volScore}/10|Gap:${gapScore}/10|Momentum:${momentumScore}/10`;
 
         return { total, breakdown };
     }
@@ -500,16 +498,6 @@ export class SMC {
         }
         const pct = aligned / lookback;
         return pct > 0.6 ? 20 : pct >= 0.5 ? 10 : 0;
-    }
-
-    /** Session quality: AM killzone = 10, London/PM = 5, Wilderness = 0. */
-    private scoreSession(timestamp: number): number {
-        if (MarketClock.isAMKillzone(timestamp)) return 10;
-        if (MarketClock.isPMKillzone(timestamp)) return 5;
-        const { totalMinutes } = MarketClock.getEasternHM(timestamp);
-        const isLondon = totalMinutes >= 135 && totalMinutes < 300;
-        if (isLondon) return 5;
-        return 0;
     }
 
     /** Counter-trend protection: 0 if 3+ consecutive HH/LL against direction in last 5 candles. */
