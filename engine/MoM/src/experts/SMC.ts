@@ -42,14 +42,15 @@ export interface SmcSignal {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ATR_PERIOD           = 14;           // Rolling ATR lookback
-const FVG_GAP_ATR_MULT     = 0.25;         // Min gap = ATR * 0.25
-const VOLUME_SPIKE_MULT    = 1.5;          // Displacement candle must be 1.5× median
-const VOLUME_OUTLIER_CAP   = 3.0;          // Cap candle volume at 3× median before averaging
-const SWING_PIVOT_BARS     = 3;            // 3-bar pivot for swing detection
-const MAX_FVG_AGE_CANDLES  = 60;           // Invalidate FVGs older than 60 candles
-const MAX_CANDLES           = 100;          // Ring buffer size — trim older candles
-const CME_SESSION_RESET_HOUR = 18;         // 6:00 PM ET = CME Globex session open
+const ATR_PERIOD              = 14;           // Rolling ATR lookback
+const FVG_GAP_ATR_MULT        = 0.25;         // Min gap = ATR * 0.25
+const VOLUME_SPIKE_MULT       = 1.5;          // Displacement candle must be 1.5× median
+const VOLUME_OUTLIER_CAP      = 3.0;          // Cap candle volume at 3× median before averaging
+const SWING_PIVOT_BARS        = 3;            // 3-bar pivot for swing detection
+const MAX_FVG_AGE_CANDLES     = 60;           // Invalidate FVGs older than 60 candles
+const MAX_CANDLES             = 100;          // Ring buffer size — trim older candles
+const CME_SESSION_RESET_HOUR  = 18;           // 6:00 PM ET = CME Globex session open
+const DISPLACEMENT_MIN_BODY   = 1.5;          // Displacement entry: candle body >= 1.5× ATR
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SMC — Institutional Grade FVG + MSS Signal Engine
@@ -151,7 +152,8 @@ export class SMC {
         }
 
         // ── Step 1: Detect NEW FVGs from the last 3 completed candles ─────
-        this.detectNewFvgs(vwap);
+        //    If displacement is strong enough, fire immediately (don't wait for tap)
+        const displacementSignal = this.detectNewFvgs(candle, vwap, trend);
 
         // ── Step 2: Mitigate / Invalidate old FVGs ────────────────────────
         this.updateFvgRegistry(candle);
@@ -166,7 +168,18 @@ export class SMC {
             return holdSignal;
         }
 
-        // ── Step 3: Scan ALL active FVGs for tap entries ──────────────────
+        // ── Step 3a: Displacement entry (fires on FVG formation, no tap needed)
+        if (displacementSignal) {
+            fvgLabel = displacementSignal.action === 'BUY' ? 'Bullish FVG' : 'Bearish FVG';
+            this.lastHeartbeat = {
+                trend, fvg: fvgLabel, decision: displacementSignal.action,
+                activeFvgCount: this.fvgRegistry.filter(z => z.isActive).length,
+                atr: this.currentATR,
+            };
+            return displacementSignal;
+        }
+
+        // ── Step 3b: Scan ALL active FVGs for tap entries ─────────────────
         const signal = this.scanForTapEntry(candle, vwap, trend);
 
         if (signal) {
@@ -191,9 +204,13 @@ export class SMC {
     // FVG Detection — scans the last 3 completed candles for new gaps
     // ─────────────────────────────────────────────────────────────────────────
 
-    private detectNewFvgs(vwap: number): void {
+    private detectNewFvgs(
+        currentCandle: Candle,
+        vwap: number,
+        trend: HeartbeatSnapshot['trend'],
+    ): SmcSignal | null {
         const len = this.candles.length;
-        if (len < 4) return;
+        if (len < 4) return null;
 
         // FVG candles: c1 (edge), c2 (displacement), c3 (edge)
         // We look at [len-4, len-3, len-2] as the formation, len-1 is current
@@ -217,6 +234,8 @@ export class SMC {
             timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit',
         });
 
+        let displacementSignal: SmcSignal | null = null;
+
         // ── Bullish FVG: c1.high < c3.low (price jumped up, leaving a void) ──
         if (c1.high < c3.low) {
             const gapSize = c3.low - c1.high;
@@ -232,7 +251,9 @@ export class SMC {
                     // Valid FVG — add to persistent registry
                     const vwapConfluence = vwap > 0 && c3.low <= vwap * 1.002 && c1.high >= vwap * 0.998;
                     const body = Math.abs(c2.close - c2.open);
-                    this.fvgRegistry.push({
+                    const bodyRatio = this.currentATR > 0 ? body / this.currentATR : 0;
+                    const gapRatio = this.currentATR > 0 ? gapSize / this.currentATR : 0;
+                    const fvg: FvgZone = {
                         direction:     'BULLISH',
                         top:           c3.low,
                         bottom:        c1.high,
@@ -240,13 +261,28 @@ export class SMC {
                         formationIdx:  this.candleCount - 2,
                         isActive:      true,
                         vwapConfluence,
-                        displacementBodyRatio: this.currentATR > 0 ? body / this.currentATR : 0,
-                        gapAtrRatio:           this.currentATR > 0 ? gapSize / this.currentATR : 0,
-                    });
+                        displacementBodyRatio: bodyRatio,
+                        gapAtrRatio:           gapRatio,
+                    };
+                    this.fvgRegistry.push(fvg);
                     console.log(
                         `[SMC] 🟢 Bullish FVG REGISTERED | Zone: [${c1.high.toFixed(2)}, ${c3.low.toFixed(2)}] | ` +
-                        `Gap: ${gapSize.toFixed(2)} pts (ATR min: ${minGap.toFixed(2)}) | VWAP confluence: ${vwapConfluence}`
+                        `Gap: ${gapSize.toFixed(2)} pts (ATR min: ${minGap.toFixed(2)}) | Disp: ${bodyRatio.toFixed(2)}× ATR | VWAP: ${vwapConfluence}`
                     );
+
+                    // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
+                    if (bodyRatio >= DISPLACEMENT_MIN_BODY) {
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'BUY', 0);
+                        console.log(
+                            `[SMC] ⚡ BULLISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
+                        );
+                        displacementSignal = {
+                            action:     'BUY',
+                            confidence: probability.total,
+                            fvgZone:    fvg,
+                            reason:     `Displacement entry [${c1.high.toFixed(2)}-${c3.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | prob=${probability.total}% | ${probability.breakdown}`,
+                        };
+                    }
                 }
             }
         }
@@ -264,7 +300,9 @@ export class SMC {
                 } else {
                     const vwapConfluence = vwap > 0 && c3.high >= vwap * 0.998 && c1.low <= vwap * 1.002;
                     const body = Math.abs(c2.close - c2.open);
-                    this.fvgRegistry.push({
+                    const bodyRatio = this.currentATR > 0 ? body / this.currentATR : 0;
+                    const gapRatio = this.currentATR > 0 ? gapSize / this.currentATR : 0;
+                    const fvg: FvgZone = {
                         direction:     'BEARISH',
                         top:           c1.low,
                         bottom:        c3.high,
@@ -272,16 +310,33 @@ export class SMC {
                         formationIdx:  this.candleCount - 2,
                         isActive:      true,
                         vwapConfluence,
-                        displacementBodyRatio: this.currentATR > 0 ? body / this.currentATR : 0,
-                        gapAtrRatio:           this.currentATR > 0 ? gapSize / this.currentATR : 0,
-                    });
+                        displacementBodyRatio: bodyRatio,
+                        gapAtrRatio:           gapRatio,
+                    };
+                    this.fvgRegistry.push(fvg);
                     console.log(
                         `[SMC] 🔴 Bearish FVG REGISTERED | Zone: [${c3.high.toFixed(2)}, ${c1.low.toFixed(2)}] | ` +
-                        `Gap: ${gapSize.toFixed(2)} pts | VWAP confluence: ${vwapConfluence}`
+                        `Gap: ${gapSize.toFixed(2)} pts | Disp: ${bodyRatio.toFixed(2)}× ATR | VWAP: ${vwapConfluence}`
                     );
+
+                    // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
+                    if (bodyRatio >= DISPLACEMENT_MIN_BODY && !displacementSignal) {
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, trend, 'SELL', 0);
+                        console.log(
+                            `[SMC] ⚡ BEARISH DISPLACEMENT | Body: ${bodyRatio.toFixed(2)}× ATR | Prob: ${probability.total}% | ${probability.breakdown}`
+                        );
+                        displacementSignal = {
+                            action:     'SELL',
+                            confidence: probability.total,
+                            fvgZone:    fvg,
+                            reason:     `Displacement entry [${c3.high.toFixed(2)}-${c1.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | prob=${probability.total}% | ${probability.breakdown}`,
+                        };
+                    }
                 }
             }
         }
+
+        return displacementSignal;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
