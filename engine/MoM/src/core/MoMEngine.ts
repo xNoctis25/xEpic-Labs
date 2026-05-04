@@ -100,7 +100,7 @@ function initiateTripleSweepPhase1(reason: string): void {
         });
 
         // Notify parentPort → triggers Phase 2 (AssistantWorker) → Phase 3 (Oracle) → system_reset
-        parentPort!.postMessage({
+        assistPort?.postMessage({
             type: 'SWEEP_PHASE_1_COMPLETE',
             payload: { symbol: trade.symbol, direction: trade.direction, entryPrice: trade.entryPrice, reason },
         });
