@@ -192,7 +192,7 @@ class SingleFeedConnection {
                 const tsMs       = Number(tsEventNs / BigInt(1_000_000));
 
                 // ── MULTICAST: emit enriched tick ─────────────────────────
-                // The caller (OracleWorker) fans this to momPort, assistPort,
+                // The caller (Oracle) fans this to momPort, assistPort,
                 // and parentPort in a single synchronous call per tick.
                 this.onTick({
                     price:     priceFloat,

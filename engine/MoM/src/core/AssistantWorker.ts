@@ -8,7 +8,7 @@
  *
  * IPC Ports (wired by Main/Core 4 via MessageChannel):
  *   • momPort    – MessagePort ↔ MomWorker    (send IMMINENT_REVERSION)
- *   • oraclePort – MessagePort ↔ OracleWorker (receive ticks + oracle_state)
+ *   • oraclePort – MessagePort ↔ Oracle (receive ticks + oracle_state)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -121,7 +121,7 @@ function evaluateOverwatch(tick: EnrichedTick): void {
 // SECTION 3 — IPC MESSAGE HANDLERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Handles messages from OracleWorker (ticks + oracle state). */
+/** Handles messages from Oracle (ticks + oracle state). */
 function onOracleMessage(msg: { type: string; [key: string]: unknown }): void {
     switch (msg.type) {
 
@@ -203,7 +203,7 @@ function onMomMessage(msg: { type: string; [key: string]: unknown }): void {
         /**
          * SWEEP_PHASE_1_COMPLETE — MomWorker cancelled local orders.
          * Phase 2: Query Tradovate via Main to confirm 0 positions, then fire Phase 2
-         * complete to OracleWorker to begin the final sweep.
+         * complete to Oracle to begin the final sweep.
          */
         case 'SWEEP_PHASE_1_COMPLETE': {
             const sweep = msg.payload as { symbol: string; reason: string; ts: number };
@@ -271,7 +271,7 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
 
         /**
          * VERIFY_FLAT_RESULT — Main (Core 4) responds with Tradovate position check.
-         * If flat confirmed, fire SWEEP_PHASE_2_COMPLETE to OracleWorker.
+         * If flat confirmed, fire SWEEP_PHASE_2_COMPLETE to Oracle.
          */
         case 'VERIFY_FLAT_RESULT': {
             if ((msg.from as string) !== 'AssistantWorker') break;
@@ -279,7 +279,7 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             const symbol = msg.symbol as string;
 
             if (isFlat) {
-                console.log(`[AssistantWorker] ✅ Phase 2 verified — ${symbol} is FLAT. Firing SWEEP_PHASE_2_COMPLETE → OracleWorker.`);
+                console.log(`[AssistantWorker] ✅ Phase 2 verified — ${symbol} is FLAT. Firing SWEEP_PHASE_2_COMPLETE → Oracle.`);
                 oraclePort?.postMessage({
                     type:    'SWEEP_PHASE_2_COMPLETE',
                     payload: { symbol, confirmed: true, reason: lastSweepReason, ts: Date.now() },

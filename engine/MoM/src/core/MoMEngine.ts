@@ -39,7 +39,7 @@ let isHuntingActive = false;
 const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
 const core = new TradingCore(tradeSymbol);
 
-// DEFCON state (received from OracleWorker)
+// DEFCON state (received from Oracle)
 let isDefconRed = false;
 
 // Wilderness auto-scratch timer
@@ -274,7 +274,7 @@ async function dispatchActions(actions: TradeAction[]): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// IPC: OracleWorker → MomWorker
+// IPC: Oracle → MomWorker
 // ─────────────────────────────────────────────────────────────────────────────
 function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
     switch (data.type) {

@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  *  Core 1 │ MoMEngine       → SMC signal evaluation + trade execution
  *  Core 2 │ AssistantWorker → Tactical Overwatch + Triple-Sweep P2
- *  Core 3 │ OracleWorker    → Databento dual-feed + Macro Radar + WSS
+ *  Core 3 │ Oracle          → Databento dual-feed + Macro Radar + Calendar + WSS
  *  Core 4 │ THIS FILE       → Boot, broker I/O, ExecutionEngine, lifecycle
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -45,7 +45,7 @@ let positionMonitor: NodeJS.Timeout | null = null;
 // ─── Worker handles ──────────────────────────────────────────────────────────
 let momWorker:       Worker;
 let assistantWorker: Worker;
-let oracleWorker:    Worker;
+let oracle:          Worker;
 
 // ─── Resolve worker path ─────────────────────────────────────────────────────
 const isTsNode = __filename.endsWith('.ts');
@@ -361,11 +361,11 @@ async function boot(): Promise<void> {
     // 2. Spawn Workers + Wire IPC Mesh
     momWorker       = new Worker(workerPath('MoMEngine'), workerOpts);
     assistantWorker = new Worker(workerPath('AssistantWorker'), workerOpts);
-    oracleWorker    = new Worker(workerPath('OracleWorker'), workerOpts);
+    oracle          = new Worker(workerPath('Oracle'), workerOpts);
 
     momWorker      .on('error', onWorkerError('MoMEngine'))      .on('exit', onWorkerExit('MoMEngine'));
     assistantWorker.on('error', onWorkerError('AssistantWorker')).on('exit', onWorkerExit('AssistantWorker'));
-    oracleWorker   .on('error', onWorkerError('OracleWorker'))   .on('exit', onWorkerExit('OracleWorker'));
+    oracle         .on('error', onWorkerError('Oracle'))         .on('exit', onWorkerExit('Oracle'));
 
     const channelOracleMom    = new MessageChannel();
     const channelOracleAssist = new MessageChannel();
@@ -379,7 +379,7 @@ async function boot(): Promise<void> {
         { type: 'init', momPort: channelMomAssist.port2, oraclePort: channelOracleAssist.port1 },
         [channelMomAssist.port2, channelOracleAssist.port1],
     );
-    oracleWorker.postMessage(
+    oracle.postMessage(
         { type: 'init', momPort: channelOracleMom.port2, assistPort: channelOracleAssist.port2 },
         [channelOracleMom.port2, channelOracleAssist.port2],
     );
@@ -418,12 +418,12 @@ async function boot(): Promise<void> {
     // 4. Start warm up sequence
     console.log('\n[M.o.M] 🔄 Starting Warm Up...');
     console.log('[M.o.M] 📡 Requesting Hydration (from 6 PM ET session open)...');
-    oracleWorker.postMessage({ type: 'TRIGGER_HYDRATION' });
+    oracle.postMessage({ type: 'TRIGGER_HYDRATION' });
 
     await new Promise<void>((resolve) => {
         const handler = (msg: any) => {
             if (msg.type === 'HYDRATION_COMPLETE') {
-                oracleWorker.off('message', handler);
+                oracle.off('message', handler);
                 const vix = msg.vixLevel ?? 0;
                 const vixTag = vix < 15 ? '😌 Calm — low vol, complacency'
                              : vix < 25 ? '📊 Normal — standard volatility'
@@ -433,7 +433,7 @@ async function boot(): Promise<void> {
                 resolve();
             }
         };
-        oracleWorker.on('message', handler);
+        oracle.on('message', handler);
     });
 
     console.log('[M.o.M] ✅ Warm Up Complete — all experts have minimum 20 candles');
@@ -510,9 +510,9 @@ function wireAssistantHandler(): void {
     });
 }
 
-// ─── OracleWorker handler ────────────────────────────────────────────────────
+// ─── Oracle handler ──────────────────────────────────────────────────────────
 function wireOracleHandler(): void {
-    oracleWorker.on('message', (msg: { type: string; [key: string]: unknown }) => {
+    oracle.on('message', (msg: { type: string; [key: string]: unknown }) => {
         switch (msg.type) {
             case 'ready': break;
             case 'feed_heartbeat': break;
@@ -529,8 +529,8 @@ function wireOracleHandler(): void {
                 const symbol = msg.symbol as string;
                 const from   = msg.from   as string;
                 checkIsFlat(symbol)
-                    .then(isFlat => oracleWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat, symbol, from }))
-                    .catch(() => oracleWorker.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat: false, symbol, from }));
+                    .then(isFlat => oracle.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat, symbol, from }))
+                    .catch(() => oracle.postMessage({ type: 'VERIFY_FLAT_RESULT', isFlat: false, symbol, from }));
                 break;
             }
 
@@ -557,7 +557,7 @@ function shutdown(): void {
     ledger.stopReconciliation();
     momWorker      ?.postMessage({ type: 'shutdown' });
     assistantWorker?.postMessage({ type: 'shutdown' });
-    oracleWorker   ?.postMessage({ type: 'shutdown' });
+    oracle         ?.postMessage({ type: 'shutdown' });
     setTimeout(async () => {
         await db.disconnect().catch(() => {});
         process.exit(0);
