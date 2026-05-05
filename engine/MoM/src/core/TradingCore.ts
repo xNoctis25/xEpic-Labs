@@ -61,6 +61,7 @@ export interface ActiveTradeContext {
 // ─────────────────────────────────────────────────────────────────────────────
 const SL_BUFFER_TICKS        = 2;          // buffer beyond FVG edge (2 ticks = 0.50 pts MES)
 const SL_MAX_ATR_MULT        = 2.5;        // reject setup if structural stop exceeds 2.5× ATR
+const SL_MIN_DISTANCE        = 3.0;        // minimum stop distance in points (12 ticks MES)
 const SL_WILDERNESS_PCT      = 0.50;       // cut SL by 50% in Wilderness
 const MIN_SMC_PROBABILITY    = 80;         // minimum probability score (0-100%) to take a trade
 
@@ -244,6 +245,17 @@ export class TradingCore {
         }
 
         let slDistance = Math.abs(candle.close - stopPrice);
+
+        // Sanity floor: reject if structural stop is too tight (MES noise = 1-2pts)
+        if (slDistance < SL_MIN_DISTANCE) {
+            this.pendingActions.push({
+                type: 'REJECTED', gate: 'SL_TOO_TIGHT', regime,
+                direction, price: candle.close,
+                confidence: signal.confidence,
+                reason: `REJECTED by SL_TOO_TIGHT | ${direction} ${this.symbol} @ ${candle.close} | SL: ${slDistance.toFixed(1)}pts below ${SL_MIN_DISTANCE}pt minimum | ${signal.reason}`,
+            });
+            return;
+        }
 
         // Sanity cap: reject if structural stop is too wide
         if (atr > 0 && slDistance > atr * SL_MAX_ATR_MULT) {

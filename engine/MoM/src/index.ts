@@ -192,8 +192,15 @@ async function handleTradeCommand(
                 return;
             }
 
+            // Calculate actual stop distance for position sizing
+            const entryPrice = price;
+            const actualStopPrice = payload.stopPrice as number | undefined;
+            const slDistance = actualStopPrice
+                ? Math.abs(entryPrice - actualStopPrice)
+                : 20;  // fallback only if no stop provided
+
             const sizing = PositionSizer.calculate(
-                ledger.getAvailableBuyingPower(), 20, config.INDICES,
+                ledger.getAvailableBuyingPower(), slDistance, config.INDICES,
             );
             if (!sizing) {
                 console.warn('[M.o.M] ❌ Trade BLOCKED — insufficient buying power.');
@@ -289,7 +296,22 @@ async function handleTradeCommand(
             const rawDir    = (payload.direction as string | undefined) ?? 'LONG';
             const exitAction: 'Buy' | 'Sell' = (rawDir === 'LONG' || rawDir === 'BUY') ? 'Sell' : 'Buy';
             console.log(`[M.o.M] 🛑 ${action} ${symbol} → ${stopPrice}`);
-            await broker.modifyStopWithVerification(symbol, exitAction, 1, stopPrice);
+
+            // Query actual net position — stops must cover ALL remaining contracts
+            try {
+                const netQty = await broker.getNetPositionQty(symbol);
+                const absQty = Math.abs(netQty);
+                if (absQty === 0) {
+                    console.warn(`[M.o.M] ⚠️ ${action}: position already flat — skipping stop.`);
+                    break;
+                }
+                // Cancel existing stops first, then place fresh one for correct qty
+                await broker.cancelAllWorkingOrders();
+                await broker.placeProtectiveStop(symbol, exitAction, absQty, stopPrice);
+                console.log(`[M.o.M] ✅ ${action}: ${absQty}x ${symbol} stop @ ${stopPrice}`);
+            } catch (e: any) {
+                console.error(`[M.o.M] ❌ ${action} failed: ${e.message}`);
+            }
             break;
         }
 
