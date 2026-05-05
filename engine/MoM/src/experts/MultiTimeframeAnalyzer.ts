@@ -315,9 +315,10 @@ export class MultiTimeframeAnalyzer {
     /**
      * Scores HTF alignment for the probability model.
      *
-     *   1H aligned:  +15pts (heaviest — most data)
-     *   15M aligned: +10pts
-     *   5M aligned:  +5pts
+     * ICT scalping hierarchy (15M is the directional anchor):
+     *   15M aligned: +15pts (primary bias — fastest reliable structure)
+     *   5M aligned:  +10pts (structure confirmation)
+     *   1H aligned:  +5pts  (bonus — too slow for intraday, but adds confidence)
      *   Neutral TFs get half credit.
      *
      * @returns 0-30 score
@@ -326,17 +327,17 @@ export class MultiTimeframeAnalyzer {
         const direction: TFTrend = action === 'BUY' ? 'Bullish' : 'Bearish';
         let score = 0;
 
-        // 1H bias (15pts)
-        if (this.tf1h.trend === direction) score += 15;
-        else if (this.tf1h.trend === 'Neutral') score += 8;
+        // 15M bias — primary anchor (15pts)
+        if (this.tf15m.trend === direction) score += 15;
+        else if (this.tf15m.trend === 'Neutral') score += 8;
 
-        // 15M structure (10pts)
-        if (this.tf15m.trend === direction) score += 10;
-        else if (this.tf15m.trend === 'Neutral') score += 5;
+        // 5M structure confirmation (10pts)
+        if (this.tf5m.trend === direction) score += 10;
+        else if (this.tf5m.trend === 'Neutral') score += 5;
 
-        // 5M confirmation (5pts)
-        if (this.tf5m.trend === direction) score += 5;
-        else if (this.tf5m.trend === 'Neutral') score += 2;
+        // 1H bonus alignment (5pts) — demoted from primary due to 3hr pivot lag
+        if (this.tf1h.trend === direction) score += 5;
+        else if (this.tf1h.trend === 'Neutral') score += 2;
 
         return score;
     }

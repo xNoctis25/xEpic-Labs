@@ -435,7 +435,7 @@ export class SMC {
 
         // ── Factor 1: HTF Alignment (max 30) ─────────────────────────────
         // Scored by MultiTimeframeAnalyzer.scoreAlignment()
-        // 1H aligned: +15 | 15M aligned: +10 | 5M aligned: +5
+        // 15M aligned: +15 | 5M aligned: +10 | 1H aligned: +5
         const htfScore = mtfScore;
 
         // ── Factor 2: Displacement Strength (max 25) ─────────────────────
