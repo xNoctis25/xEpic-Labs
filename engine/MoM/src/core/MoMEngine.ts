@@ -16,6 +16,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import '../utils/etLogger';
 import { parentPort, MessagePort } from 'worker_threads';
 import { MarketClock }             from './MarketClock';
 import { Candle, Tick }            from '../market/CandleAggregator';

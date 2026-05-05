@@ -12,6 +12,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import '../utils/etLogger';
 import { parentPort, MessagePort } from 'worker_threads';
 import { EnrichedTick }            from '../services/DatabentoLiveService';
 

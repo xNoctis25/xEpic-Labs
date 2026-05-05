@@ -83,7 +83,7 @@ export class NeonDatabase {
             CREATE TABLE IF NOT EXISTS bot_state (
                 id SERIAL PRIMARY KEY,
                 current_phase VARCHAR(20) NOT NULL DEFAULT 'EVALUATION',
-                start_date TIMESTAMP NOT NULL DEFAULT NOW(),
+                start_date TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'),
                 active_trading_days INT NOT NULL DEFAULT 0,
                 running_pnl NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
                 max_drawdown_limit NUMERIC(12, 2) NOT NULL DEFAULT -500.00
@@ -94,7 +94,7 @@ export class NeonDatabase {
         await this.pool.query(`
             CREATE TABLE IF NOT EXISTS trade_journal (
                 id SERIAL PRIMARY KEY,
-                timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+                timestamp TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York'),
                 symbol VARCHAR(20) NOT NULL DEFAULT 'MESM6',
                 side VARCHAR(4) NOT NULL,
                 qty INT NOT NULL DEFAULT 1,

@@ -8,6 +8,9 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+// ─── Global ET Timestamp Prefixer (must be first import) ─────────────────────
+import '../utils/etLogger';
+
 // Suppress Node.js deprecation warnings (pg SSL, etc.)
 process.env.NODE_NO_WARNINGS = '1';
 

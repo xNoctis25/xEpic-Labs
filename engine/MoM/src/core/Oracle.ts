@@ -20,6 +20,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import '../utils/etLogger';
 import { parentPort, MessagePort } from 'worker_threads';
 import { WebSocketServer, WebSocket } from 'ws';
 import { DatabentoLiveService, EnrichedTick, CFE_DATASET } from '../services/DatabentoLiveService';
