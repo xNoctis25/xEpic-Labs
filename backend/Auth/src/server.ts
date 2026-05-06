@@ -702,6 +702,29 @@ app.post('/api/auth/trading/prop-accounts', async (req, res) => {
     }
 });
 
+app.get('/api/auth/trading/engine/status', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+
+        const result = await pool.query(
+            "SELECT reason FROM engine_halts WHERE status = 'Active' ORDER BY created_at DESC LIMIT 1"
+        );
+
+        if (result.rows.length > 0) {
+            res.status(200).json({ status: 'HALTED', reason: result.rows[0].reason });
+        } else {
+            res.status(200).json({ status: 'ACTIVE' });
+        }
+    } catch (error) {
+        console.error('[API ERROR] /engine/status GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
     res.status(200).json({ status: 'Auth API Online', timestamp: new Date().toISOString() });

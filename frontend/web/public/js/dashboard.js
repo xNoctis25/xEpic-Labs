@@ -632,7 +632,7 @@ function updateMarketClock() {
         kzText = 'Killzone: NY AM'; kzColor = 'green';
     } else if (isNYPM) {
         kzText = 'Killzone: NY PM'; kzColor = 'green';
-    } else if (isMarketOpen) {
+    } else if (activeSessions.length > 0) {
         kzText = 'Killzone: Wilderness'; kzColor = 'yellow';
     } else {
         kzText = 'Killzone: Inactive'; kzColor = 'gray';
@@ -675,6 +675,31 @@ function _stopSessionOverlap() {
 
 updateMarketClock();
 setInterval(updateMarketClock, 10000);
+
+// ── MOM ENGINE STATUS POLLING ──────────────────────────────────────────────────
+async function updateEngineStatus() {
+    const uiEngineLabel = document.getElementById('uiEngineLabel');
+    const uiEngineDot   = document.getElementById('uiEngineDot');
+    if (!uiEngineLabel || !uiEngineDot) return;
+
+    try {
+        const res = await auth.request('/trading/engine/status', { method: 'GET' });
+        if (res.status === 'HALTED') {
+            uiEngineLabel.textContent = 'MoM: Halted';
+            uiEngineDot.className = 'dot pulse-yellow';
+        } else {
+            uiEngineLabel.textContent = 'MoM Engine';
+            uiEngineDot.className = 'dot green';
+        }
+    } catch (err) {
+        console.error('Failed to get engine status:', err);
+        uiEngineLabel.textContent = 'MoM: Offline';
+        uiEngineDot.className = 'dot red';
+    }
+}
+
+updateEngineStatus();
+setInterval(updateEngineStatus, 15000); // Check every 15s
 
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
 
