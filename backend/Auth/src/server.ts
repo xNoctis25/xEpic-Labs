@@ -643,7 +643,7 @@ app.get('/api/auth/trading/prop-accounts', async (req, res) => {
     }
 });
 
-app.patch('/api/auth/trading/prop-accounts/:id/risk', async (req, res) => {
+app.patch('/api/auth/trading/risk', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -651,25 +651,21 @@ app.patch('/api/auth/trading/prop-accounts/:id/risk', async (req, res) => {
         }
         jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
 
-        const accountId = req.params.id;
         const { risk_profile } = req.body;
 
         if (!['SAFE', 'AGGRESSIVE'].includes(risk_profile)) {
             return res.status(400).json({ message: 'Invalid risk profile.' });
         }
 
-        const result = await pool.query(
-            'UPDATE prop_accounts SET risk_profile = $1 WHERE id = $2 RETURNING *',
-            [risk_profile, accountId]
+        // Update all prop accounts to use the same risk profile (global risk)
+        await pool.query(
+            'UPDATE prop_accounts SET risk_profile = $1',
+            [risk_profile]
         );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Account not found.' });
-        }
-
-        res.status(200).json(result.rows[0]);
+        res.status(200).json({ message: 'Global risk updated', risk_profile });
     } catch (error) {
-        console.error('[API ERROR] /prop-accounts PATCH risk:', error);
+        console.error('[API ERROR] /trading/risk PATCH:', error);
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
