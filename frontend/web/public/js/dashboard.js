@@ -482,6 +482,54 @@ if (changePwdForm) {
     });
 }
 
+// ── GLOBAL RISK TOGGLE ────────────────────────────────────────────────────────
+const globalRiskToggleBtn = document.getElementById('globalRiskToggleBtn');
+
+function updateGlobalRiskToggle(riskProfile) {
+    if (!globalRiskToggleBtn) return;
+    globalRiskToggleBtn.style.display = 'inline-block';
+    
+    if (riskProfile === 'SAFE') {
+        globalRiskToggleBtn.textContent = 'Risk: SAFE';
+        globalRiskToggleBtn.style.background = 'rgba(52, 211, 153, 0.2)';
+        globalRiskToggleBtn.style.color = '#34d399';
+        globalRiskToggleBtn.style.borderColor = '#34d399';
+    } else {
+        globalRiskToggleBtn.textContent = 'Risk: AGGRESSIVE';
+        globalRiskToggleBtn.style.background = 'rgba(248, 113, 113, 0.2)';
+        globalRiskToggleBtn.style.color = '#f87171';
+        globalRiskToggleBtn.style.borderColor = '#f87171';
+    }
+}
+
+if (globalRiskToggleBtn) {
+    globalRiskToggleBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (!window.currentActiveAccountId) return;
+
+        const newRisk = window.currentActiveAccountRisk === 'SAFE' ? 'AGGRESSIVE' : 'SAFE';
+        const originalText = globalRiskToggleBtn.textContent;
+        globalRiskToggleBtn.textContent = 'Updating...';
+        globalRiskToggleBtn.disabled = true;
+
+        try {
+            await auth.request(`/trading/prop-accounts/${window.currentActiveAccountId}/risk`, {
+                method: 'PATCH',
+                body: JSON.stringify({ risk_profile: newRisk })
+            });
+            window.currentActiveAccountRisk = newRisk;
+            updateGlobalRiskToggle(newRisk);
+            await loadPropAccounts(); // Refresh table
+        } catch (err) {
+            console.error('Failed to toggle risk:', err);
+            globalRiskToggleBtn.textContent = originalText;
+            alert(err.message || 'Failed to update risk profile.');
+        } finally {
+            globalRiskToggleBtn.disabled = false;
+        }
+    });
+}
+
 // ── LIVE MARKET CLOCK ─────────────────────────────────────────────────────────
 function updateMarketClock() {
     const uiSessionLabel  = document.getElementById('uiSessionLabel');
@@ -824,8 +872,13 @@ async function loadPropAccounts() {
         if (!accounts || accounts.length === 0) {
             evalList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts found.</td></tr>';
             fundedList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts found.</td></tr>';
+            const riskBtn = document.getElementById('globalRiskToggleBtn');
+            if (riskBtn) riskBtn.style.display = 'none'; // Hide if no accounts
             return;
         }
+
+        window.currentActiveAccountId = null; // Reset
+
 
         accounts.forEach(acc => {
             const statusColor = acc.status === 'ACTIVE' ? 'var(--primary)' : 
@@ -858,6 +911,13 @@ async function loadPropAccounts() {
 
             if (acc.phase === 'EVAL') evalHtml += rowHtml;
             else fundedHtml += rowHtml;
+
+            // Track the first active account for the global risk toggle
+            if (acc.status === 'ACTIVE' && !window.currentActiveAccountId) {
+                window.currentActiveAccountId = acc.id;
+                window.currentActiveAccountRisk = acc.risk_profile;
+                updateGlobalRiskToggle(acc.risk_profile);
+            }
         });
 
         evalList.innerHTML = evalHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
@@ -893,6 +953,7 @@ if (propForm) {
             });
             
             propForm.reset();
+            window.currentActiveAccountId = null; // force recalculation of the toggle
             await loadPropAccounts();
             if (propAccountModal) propAccountModal.style.display = 'none';
             

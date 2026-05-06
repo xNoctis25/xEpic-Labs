@@ -643,6 +643,37 @@ app.get('/api/auth/trading/prop-accounts', async (req, res) => {
     }
 });
 
+app.patch('/api/auth/trading/prop-accounts/:id/risk', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+
+        const accountId = req.params.id;
+        const { risk_profile } = req.body;
+
+        if (!['SAFE', 'AGGRESSIVE'].includes(risk_profile)) {
+            return res.status(400).json({ message: 'Invalid risk profile.' });
+        }
+
+        const result = await pool.query(
+            'UPDATE prop_accounts SET risk_profile = $1 WHERE id = $2 RETURNING *',
+            [risk_profile, accountId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Account not found.' });
+        }
+
+        res.status(200).json(result.rows[0]);
+    } catch (error) {
+        console.error('[API ERROR] /prop-accounts PATCH risk:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 app.post('/api/auth/trading/prop-accounts', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
