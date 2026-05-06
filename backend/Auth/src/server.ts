@@ -570,17 +570,17 @@ The user's name is: ${decoded.username}`,
                         {
                             name: "halt_engine",
                             description: "Halts the trading engine normally. The engine will not enter new trades, but will manage existing ones. Use this when the user says 'stop trading'.",
-                            parameters: { type: "OBJECT", properties: {} }
+                            parameters: { type: "OBJECT" as any, properties: {} }
                         },
                         {
                             name: "resume_engine",
                             description: "Resumes the trading engine and clears all halts. Use this when the user says 'resume trading'.",
-                            parameters: { type: "OBJECT", properties: {} }
+                            parameters: { type: "OBJECT" as any, properties: {} }
                         },
                         {
                             name: "close_engine",
                             description: "Emergency closes the trading engine. It immediately wipes the board (closes all open positions and orders) and halts permanently. Use this when the user says 'close the trade' or 'emergency stop'.",
-                            parameters: { type: "OBJECT", properties: {} }
+                            parameters: { type: "OBJECT" as any, properties: {} }
                         }
                     ]
                 }]
