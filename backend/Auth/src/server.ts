@@ -626,7 +626,7 @@ The user's name is: ${decoded.username}`,
 });
 
 // ── PROP FIRM ACCOUNTS (Protected) ──────────────────────────────────────────
-app.get('/api/trading/prop-accounts', async (req, res) => {
+app.get('/api/auth/trading/prop-accounts', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -643,7 +643,7 @@ app.get('/api/trading/prop-accounts', async (req, res) => {
     }
 });
 
-app.post('/api/trading/prop-accounts', async (req, res) => {
+app.post('/api/auth/trading/prop-accounts', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {

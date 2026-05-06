@@ -781,6 +781,32 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── PROP FIRM MANAGEMENT ──────────────────────────────────────────────────────
+const propAccountModal = document.getElementById('propAccountModal');
+const openPropModalBtn = document.getElementById('openPropModalBtn');
+const closePropModalBtn = document.getElementById('closePropModalBtn');
+
+if (openPropModalBtn) {
+    openPropModalBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (propAccountModal) propAccountModal.style.display = 'flex';
+    });
+}
+
+if (closePropModalBtn) {
+    closePropModalBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (propAccountModal) propAccountModal.style.display = 'none';
+    });
+}
+
+if (propAccountModal) {
+    propAccountModal.addEventListener('click', (e) => {
+        if (e.target === propAccountModal) {
+            propAccountModal.style.display = 'none';
+        }
+    });
+}
+
 async function loadPropAccounts() {
     const evalList = document.getElementById('evalAccountList');
     const fundedList = document.getElementById('fundedAccountList');
@@ -838,8 +864,9 @@ async function loadPropAccounts() {
         fundedList.innerHTML = fundedHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
     } catch (err) {
         console.error('Failed to load prop accounts:', err);
-        evalList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Error loading accounts.</td></tr>';
-        fundedList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Error loading accounts.</td></tr>';
+        const msg = err.status === 404 ? 'No accounts found.' : (err.message || 'Error loading accounts.');
+        evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
     }
 }
 
@@ -867,6 +894,7 @@ if (propForm) {
             
             propForm.reset();
             await loadPropAccounts();
+            if (propAccountModal) propAccountModal.style.display = 'none';
             
             // Temporary success state
             btn.textContent = 'Success!';

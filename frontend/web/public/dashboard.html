@@ -56,7 +56,7 @@
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2z"></path></svg>
                 </a>
                 <a href="#" class="nav-item" id="navTrading" title="Trading Dashboard">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
                 </a>
                 <a href="#" class="nav-item" title="Insights">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
@@ -145,16 +145,19 @@
             </div>
 
             <div id="tradingView" class="view-section hidden" style="padding: 30px;">
-                <div class="profile-header">
-                    <h2>Trading Dashboard</h2>
-                    <p class="subtitle">Manage Prop Firm Accounts and Engine Risk</p>
+                <div class="profile-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h2>Trading Dashboard</h2>
+                        <p class="subtitle">Manage Prop Firm Accounts and Engine Risk</p>
+                    </div>
+                    <button class="btn" id="openPropModalBtn" style="padding: 10px 20px; font-size: 0.9rem;">+ Add Account</button>
                 </div>
                 
                 <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
                     <!-- Active Accounts Roster -->
                     <div style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 20px;">
                         <div>
-                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">EVALUATION PHASE</h3>
+                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">EVALUATION ACCOUNTS</h3>
                             <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>
@@ -174,7 +177,7 @@
                         </div>
 
                         <div>
-                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">FUNDED PHASE</h3>
+                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">FUNDED ACCOUNTS</h3>
                             <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>
@@ -193,10 +196,13 @@
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Add Account Form -->
-                    <div style="flex: 1; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                        <h3 style="color: var(--text-light); margin-bottom: 15px;">Add Prop Firm</h3>
+                <!-- Add Account Modal -->
+                <div id="propAccountModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); backdrop-filter: blur(5px); z-index: 1000; align-items: center; justify-content: center;">
+                    <div style="background: rgba(10,10,15,0.95); border: 1px solid var(--glass-border); border-radius: 12px; padding: 30px; width: 100%; max-width: 400px; position: relative;">
+                        <button id="closePropModalBtn" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem;">&times;</button>
+                        <h3 style="color: var(--text-light); margin-bottom: 20px;">Add Prop Firm Account</h3>
                         <form id="addPropAccountForm" class="profile-form">
                             <div class="form-group">
                                 <label style="display:block; margin-bottom:5px; color:var(--text-muted); font-size:0.9rem;">Account Name (e.g. Apex-01)</label>
@@ -259,6 +265,6 @@
     </div><!-- /.app-layout -->
 
     <script src="/js/api.js?v=34.0"></script>
-    <script src="/js/dashboard.js?v=68.0"></script>
+    <script src="/js/dashboard.js?v=69.0"></script>
 </body>
 </html>
