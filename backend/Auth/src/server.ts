@@ -711,11 +711,11 @@ app.get('/api/auth/trading/engine/status', async (req, res) => {
         jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
 
         const result = await pool.query(
-            "SELECT reason FROM engine_halts WHERE status = 'Active' ORDER BY created_at DESC LIMIT 1"
+            "SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1"
         );
 
         if (result.rows.length > 0) {
-            res.status(200).json({ status: 'HALTED', reason: result.rows[0].reason });
+            res.status(200).json({ status: 'HALTED', reason: result.rows[0].halt_type });
         } else {
             res.status(200).json({ status: 'ACTIVE' });
         }
