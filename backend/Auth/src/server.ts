@@ -555,19 +555,73 @@ Your core expertise:
 
 Your personality:
 - Confident, articulate, and substantive — never give a one-liner when depth is warranted
-- Professional but personable — like a sharp colleague who actually knows their stuff
-- When you lack real-time data (live prices, today's news feed), acknowledge it briefly then immediately pivot to what you CAN provide: analysis, context, historical patterns, frameworks
+- Professional but personable
+- When you lack real-time data, acknowledge it briefly then provide analysis
 - Never refuse to engage. Always find an angle that adds value.
-- Format clearly: use **bold** for key terms, bullet points for lists, and structured breakdowns when helpful
 
-The user's name is: ${decoded.username}`
+You also have the ability to control the M.o.M trading engine. If the user tells you to stop trading, halt the engine, or close positions, you MUST execute the appropriate tool.
+- Halt Trading: Halts new entries.
+- Resume Trading: Clears all halts.
+- Close Trade: Wipes the board and halts permanently.
+
+The user's name is: ${decoded.username}`,
+                tools: [{
+                    functionDeclarations: [
+                        {
+                            name: "halt_engine",
+                            description: "Halts the trading engine normally. The engine will not enter new trades, but will manage existing ones. Use this when the user says 'stop trading'.",
+                            parameters: { type: "OBJECT", properties: {} }
+                        },
+                        {
+                            name: "resume_engine",
+                            description: "Resumes the trading engine and clears all halts. Use this when the user says 'resume trading'.",
+                            parameters: { type: "OBJECT", properties: {} }
+                        },
+                        {
+                            name: "close_engine",
+                            description: "Emergency closes the trading engine. It immediately wipes the board (closes all open positions and orders) and halts permanently. Use this when the user says 'close the trade' or 'emergency stop'.",
+                            parameters: { type: "OBJECT", properties: {} }
+                        }
+                    ]
+                }]
             }
         });
+
+        if (response.functionCalls && response.functionCalls.length > 0) {
+            const call = response.functionCalls[0];
+            let toolOutput = "";
+            try {
+                if (call.name === "halt_engine") {
+                    await pool.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('MANUAL_HALT', TRUE)`);
+                    toolOutput = "Engine successfully halted.";
+                } else if (call.name === "resume_engine") {
+                    await pool.query(`UPDATE engine_halts SET is_active = FALSE WHERE is_active = TRUE`);
+                    toolOutput = "Engine successfully resumed. All halts cleared.";
+                } else if (call.name === "close_engine") {
+                    await pool.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('EMERGENCY_CLOSE', TRUE)`);
+                    toolOutput = "Engine emergency closed. All positions will be flattened immediately.";
+                }
+            } catch (err) {
+                console.error("[NOVA TOOL ERROR]", err);
+                toolOutput = "Failed to execute engine command due to database error.";
+            }
+            
+            // Re-prompt model with tool output
+            const followUp = await ai.models.generateContent({
+                model: targetModel,
+                contents: [
+                    ...contents,
+                    { role: 'model', parts: [{ functionCall: call }] },
+                    { role: 'user', parts: [{ functionResponse: { name: call.name, response: { result: toolOutput } } }] }
+                ]
+            });
+            return res.status(200).json({ reply: followUp.text });
+        }
 
         res.status(200).json({ reply: response.text });
     } catch (error: any) {
         console.error('[NOVA ERROR]', error);
-        res.status(500).json({ reply: 'Error communicating with Nova core.', message: 'Error communicating with Nova core.' });
+        res.status(500).json({ reply: 'Error communicating with Nova core.', message: error.message || String(error) });
     }
 });
 
