@@ -404,11 +404,13 @@ if (dropdownTrigger && modelDropdown) {
 const navs = {
     home:     document.getElementById('navHome'),
     nova:     document.getElementById('navNova'),
+    trading:  document.getElementById('navTrading'),
     settings: document.getElementById('navSettings')
 };
 const views = {
     home:     document.getElementById('homeView'),
     nova:     document.getElementById('novaView'),
+    trading:  document.getElementById('tradingView'),
     settings: document.getElementById('profileView')
 };
 
@@ -416,6 +418,7 @@ const ACTIVE_VIEW_KEY = 'nova_activeView';
 const VIEW_TITLES = {
     home:     'xEpic Labs — Home',
     nova:     'xEpic Labs — Nova',
+    trading:  'xEpic Labs — Trading',
     settings: 'xEpic Labs — Settings'
 };
 
@@ -432,6 +435,7 @@ window.switchView = function (viewName) {
 
 if (navs.home)     navs.home.addEventListener('click',     (e) => { e.preventDefault(); window.switchView('home'); });
 if (navs.nova)     navs.nova.addEventListener('click',     (e) => { e.preventDefault(); window.switchView('nova'); });
+if (navs.trading)  navs.trading.addEventListener('click',  (e) => { e.preventDefault(); window.switchView('trading'); loadPropAccounts(); });
 if (navs.settings) navs.settings.addEventListener('click', (e) => { e.preventDefault(); window.switchView('settings'); });
 
 // ── CHANGE PASSWORD ───────────────────────────────────────────────────────────
@@ -775,3 +779,111 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// ── PROP FIRM MANAGEMENT ──────────────────────────────────────────────────────
+async function loadPropAccounts() {
+    const evalList = document.getElementById('evalAccountList');
+    const fundedList = document.getElementById('fundedAccountList');
+    if (!evalList || !fundedList) return;
+    
+    try {
+        evalList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading evaluation accounts...</td></tr>';
+        fundedList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading funded accounts...</td></tr>';
+        
+        const accounts = await auth.request('/trading/prop-accounts', { method: 'GET' });
+        
+        let evalHtml = '';
+        let fundedHtml = '';
+
+        if (!accounts || accounts.length === 0) {
+            evalList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts found.</td></tr>';
+            fundedList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts found.</td></tr>';
+            return;
+        }
+
+        accounts.forEach(acc => {
+            const statusColor = acc.status === 'ACTIVE' ? 'var(--primary)' : 
+                              (acc.status === 'BLOWN' ? 'var(--error)' : 'var(--text-light)');
+            
+            const pnlColor = acc.current_pnl >= 0 ? 'var(--primary)' : 'var(--error)';
+            const pnlFormatted = Number(acc.current_pnl).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+            const targetFormatted = Number(acc.profit_target).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+
+            const rowHtml = `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 10px 15px; color: var(--text-light); font-weight: 500;">
+                        ${acc.account_name}
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">${acc.firm}</div>
+                    </td>
+                    <td style="padding: 10px 15px;">
+                        <span style="color: ${acc.risk_profile === 'SAFE' ? 'var(--primary)' : 'var(--error)'}; font-size: 0.85rem;">${acc.risk_profile}</span>
+                    </td>
+                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
+                        ${targetFormatted}
+                    </td>
+                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">
+                        ${pnlFormatted}
+                    </td>
+                    <td style="padding: 10px 15px;">
+                        <span style="color: ${statusColor}; font-weight: bold; font-size: 0.85rem;">${acc.status}</span>
+                    </td>
+                </tr>
+            `;
+
+            if (acc.phase === 'EVAL') evalHtml += rowHtml;
+            else fundedHtml += rowHtml;
+        });
+
+        evalList.innerHTML = evalHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
+        fundedList.innerHTML = fundedHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
+    } catch (err) {
+        console.error('Failed to load prop accounts:', err);
+        evalList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Error loading accounts.</td></tr>';
+        fundedList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Error loading accounts.</td></tr>';
+    }
+}
+
+const propForm = document.getElementById('addPropAccountForm');
+if (propForm) {
+    propForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = propForm.querySelector('button[type="submit"]');
+        const originalText = btn.textContent;
+        
+        try {
+            btn.disabled = true;
+            btn.textContent = 'Initializing...';
+            
+            await auth.request('/trading/prop-accounts', {
+                method: 'POST',
+                body: JSON.stringify({
+                    account_name: document.getElementById('propAccountName').value,
+                    firm: document.getElementById('propFirm').value,
+                    phase: document.getElementById('propPhase').value,
+                    risk_profile: document.getElementById('propRisk').value,
+                    profit_target: Number(document.getElementById('propTarget').value)
+                })
+            });
+            
+            propForm.reset();
+            await loadPropAccounts();
+            
+            // Temporary success state
+            btn.textContent = 'Success!';
+            btn.style.background = 'var(--primary)';
+            btn.style.color = '#000';
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '';
+                btn.style.color = '';
+            }, 2000);
+            
+        } catch (err) {
+            alert('Failed to add account: ' + (err.message || 'Unknown error'));
+            btn.textContent = originalText;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+}
+

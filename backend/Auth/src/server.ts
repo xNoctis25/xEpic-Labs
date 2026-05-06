@@ -571,6 +571,56 @@ The user's name is: ${decoded.username}`
     }
 });
 
+// ── PROP FIRM ACCOUNTS (Protected) ──────────────────────────────────────────
+app.get('/api/trading/prop-accounts', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET); // Throws if invalid
+
+        // Fetch all accounts, ordered by ID
+        const result = await pool.query('SELECT * FROM prop_accounts ORDER BY id ASC');
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('[API ERROR] /prop-accounts GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+app.post('/api/trading/prop-accounts', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+
+        const { account_name, firm, phase, risk_profile, profit_target } = req.body;
+
+        if (!account_name || !firm || !phase || !risk_profile || !profit_target) {
+            return res.status(400).json({ message: 'All fields are required.' });
+        }
+
+        if (!['EVAL', 'FUNDED'].includes(phase) || !['SAFE', 'AGGRESSIVE'].includes(risk_profile)) {
+            return res.status(400).json({ message: 'Invalid phase or risk profile enum.' });
+        }
+
+        const result = await pool.query(`
+            INSERT INTO prop_accounts (account_name, firm, phase, risk_profile, profit_target, current_pnl, best_day_pnl, days_traded, status)
+            VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 'ACTIVE')
+            RETURNING *
+        `, [account_name, firm, phase, risk_profile, profit_target]);
+
+        console.log(`[API] ✅ Prop Firm Account Added: ${account_name} (${phase})`);
+        res.status(201).json(result.rows[0]);
+    } catch (error: any) {
+        console.error('[API ERROR] /prop-accounts POST:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
     res.status(200).json({ status: 'Auth API Online', timestamp: new Date().toISOString() });

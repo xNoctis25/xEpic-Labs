@@ -65,10 +65,19 @@ export class PositionSizer {
         // PROP FIRM OVERRIDE — Mega Heist Scaling Ladder
         // ==========================================
         if (propOverride) {
-            // EVAL Phase: Symmetrical Overshoot — Always 3 ES
+            // EVAL Phase: Topstep 3-Day Sniper Playbook
             if (propOverride.phase === 'EVAL') {
-                console.log(`📐 [PositionSizer] - PROP EVAL: 3× ES (Symmetrical Overshoot)`);
-                return { symbolRoot: 'ES', qty: 3, riskBudget: 0 };
+                const buffer = Number(propOverride.currentBuffer);
+                let qty = 6;
+                let tier = 'Day 1 Buffer Trade';
+
+                if (buffer >= 2000) {
+                    qty = 8;
+                    tier = 'Day 2/3 Scaling Trade';
+                }
+
+                console.log(`📐 [PositionSizer] - PROP EVAL: Buffer $${buffer.toFixed(2)} → ${tier} → ES × ${qty}`);
+                return { symbolRoot: 'ES', qty, riskBudget: 0 };
             }
 
             // FUNDED Phase: The Scaling Ladder

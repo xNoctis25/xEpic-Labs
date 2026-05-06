@@ -26,9 +26,14 @@ import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './core/PositionSiz
 import { RiskEngine }                    from './core/RiskEngine';
 import { EvaluationEngine }              from './core/EvaluationEngine';
 import { MarketClock }                   from './core/MarketClock';
+import { HaltManager }                   from './services/HaltManager';
+import { getNextCmeOpen }                from './utils/TimeUtils';
+import { ContractBuilder }               from './utils/ContractBuilder';
 import { config }                           from './config/env';
 
 dotenv.config();
+
+const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
 
 const maxContracts = config.MAX_CONTRACTS;
 const playbookLabel = maxContracts > 0
@@ -42,7 +47,8 @@ const db              = new NeonDatabase();
 const executionEngine = new ExecutionEngine(broker, db);
 const ledger          = new SessionLedger();
 const riskEngine      = new RiskEngine();
-const evalEngine      = new EvaluationEngine(db);
+const haltManager     = new HaltManager(db);
+const evalEngine      = new EvaluationEngine(db, haltManager);
 let positionMonitor: NodeJS.Timeout | null = null;
 
 // ─── Worker handles ──────────────────────────────────────────────────────────
@@ -112,6 +118,13 @@ async function reconcileLedgerOnClose(reason: string): Promise<void> {
         // Update RiskEngine daily P&L tracker
         const riskBudget = ledger.getAvailableBuyingPower() * (config.RISK / 100);
         riskEngine.updatePnL(realizedPnL, riskBudget);
+
+        // Check for Global Daily Profit Limit Halt
+        if (ledger.getSessionPnL() >= config.DAILY_PROFIT_LIMIT) {
+            const nextOpen = getNextCmeOpen();
+            await haltManager.triggerHalt('DAILY_PROFIT', nextOpen);
+            console.log(`\n🛑 [M.o.M] DAILY PROFIT LIMIT HIT ($${ledger.getSessionPnL().toFixed(2)}). Halted until next CME Open.`);
+        }
 
         const pnlStr = realizedPnL >= 0 ? `+$${realizedPnL.toFixed(2)}` : `-$${Math.abs(realizedPnL).toFixed(2)}`;
         const duration = ((Date.now() - ctx.entryTs) / 60000).toFixed(1);
@@ -202,8 +215,25 @@ async function handleTradeCommand(
                 ? Math.abs(entryPrice - actualStopPrice)
                 : 20;  // fallback only if no stop provided
 
+            // ── Real-Time Prop Firm Context ──
+            // Query the DB right before entry to ensure we have the live buffer and phase.
+            let propOverride;
+            try {
+                const activeProps = await (db as any).pool.query(`SELECT * FROM prop_accounts WHERE status = 'ACTIVE' LIMIT 1`);
+                if (activeProps.rows.length > 0) {
+                    const acc = activeProps.rows[0];
+                    propOverride = {
+                        phase: acc.phase,
+                        riskProfile: acc.risk_profile,
+                        currentBuffer: Number(acc.current_pnl),
+                    };
+                }
+            } catch (err) {
+                console.warn('[M.o.M] ⚠️ Failed to fetch Prop Account context. Falling back to Cash Account sizing.');
+            }
+
             const sizing = PositionSizer.calculate(
-                ledger.getAvailableBuyingPower(), slDistance, config.INDICES,
+                ledger.getAvailableBuyingPower(), slDistance, config.INDICES, propOverride
             );
             if (!sizing) {
                 console.warn('[M.o.M] ❌ Trade BLOCKED — insufficient buying power.');
@@ -393,7 +423,10 @@ async function boot(): Promise<void> {
 
     console.log('[M.o.M] ✅ 4-core mesh online — feeds connecting...');
 
-    // 3. Wait for test trade to complete (60s timeout = HALT on failure)
+    // 3. Test trade DISABLED — skip preflight trade validation
+    // To re-enable: uncomment the block below and set isTestingTrade = true in MoMEngine.ts
+    console.log('[M.o.M] ⏭️  Test trade DISABLED — skipping preflight trade validation');
+    /*
     console.log('[M.o.M] 🧪 Awaiting test trade + triple-sweep...');
 
     const testTradeResult = await new Promise<boolean>((resolve) => {
@@ -410,11 +443,28 @@ async function boot(): Promise<void> {
     }
 
     console.log('[M.o.M] ✅ Test trade passed — triple-sweep verified');
+    */
 
     console.log('\n==========================================');
     console.log('  M.o.M — Institutional Quant Engine v5.1');
     console.log(`  ${tradingMode} | ${config.INDICES} | Risk: ${config.RISK}%`);
     console.log(`  Playbook: ${playbookLabel}`);
+    
+    await haltManager.initialize();
+
+    haltManager.onStateChange(async (isHalted, haltType) => {
+        if (momWorker) momWorker.postMessage({ type: 'HALT_STATE', payload: isHalted });
+
+        // If an EMERGENCY_CLOSE manual halt is triggered from an external script
+        if (isHalted && haltType === 'EMERGENCY_CLOSE') {
+            console.log(`\n🚨 [M.o.M] EMERGENCY CLOSE DETECTED via HALT MANAGER. Flattening all positions...`);
+            await broker.cancelAllWorkingOrders();
+            await executionEngine.flattenPosition(tradeSymbol);
+            if (momWorker) momWorker.postMessage({ type: 'position_closed', reason: 'EMERGENCY_CLOSE' });
+            await reconcileLedgerOnClose('EMERGENCY_CLOSE');
+        }
+    });
+
     console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
     console.log(`  Buying Power: $${ledger.getAvailableBuyingPower().toFixed(0)}`);
     console.log('==========================================');

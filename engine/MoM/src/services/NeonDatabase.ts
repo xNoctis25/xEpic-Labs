@@ -186,6 +186,63 @@ export class NeonDatabase {
                 VALUES ('EVALUATION', NOW(), 0, 0.00, -500.00)
             `);
         }
+
+        // Create the engine_halts table for the global kill-switch
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS engine_halts (
+                id SERIAL PRIMARY KEY,
+                halt_type VARCHAR(50) NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                unlock_time TIMESTAMP,
+                created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
+            );
+        `);
+    }
+
+    // ==========================================
+    // Global Halt Management
+    // ==========================================
+    /**
+     * Checks for any active halts. If an active halt is past its unlock time, it automatically resolves it.
+     */
+    public async getActiveHalt(): Promise<{ haltType: string; unlockTime: Date | null } | null> {
+        const res = await this.pool.query(`SELECT id, halt_type, unlock_time FROM engine_halts WHERE is_active = TRUE ORDER BY id DESC LIMIT 1`);
+        if (res.rows.length === 0) return null;
+
+        const halt = res.rows[0];
+        if (halt.unlock_time && new Date() >= new Date(halt.unlock_time)) {
+            // Halt expired, resolve it
+            await this.resolveHalt(halt.id);
+            return null;
+        }
+
+        return {
+            haltType: halt.halt_type,
+            unlockTime: halt.unlock_time ? new Date(halt.unlock_time) : null
+        };
+    }
+
+    /**
+     * Creates a new global halt.
+     */
+    public async createHalt(haltType: string, unlockTime?: Date): Promise<void> {
+        await this.pool.query(
+            `INSERT INTO engine_halts (halt_type, unlock_time, is_active) VALUES ($1, $2, TRUE)`,
+            [haltType, unlockTime ? unlockTime.toISOString() : null]
+        );
+        console.log(`🛑 [NeonDB] - HALT CREATED: ${haltType} | Unlocks: ${unlockTime ? unlockTime.toLocaleString('en-US', {timeZone: 'America/New_York'}) : 'MANUAL_RESET'}`);
+    }
+
+    /**
+     * Resolves a specific halt, or all active halts if id is not provided.
+     */
+    public async resolveHalt(id?: number): Promise<void> {
+        if (id) {
+            await this.pool.query(`UPDATE engine_halts SET is_active = FALSE WHERE id = $1`, [id]);
+        } else {
+            await this.pool.query(`UPDATE engine_halts SET is_active = FALSE WHERE is_active = TRUE`);
+        }
+        console.log(`🟢 [NeonDB] - HALT(S) RESOLVED. Engine is live.`);
     }
 
     /**
@@ -385,13 +442,48 @@ export class NeonDatabase {
 
         console.log(`🏦 [NeonDB] - Account #${id} PnL updated: ${dailyPnl >= 0 ? '+' : ''}$${dailyPnl.toFixed(2)}`);
 
-        // Payout Check Logic for FUNDED accounts
+        // Fetch the updated account row
         const res = await this.pool.query(`SELECT * FROM prop_accounts WHERE id = $1`, [id]);
         if (res.rows.length > 0) {
             const acc = res.rows[0];
-            if (acc.phase === 'FUNDED' && acc.days_traded >= 5 && Number(acc.current_pnl) >= (Number(acc.best_day_pnl) * 2)) {
-                await this.updateAccountStatus(id, 'PAYOUT_READY');
-                console.log(`🤑 [NeonDB] - MEGA HEIST ALERT: Account ${acc.account_name} is PAYOUT READY!`);
+            const currentPnl = Number(acc.current_pnl);
+            const bestDay = Number(acc.best_day_pnl);
+
+            if (acc.phase === 'EVAL') {
+                // Topstep 50% Consistency Rule: Best day cannot exceed 50% of total profit target
+                // If it does, the new target effectively becomes best_day * 2.
+                const dynamicTarget = Math.max(9000, bestDay * 2);
+                
+                if (Number(acc.profit_target) !== dynamicTarget) {
+                    await this.pool.query(`UPDATE prop_accounts SET profit_target = $1 WHERE id = $2`, [dynamicTarget, id]);
+                    console.log(`⚠️ [NeonDB] - Consistency Rule Triggered! Target raised to $${dynamicTarget.toFixed(2)}`);
+                }
+
+                // BLOWN Condition (Trailing Drawdown)
+                if (currentPnl <= -4500) {
+                    await this.updateAccountStatus(id, 'BLOWN');
+                    console.log(`🔴 [NeonDB] - Account ${acc.account_name} BLOWN. Drawdown exceeded -$4500.`);
+                }
+                // PASSED Condition
+                else if (currentPnl >= dynamicTarget) {
+                    await this.pool.query(`
+                        UPDATE prop_accounts 
+                        SET phase = 'FUNDED', status = 'PASSED', current_pnl = 0, best_day_pnl = 0, days_traded = 0
+                        WHERE id = $1
+                    `, [id]);
+                    console.log(`🟢 [NeonDB] - CHALLENGE PASSED! Account ${acc.account_name} promoted to FUNDED. P&L reset for Buffer Building.`);
+                }
+            } else if (acc.phase === 'FUNDED') {
+                // BLOWN Condition for Funded
+                if (currentPnl <= -4500) {
+                    await this.updateAccountStatus(id, 'BLOWN');
+                    console.log(`🔴 [NeonDB] - Account ${acc.account_name} BLOWN. Drawdown exceeded -$4500.`);
+                }
+                // Payout Check Logic for FUNDED accounts
+                else if (acc.days_traded >= 5 && currentPnl >= (bestDay * 2)) {
+                    await this.updateAccountStatus(id, 'PAYOUT_READY');
+                    console.log(`🤑 [NeonDB] - MEGA HEIST ALERT: Account ${acc.account_name} is PAYOUT READY!`);
+                }
             }
         }
     }

@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { NeonDatabase, BotPhase } from '../services/NeonDatabase';
+import { HaltManager } from '../services/HaltManager';
 import { SessionLedger } from '../services/SessionLedger';
 
 /**
@@ -18,10 +19,12 @@ import { SessionLedger } from '../services/SessionLedger';
  */
 export class EvaluationEngine {
     private db: NeonDatabase;
+    private haltManager: HaltManager;
     private currentPhase: BotPhase = 'EVALUATION';
 
-    constructor(db: NeonDatabase) {
+    constructor(db: NeonDatabase, haltManager: HaltManager) {
         this.db = db;
+        this.haltManager = haltManager;
     }
 
     /**
@@ -57,6 +60,29 @@ export class EvaluationEngine {
         const state = await this.db.getState();
 
         console.log(`🏛️ [EvaluationEngine] - Running P&L: $${state.runningPnl.toFixed(2)} | Days: ${state.activeTradingDays}/20 | Phase: ${state.currentPhase}`);
+
+        // ==========================================
+        // Prop Firm Accounts Evaluation
+        // ==========================================
+        try {
+            const propRes = await (this.db as any).pool.query(`SELECT id, account_name, phase FROM prop_accounts WHERE status = 'ACTIVE'`);
+            const activeProps = propRes.rows;
+            if (activeProps.length > 0) {
+                console.log(`\n🏦 [EvaluationEngine] - Evaluating ${activeProps.length} ACTIVE Prop Firm Account(s)...`);
+                for (const acc of activeProps) {
+                    await this.db.updateAccountPnL(acc.id, sessionPnL);
+                    
+                    // Re-fetch to check if it passed
+                    const afterRes = await (this.db as any).pool.query(`SELECT status FROM prop_accounts WHERE id = $1`, [acc.id]);
+                    if (afterRes.rows.length > 0 && afterRes.rows[0].status === 'PASSED') {
+                        console.log(`🛑 [EvaluationEngine] - Account ${acc.account_name} PASSED! Triggering global halt.`);
+                        await this.haltManager.triggerHalt('CHALLENGE_PASSED');
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.error(`🔴 [EvaluationEngine] - Failed to evaluate Prop Accounts: ${err.message}`);
+        }
 
         // ==========================================
         // Rule 1: PROMOTION — Evaluation Complete (Cash Account)

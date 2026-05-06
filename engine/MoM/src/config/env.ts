@@ -21,6 +21,7 @@ export const config = {
 
     // Prop Firm Safety Ceiling (0 = uncapped / dynamic)
     MAX_CONTRACTS: process.env.MAX_CONTRACTS ? parseInt(process.env.MAX_CONTRACTS, 10) : 0,
+    DAILY_PROFIT_LIMIT: process.env.DAILY_PROFIT_LIMIT ? parseInt(process.env.DAILY_PROFIT_LIMIT, 10) : 4000,
 
     // ATM Tuning Flags (used by TradingCore + BacktestEngine)
     ENABLE_TIME_DECAY: process.env.ENABLE_TIME_DECAY !== 'false',       // default: ON

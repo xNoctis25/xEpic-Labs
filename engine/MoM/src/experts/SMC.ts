@@ -275,7 +275,7 @@ export class SMC {
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY) {
                         const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'BUY', htfScore);
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'BUY', htfScore, false);
                         displacementSignal = {
                             action:     'BUY',
                             confidence: probability.total,
@@ -318,7 +318,7 @@ export class SMC {
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY && !displacementSignal) {
                         const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'SELL', htfScore);
+                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'SELL', htfScore, false);
                         displacementSignal = {
                             action:     'SELL',
                             confidence: probability.total,
@@ -389,7 +389,7 @@ export class SMC {
 
                 const age = this.candleCount - fvg.formationIdx;
                 const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
-                const probability = this.calculateProbability(candle, fvg, vwap, 'BUY', htfScore);
+                const probability = this.calculateProbability(candle, fvg, vwap, 'BUY', htfScore, true);
 
                 // Mark as mitigated (no double-tapping)
                 fvg.isActive = false;
@@ -408,7 +408,7 @@ export class SMC {
 
                 const age = this.candleCount - fvg.formationIdx;
                 const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
-                const probability = this.calculateProbability(candle, fvg, vwap, 'SELL', htfScore);
+                const probability = this.calculateProbability(candle, fvg, vwap, 'SELL', htfScore, true);
 
                 fvg.isActive = false;
 
@@ -431,6 +431,7 @@ export class SMC {
     private calculateProbability(
         candle: Candle, fvg: FvgZone, vwap: number,
         action: 'BUY' | 'SELL', mtfScore: number,
+        isFvgTap: boolean = false
     ): { total: number; breakdown: string } {
 
         // ── Factor 1: HTF Alignment (max 30) ─────────────────────────────
@@ -451,6 +452,7 @@ export class SMC {
         const totalSidedVol = candle.buyVolume + candle.sellVolume;
         const deltaRatio = totalSidedVol > 0 ? Math.abs(delta) / totalSidedVol : 0;
         const deltaAligned = (action === 'BUY' && delta > 0) || (action === 'SELL' && delta < 0);
+        
         const deltaScore = !deltaAligned ? 0                // wrong side = 0
                          : deltaRatio >= 0.40 ? 20          // 70%+ one-sided = max
                          : deltaRatio >= 0.25 ? 15          // 62%+ one-sided = strong
@@ -469,8 +471,20 @@ export class SMC {
         // gap ÷ ATR ratio — larger gaps = more institutional activity
         const gapScore = fvg.gapAtrRatio >= 1.0 ? 10 : fvg.gapAtrRatio >= 0.5 ? 5 : 0;
 
-        const total = htfScore + dispScore + deltaScore + vwapScore + gapScore;
-        const breakdown = `HTF:${htfScore}/30|Disp:${dispScore}/25|Delta:${deltaScore}/20|VWAP:${vwapScore}/15|Gap:${gapScore}/10`;
+        // ── Factor 6: Trend Counter-Signal Penalty (up to -10) ───────────
+        // If VWAP trend opposes the trade direction, penalize — you're fighting the flow
+        const trendCounterPenalty = vwap > 0 && (
+            (action === 'BUY' && candle.close < vwap) ||
+            (action === 'SELL' && candle.close > vwap)
+        ) ? -10 : 0;
+
+        // ── Factor 7: Wide Stop Penalty (up to -5) ──────────────────────
+        // If the FVG-based stop is stretched beyond 1.5× ATR, structure is weak
+        const gapSize = fvg.top - fvg.bottom;
+        const wideStopPenalty = (this.currentATR > 0 && gapSize > this.currentATR * 1.5) ? -5 : 0;
+
+        const total = Math.max(0, htfScore + dispScore + deltaScore + vwapScore + gapScore + trendCounterPenalty + wideStopPenalty);
+        const breakdown = `HTF:${htfScore}/30|Disp:${dispScore}/25|Delta:${deltaScore}/20|VWAP:${vwapScore}/15|Gap:${gapScore}/10|TrendPen:${trendCounterPenalty}|WidePen:${wideStopPenalty}`;
 
         return { total, breakdown };
     }

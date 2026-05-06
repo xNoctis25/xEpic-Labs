@@ -327,13 +327,13 @@ export class MultiTimeframeAnalyzer {
         const direction: TFTrend = action === 'BUY' ? 'Bullish' : 'Bearish';
         let score = 0;
 
-        // 15M bias — primary anchor (15pts)
-        if (this.tf15m.trend === direction) score += 15;
-        else if (this.tf15m.trend === 'Neutral') score += 8;
+        // 5M bias — primary intraday anchor (15pts)
+        if (this.tf5m.trend === direction) score += 15;
+        else if (this.tf5m.trend === 'Neutral') score += 8;
 
-        // 5M structure confirmation (10pts)
-        if (this.tf5m.trend === direction) score += 10;
-        else if (this.tf5m.trend === 'Neutral') score += 5;
+        // 15M structure confirmation (10pts)
+        if (this.tf15m.trend === direction) score += 10;
+        else if (this.tf15m.trend === 'Neutral') score += 5;
 
         // 1H bonus alignment (5pts) — demoted from primary due to 3hr pivot lag
         if (this.tf1h.trend === direction) score += 5;

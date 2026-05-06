@@ -42,6 +42,7 @@ interface SimulatedPosition {
     entryReason: string;
     tradeId: string;
     legs: BracketLeg[];
+    beTriggered: boolean;  // candle-based breakeven (mirrors live onTick BE)
 }
 
 export class BacktestEngine {
@@ -63,12 +64,12 @@ export class BacktestEngine {
         stopPrice: number,
     ): BracketLeg[] {
         const tp1Price = isLong
-            ? entryPrice + riskR       // 1:1 RR
-            : entryPrice - riskR;
+            ? entryPrice + (riskR * 1.5)   // 1:1.5 RR
+            : entryPrice - (riskR * 1.5);
 
         const tp2Price = isLong
-            ? entryPrice + (riskR * 2)  // 1:2 RR
-            : entryPrice - (riskR * 2);
+            ? entryPrice + (riskR * 3.0)  // 1:3 RR
+            : entryPrice - (riskR * 3.0);
 
         // qty === 1: Pure Runner
         if (qty === 1) {
@@ -211,6 +212,31 @@ export class BacktestEngine {
                     }
                 }
 
+                // ── Deferred Candle-Based Breakeven ──────────────────────────
+                // Check if this candle reached +1R. If so, move stops to BE
+                // for the NEXT candle. This prevents same-candle BE + stop-out
+                // (where high spikes to 1R, low dips to entry, trade scratches
+                // but then price continues in the winning direction).
+                if (!position.beTriggered) {
+                    const reachedBE = isLong
+                        ? candle.high >= entryPrice + (position.riskR * 1.5)
+                        : candle.low  <= entryPrice - (position.riskR * 1.5);
+
+                    if (reachedBE) {
+                        position.beTriggered = true;
+                        for (const leg of legs) {
+                            if (leg.filled) continue;
+                            if (isLong && entryPrice > leg.slPrice) {
+                                leg.slPrice = entryPrice;
+                                if (leg.trailingStop) leg.trailPrice = entryPrice;
+                            } else if (!isLong && entryPrice < leg.slPrice) {
+                                leg.slPrice = entryPrice;
+                                if (leg.trailingStop) leg.trailPrice = entryPrice;
+                            }
+                        }
+                    }
+                }
+
                 // EOD flatten remaining legs
                 if (MarketClock.isEndOfDayFlatten(candle.timestamp)) {
                     for (const leg of legs) {
@@ -287,6 +313,7 @@ export class BacktestEngine {
                             entryReason: action.reason,
                             tradeId: action.tradeId!,
                             legs,
+                            beTriggered: false,
                         };
 
                         console.log(

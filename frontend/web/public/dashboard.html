@@ -55,6 +55,9 @@
                 <a href="#" class="nav-item" id="navNova" title="Nova Terminal">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2z"></path></svg>
                 </a>
+                <a href="#" class="nav-item" id="navTrading" title="Trading Dashboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                </a>
                 <a href="#" class="nav-item" title="Insights">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
                 </a>
@@ -137,6 +140,94 @@
                             </div>
                         </form>
                         <div class="nova-disclaimer">Nova is AI and can make mistakes. Please verify critical trading execution.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tradingView" class="view-section hidden" style="padding: 30px;">
+                <div class="profile-header">
+                    <h2>Trading Dashboard</h2>
+                    <p class="subtitle">Manage Prop Firm Accounts and Engine Risk</p>
+                </div>
+                
+                <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
+                    <!-- Active Accounts Roster -->
+                    <div style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 20px;">
+                        <div>
+                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">EVALUATION PHASE</h3>
+                            <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
+                                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                    <thead>
+                                        <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Account</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Risk</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Target</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Current P&L</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="evalAccountList">
+                                        <tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading evaluation accounts...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">FUNDED PHASE</h3>
+                            <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
+                                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                                    <thead>
+                                        <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Account</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Risk</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Target</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Current P&L</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="fundedAccountList">
+                                        <tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading funded accounts...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Add Account Form -->
+                    <div style="flex: 1; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 12px; border: 1px solid var(--glass-border);">
+                        <h3 style="color: var(--text-light); margin-bottom: 15px;">Add Prop Firm</h3>
+                        <form id="addPropAccountForm" class="profile-form">
+                            <div class="form-group">
+                                <label style="display:block; margin-bottom:5px; color:var(--text-muted); font-size:0.9rem;">Account Name (e.g. Apex-01)</label>
+                                <input type="text" id="propAccountName" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                            </div>
+                            <div class="form-group">
+                                <label style="display:block; margin-bottom:5px; color:var(--text-muted); font-size:0.9rem;">Firm (e.g. Topstep)</label>
+                                <input type="text" id="propFirm" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label style="display:block; margin-bottom:5px; color:var(--text-muted); font-size:0.9rem;">Phase</label>
+                                    <select id="propPhase" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                                        <option value="EVAL">Evaluation</option>
+                                        <option value="FUNDED">Funded</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label style="display:block; margin-bottom:5px; color:var(--text-muted); font-size:0.9rem;">Risk Profile</label>
+                                    <select id="propRisk" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                                        <option value="SAFE">Safe</option>
+                                        <option value="AGGRESSIVE">Aggressive</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label style="display:block; margin-bottom:5px; color:var(--text-muted); font-size:0.9rem;">Profit Target ($)</label>
+                                <input type="number" id="propTarget" value="9000" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                            </div>
+                            <button type="submit" class="btn" style="width: 100%; margin-top: 10px;">Initialize Account</button>
+                        </form>
                     </div>
                 </div>
             </div>

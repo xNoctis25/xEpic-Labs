@@ -33,8 +33,9 @@ let assistPort: MessagePort | null = null;
 // ─── Engine state ────────────────────────────────────────────────────────────
 type EngineState = 'IDLE' | 'AWAITING_HANDSHAKE' | 'IN_TRADE';
 let engineState: EngineState = 'IDLE';
-let isTestingTrade = true;  // Armed immediately — test trade fires on first tick
+let isTestingTrade = false;  // DISABLED — set to true to re-enable preflight test trade
 let isHuntingActive = false;
+let isHalted = false;
 
 // ─── TradingCore — THE BRAIN ─────────────────────────────────────────────────
 const tradeSymbol = ContractBuilder.getActiveContract(config.INDICES);
@@ -132,6 +133,10 @@ async function dispatchActions(actions: TradeAction[]): Promise<void> {
         switch (action.type) {
             case 'ENTER': {
                 if (engineState !== 'IDLE') break;
+                if (isHalted) {
+                    console.log(`[MoMEngine] 🛑 BLOCKED ENTRY: Engine is globally halted.`);
+                    break;
+                }
 
                 const symbol = ContractBuilder.getActiveContract(config.INDICES);
                 const inWilderness = action.regime === 'Wilderness';
@@ -441,6 +446,16 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
         case 'HUNTING_ACTIVE': {
             isHuntingActive = true;
             core.isHuntingActive = true;  // Sync to TradingCore
+            break;
+        }
+
+        case 'HALT_STATE': {
+            isHalted = !!msg.payload;
+            if (isHalted) {
+                console.log(`[MoMEngine] 🛑 HALT ENGAGED — Trading operations locked.`);
+            } else {
+                console.log(`[MoMEngine] 🟢 HALT LIFTED — Trading operations resumed.`);
+            }
             break;
         }
 
