@@ -981,9 +981,9 @@ if (customSelectTrigger && customOptionsContainer) {
 
     // Dynamically inject options to bypass aggressive adblockers or HTML cache dropping the 150K node
     customOptionsContainer.innerHTML = `
-        <div class="custom-option" data-value="50000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s;">TopStep - No Activation - 50K</div>
-        <div class="custom-option" data-value="100000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s;">TopStep - No Activation - 100K</div>
-        <div class="custom-option" data-value="150000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s;">TopStep - No Activation - 150K</div>
+        <div class="custom-option" data-value="50000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s; display: block !important; visibility: visible !important;">TopStep - No Activation - 50K</div>
+        <div class="custom-option" data-value="100000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s; display: block !important; visibility: visible !important;">TopStep - No Activation - 100K</div>
+        <div class="custom-option" data-value="150000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s; display: block !important; visibility: visible !important;">TopStep - No Activation - 150K</div>
     `;
 
     document.querySelectorAll('.custom-option').forEach(option => {
