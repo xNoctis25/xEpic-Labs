@@ -161,7 +161,7 @@
                                     <button class="btn" id="openPropModalBtn" style="width: 175px; height: 42px; display: flex; align-items: center; justify-content: center; padding: 0 15px; font-size: 0.85rem; font-weight: 700; margin-top: 0;">+ Add Account</button>
                                 </div>
                             </div>
-                            <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
+                            <div style="background: transparent; border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>
                                         <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
@@ -181,7 +181,7 @@
 
                         <div>
                             <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px;">FUNDED</h3>
-                            <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
+                            <div style="background: transparent; border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>
                                         <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
@@ -208,21 +208,23 @@
                         <h3 style="color: var(--text-light); margin-bottom: 20px;">Add Prop Firm Account</h3>
                         <form id="addPropAccountForm" class="profile-form">
                             <div class="form-group">
-                                <input type="text" id="propAccountName" required placeholder="Account Name (e.g. Apex-01)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                                <input type="text" id="propAccountName" required placeholder="Account Name (e.g. 150KTC-V2-DLL-585127...)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
                             </div>
                             <div class="form-group">
-                                <input type="text" id="propFirm" required placeholder="Firm (e.g. Topstep)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                                <input type="text" id="propFirm" value="Topstep" disabled required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-muted); cursor: not-allowed;">
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <select id="propPhase" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
-                                        <option value="" disabled selected>Select Phase</option>
-                                        <option value="EVAL">Evaluation</option>
-                                        <option value="FUNDED">Funded</option>
-                                    </select>
+                                    <div class="phase-toggle" style="display: flex; gap: 10px;">
+                                        <input type="radio" id="phaseEval" name="propPhase" value="EVAL" checked style="display:none;">
+                                        <label for="phaseEval" class="toggle-btn" style="flex: 1; text-align: center; padding: 10px; background: rgba(52, 211, 153, 0.2); border: 1px solid #34d399; color: #34d399; border-radius: 8px; cursor: pointer; transition: all 0.2s;">Evaluation</label>
+                                        
+                                        <input type="radio" id="phaseFunded" name="propPhase" value="FUNDED" style="display:none;">
+                                        <label for="phaseFunded" class="toggle-btn" style="flex: 1; text-align: center; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: all 0.2s;">Funded</label>
+                                    </div>
                                 </div>
                                 <div class="form-group">
-                                    <input type="number" id="propTarget" value="9000" required placeholder="Profit Target ($)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                                    <input type="number" id="propTarget" required placeholder="Profit Target ($)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
                                 </div>
                             </div>
                             <button type="submit" class="btn" style="width: 100%; margin-top: 10px;">Initialize Account</button>

@@ -952,6 +952,29 @@ async function loadPropAccounts() {
     }
 }
 
+// ── PHASE TOGGLE LOGIC ────────────────────────────────────────────────────────
+document.querySelectorAll('input[name="propPhase"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        const evalLabel = document.querySelector('label[for="phaseEval"]');
+        const fundedLabel = document.querySelector('label[for="phaseFunded"]');
+        if (e.target.value === 'EVAL') {
+            evalLabel.style.background = 'rgba(52, 211, 153, 0.2)';
+            evalLabel.style.borderColor = '#34d399';
+            evalLabel.style.color = '#34d399';
+            fundedLabel.style.background = 'rgba(255, 255, 255, 0.05)';
+            fundedLabel.style.borderColor = 'var(--glass-border)';
+            fundedLabel.style.color = 'var(--text-muted)';
+        } else {
+            fundedLabel.style.background = 'rgba(52, 211, 153, 0.2)';
+            fundedLabel.style.borderColor = '#34d399';
+            fundedLabel.style.color = '#34d399';
+            evalLabel.style.background = 'rgba(255, 255, 255, 0.05)';
+            evalLabel.style.borderColor = 'var(--glass-border)';
+            evalLabel.style.color = 'var(--text-muted)';
+        }
+    });
+});
+
 const propForm = document.getElementById('addPropAccountForm');
 if (propForm) {
     propForm.addEventListener('submit', async (e) => {
@@ -968,7 +991,7 @@ if (propForm) {
                 body: JSON.stringify({
                     account_name: document.getElementById('propAccountName').value,
                     firm: document.getElementById('propFirm').value,
-                    phase: document.getElementById('propPhase').value,
+                    phase: document.querySelector('input[name="propPhase"]:checked').value,
                     risk_profile: localStorage.getItem('globalRiskProfile') || 'SAFE',
                     profit_target: Number(document.getElementById('propTarget').value)
                 })
