@@ -766,15 +766,23 @@ app.get('/api/auth/trading/engine/status', async (req, res) => {
             "SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1"
         );
 
-        // Detect active trade: last telemetry log action is TRADE_OPENED (not yet TRADE_CLOSED)
-        const tradeResult = await pool.query(`
-            SELECT action FROM mom_telemetry_logs
-            WHERE action IN ('TRADE_OPENED', 'TRADE_CLOSED', 'EMERGENCY_EXIT', 'SYSTEM_RESET')
-              AND created_at > NOW() - INTERVAL '24 hours'
-            ORDER BY created_at DESC LIMIT 1
-        `);
-        const lastAction = tradeResult.rows[0]?.action;
-        const inTrade = lastAction === 'TRADE_OPENED';
+        // Detect active trade: look for an open trade_id (has ENTRY log but no EXIT in last 24h)
+        // Wrapped in its own try/catch — never crashes the status endpoint
+        let inTrade = false;
+        try {
+            const tradeResult = await pool.query(`
+                SELECT trade_id, message FROM mom_telemetry_logs
+                WHERE trade_id IS NOT NULL
+                  AND timestamp > NOW() - INTERVAL '24 hours'
+                ORDER BY timestamp DESC LIMIT 1
+            `);
+            const lastRow = tradeResult.rows[0];
+            if (lastRow) {
+                // A trade is live if the most recent trade log doesn't mention exit/close/flat
+                const msg = (lastRow.message || '').toLowerCase();
+                inTrade = !msg.includes('exit') && !msg.includes('closed') && !msg.includes('flat') && !msg.includes('sweep');
+            }
+        } catch { /* silently ignore — don't let trade detection crash status */ }
 
         if (haltResult.rows.length > 0) {
             res.status(200).json({ status: 'HALTED', reason: haltResult.rows[0].halt_type, in_trade: inTrade });

@@ -639,8 +639,11 @@ function updateMarketClock() {
     }
 
     uiKillzoneLabel.textContent = kzText;
-    uiKillzoneDot.className     = 'dot ' + kzColor;
+    uiKillzoneDot.className     = 'dot ' + (_tradeActive ? 'pulse-' + kzColor : kzColor);
 }
+
+// Trade state — set by updateEngineStatus every 15s, read by updateMarketClock
+var _tradeActive = false;
 
 // ── SESSION OVERLAP CROSSFADE ─────────────────────────────────────────────────
 var _overlapTimer = null;
@@ -695,14 +698,8 @@ async function updateEngineStatus() {
             uiEngineDot.className = 'dot green';
         }
 
-        // ── Killzone pill: pulse green ONLY while a trade is live ─────
-        // updateMarketClock() normally owns the killzone dot color.
-        // We override it here if in_trade=true, and release it back to
-        // the clock when the trade is closed.
-        if (uiKillzoneDot && res.in_trade) {
-            uiKillzoneDot.className = 'dot pulse-green';
-        }
-        // (If not in_trade, updateMarketClock() will restore the correct color on next tick)
+        // ── Killzone pulse: store trade state for updateMarketClock to use ──
+        _tradeActive = !!res.in_trade;
 
     } catch (err) {
         console.error('Failed to get engine status:', err);
