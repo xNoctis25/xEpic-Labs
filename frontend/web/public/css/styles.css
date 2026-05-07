@@ -902,20 +902,35 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 
 .notif-item {
     display: flex; gap: 10px; align-items: flex-start;
-    padding: 11px 16px;
+    padding: 11px 16px 11px 18px;
     border-bottom: 1px solid rgba(255,255,255,0.04);
-    transition: background 0.15s;
+    border-left: 3px solid transparent;
+    transition: background 0.2s, border-color 0.2s, opacity 0.2s;
     cursor: default;
 }
 .notif-item:last-child { border-bottom: none; }
-.notif-item:hover { background: rgba(255,255,255,0.03); }
-.notif-item.unread { background: rgba(102,252,241,0.04); }
-.notif-item.unread .notif-msg { color: #e3e3e3; }
+.notif-item:hover { background: rgba(255,255,255,0.04); }
 
-.notif-msg { flex: 1; font-size: 0.82rem; color: rgba(255,255,255,0.65); line-height: 1.45; }
+/* Unread: email-style — clickable to mark read */
+.notif-item.unread {
+    background: rgba(102,252,241,0.06);
+    border-left-color: #66fcf1;
+    cursor: pointer;
+}
+.notif-item.unread:hover {
+    background: rgba(102,252,241,0.11);
+    border-left-color: #a0fffa;
+}
+.notif-item.unread .notif-msg { color: #ffffff; font-weight: 600; }
+.notif-item.unread .notif-rel-time { color: rgba(255,255,255,0.7); }
+.notif-item.unread .notif-abs-time { color: rgba(255,255,255,0.45); }
+.notif-item.marking { opacity: 0.5; pointer-events: none; }
+
+/* Read: muted */
+.notif-msg { flex: 1; font-size: 0.82rem; color: rgba(255,255,255,0.45); line-height: 1.45; }
 .notif-time-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
-.notif-rel-time { font-size: 0.72rem; color: rgba(255,255,255,0.35); white-space: nowrap; }
-.notif-abs-time { font-size: 0.68rem; color: rgba(255,255,255,0.22); white-space: nowrap; }
+.notif-rel-time { font-size: 0.72rem; color: rgba(255,255,255,0.28); white-space: nowrap; }
+.notif-abs-time { font-size: 0.68rem; color: rgba(255,255,255,0.18); white-space: nowrap; }
 
 .notif-empty {
     padding: 32px 16px;

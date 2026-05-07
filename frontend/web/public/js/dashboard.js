@@ -1210,7 +1210,6 @@ if (editPropAccountForm) {
                 <div class="notif-time-wrap">
                     <span class="notif-rel-time">${relativeTime(n.created_at)}</span>
                     <span class="notif-abs-time">${absTimeEST(n.created_at)}</span>
-                    ${!n.read ? `<button class="notif-dismiss-btn" data-id="${n.id}" title="Mark as read">\u2713</button>` : ''}
                 </div>
             </div>
         `).join('');
@@ -1255,32 +1254,33 @@ if (editPropAccountForm) {
         }
     }
 
-    // ── Mark-as-read helper ───────────────────────────────────────────────
-    async function markOneRead(id, rowEl) {
+    // ── Mark-as-read helper (reloads list from DB for guaranteed accuracy) ──
+    async function markOneRead(id, rowEl, reloadFn) {
+        rowEl.classList.add('marking');
         try {
             await auth.request(`/trading/notifications/${id}/read`, { method: 'PATCH' });
-            rowEl.classList.remove('unread');
-            rowEl.querySelector('.notif-dismiss-btn')?.remove();
             await refreshBadge();
-        } catch (_) { /* silent */ }
+            await reloadFn();
+        } catch (err) {
+            console.error('[Notif] markOneRead failed:', err);
+            rowEl.classList.remove('marking');
+        }
     }
 
-    // ── Event delegation — dropdown list ──────────────────────────────────
+    // ── Event delegation — dropdown list (click row to mark read) ──────────
     list.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.notif-dismiss-btn');
-        if (btn) {
-            e.stopPropagation();
-            await markOneRead(btn.dataset.id, btn.closest('.notif-item'));
+        const row = e.target.closest('.notif-item.unread');
+        if (row) {
+            await markOneRead(row.dataset.id, row, () => loadDropdown(currentPage));
         }
     });
 
-    // ── Event delegation — history modal list ─────────────────────────────
+    // ── Event delegation — history modal list (click row to mark read) ─────
     if (historyBody) {
         historyBody.addEventListener('click', async (e) => {
-            const btn = e.target.closest('.notif-dismiss-btn');
-            if (btn) {
-                e.stopPropagation();
-                await markOneRead(btn.dataset.id, btn.closest('.notif-item'));
+            const row = e.target.closest('.notif-item.unread');
+            if (row) {
+                await markOneRead(row.dataset.id, row, () => loadHistoryModal(currentHistoryPage));
             }
         });
     }
@@ -1291,31 +1291,30 @@ if (editPropAccountForm) {
         const isOpen = dropdown.classList.contains('open');
         dropdown.classList.toggle('open', !isOpen);
         if (!isOpen) {
-            await loadDropdown(1);
-            // Auto-mark all as read when opening
-            try {
-                await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
-                badge.style.display = 'none';
-                bellBtn.classList.remove('has-unread');
-            } catch (_) { /* silent */ }
+            await loadDropdown(1);  // just shows list — user marks manually
         }
     });
 
-    // ── Mark all read button (dropdown header) ────────────────────────────
+    // ── Mark all read button (dropdown header) — reload list after ────────
     markReadBtn?.addEventListener('click', async () => {
+        markReadBtn.textContent = '…';
+        markReadBtn.disabled = true;
         try {
             await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
-            badge.style.display = 'none';
-            bellBtn.classList.remove('has-unread');
-            list.querySelectorAll('.notif-item.unread').forEach(el => {
-                el.classList.remove('unread');
-                el.querySelector('.notif-dismiss-btn')?.remove();
-            });
-        } catch (_) { /* silent */ }
+            await refreshBadge();
+            await loadDropdown(currentPage);  // reload from DB
+        } catch (err) {
+            console.error('[Notif] markAllRead (dropdown) failed:', err);
+        } finally {
+            markReadBtn.textContent = 'Mark all read';
+            markReadBtn.disabled = false;
+        }
     });
 
     // ── View All History — open modal ─────────────────────────────────────
+    let currentHistoryPage = 1;
     async function loadHistoryModal(page = 1) {
+        currentHistoryPage = page;
         if (!overlay || !historyBody) return;
         overlay.classList.add('open');
         dropdown.classList.remove('open');
@@ -1348,15 +1347,18 @@ if (editPropAccountForm) {
     overlay?.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('open'); });
 
     historyMark?.addEventListener('click', async () => {
+        historyMark.textContent = '…';
+        historyMark.disabled = true;
         try {
             await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
-            badge.style.display = 'none';
-            bellBtn.classList.remove('has-unread');
-            historyBody.querySelectorAll('.notif-item.unread').forEach(el => {
-                el.classList.remove('unread');
-                el.querySelector('.notif-dismiss-btn')?.remove();
-            });
-        } catch (_) { /* silent */ }
+            await refreshBadge();
+            await loadHistoryModal(currentHistoryPage);  // reload from DB
+        } catch (err) {
+            console.error('[Notif] markAllRead (history) failed:', err);
+        } finally {
+            historyMark.textContent = 'Mark all read';
+            historyMark.disabled = false;
+        }
     });
 
     // ── Close dropdown on outside click ───────────────────────────────────
