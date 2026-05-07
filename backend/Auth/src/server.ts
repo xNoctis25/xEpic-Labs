@@ -623,6 +623,7 @@ You also have the ability to control the M.o.M trading engine. If the user tells
 - Halt Trading: Halts new entries.
 - Resume Trading: Clears all halts.
 - Close Trade: Wipes the board and halts permanently.
+- Switch Playbook: Switches the engine between PROP_FIRM (prop firm risk rules, buffer-based sizing) and CASH_ACCOUNT (standard buying power sizing). Use when the user says 'switch to prop firm', 'use prop firm playbook', 'switch to cash account', 'use cash account mode', etc.
 
 The user's name is: ${decoded.username}`,
                 tools: [{
@@ -641,6 +642,21 @@ The user's name is: ${decoded.username}`,
                             name: "close_engine",
                             description: "Emergency closes the trading engine. It immediately wipes the board (closes all open positions and orders) and halts permanently. Use this when the user says 'close the trade' or 'emergency stop'.",
                             parameters: { type: "OBJECT" as any, properties: {} }
+                        },
+                        {
+                            name: "switch_playbook",
+                            description: "Switches the M.o.M engine playbook between PROP_FIRM and CASH_ACCOUNT. PROP_FIRM uses buffer-based position sizing across active prop accounts. CASH_ACCOUNT uses standard buying power. Use when the user says 'switch to prop firm', 'use prop firm playbook', 'switch to cash account', 'use cash account mode', etc.",
+                            parameters: {
+                                type: "OBJECT" as any,
+                                properties: {
+                                    playbook: {
+                                        type: "STRING" as any,
+                                        enum: ["PROP_FIRM", "CASH_ACCOUNT"],
+                                        description: "The playbook to activate."
+                                    }
+                                },
+                                required: ["playbook"]
+                            }
                         }
                     ]
                 }]
@@ -660,6 +676,40 @@ The user's name is: ${decoded.username}`,
                 } else if (call.name === "close_engine") {
                     await pool.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('EMERGENCY_CLOSE', TRUE)`);
                     toolOutput = "Engine emergency closed. All positions will be flattened immediately.";
+                } else if (call.name === "switch_playbook") {
+                    const playbook = ((call.args as any)?.playbook ?? '').toUpperCase() as string;
+                    if (!['PROP_FIRM', 'CASH_ACCOUNT'].includes(playbook)) {
+                        toolOutput = "Invalid playbook value. Must be PROP_FIRM or CASH_ACCOUNT.";
+                    } else {
+                        await pool.query(
+                            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW() WHERE id = 1`,
+                            [playbook]
+                        );
+                        await pool.query(
+                            `INSERT INTO engine_notifications (event_type, message) VALUES ($1, $2)`,
+                            ['PLAYBOOK_SWITCH', `🔄 Playbook → ${playbook} via Nova`]
+                        );
+                        // Build a contextual response with current buffer status
+                        let bufInfo = '';
+                        if (playbook === 'PROP_FIRM') {
+                            const bufRes = await pool.query(
+                                `SELECT account_balance, account_size, max_loss_limit FROM prop_accounts WHERE status = 'ACTIVE'`
+                            );
+                            if (bufRes.rows.length === 0) {
+                                bufInfo = ' No active prop accounts found — entries will be blocked until an account is set to ACTIVE.';
+                            } else {
+                                const buffers = bufRes.rows.map((r: any) =>
+                                    Number(r.max_loss_limit) + (Number(r.account_balance ?? r.account_size) - Number(r.account_size))
+                                );
+                                const minBuf = Math.min(...buffers);
+                                const contracts = minBuf >= 1500
+                                    ? `${Math.floor(minBuf / 1500)} ES`
+                                    : `${Math.floor(minBuf / 150)} MES`;
+                                bufInfo = ` Min buffer: $${minBuf.toFixed(0)} → sizing for ${contracts}.`;
+                            }
+                        }
+                        toolOutput = `Playbook switched to ${playbook}.${bufInfo} The engine will pick up the change within 30 seconds.`;
+                    }
                 }
             } catch (err) {
                 console.error("[NOVA TOOL ERROR]", err);
