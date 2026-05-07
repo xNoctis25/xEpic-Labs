@@ -998,8 +998,20 @@ if (propForm) {
             });
             
             propForm.reset();
+            
+            // Reset phase toggle UI to EVAL
+            const evalLabel = document.querySelector('label[for="phaseEval"]');
+            const fundedLabel = document.querySelector('label[for="phaseFunded"]');
+            if (evalLabel && fundedLabel) {
+                evalLabel.style.background = 'rgba(52, 211, 153, 0.2)';
+                evalLabel.style.borderColor = '#34d399';
+                evalLabel.style.color = '#34d399';
+                fundedLabel.style.background = 'rgba(255, 255, 255, 0.05)';
+                fundedLabel.style.borderColor = 'var(--glass-border)';
+                fundedLabel.style.color = 'var(--text-muted)';
+            }
+
             await loadPropAccounts();
-            if (propAccountModal) propAccountModal.style.display = 'none';
             
             // Temporary success state
             btn.textContent = 'Success!';
@@ -1009,7 +1021,8 @@ if (propForm) {
                 btn.textContent = originalText;
                 btn.style.background = '';
                 btn.style.color = '';
-            }, 2000);
+                if (propAccountModal) propAccountModal.style.display = 'none';
+            }, 1000);
             
         } catch (err) {
             alert('Failed to add account: ' + (err.message || 'Unknown error'));
