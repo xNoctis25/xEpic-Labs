@@ -68,49 +68,73 @@ export class PositionSizer {
         const maxCap = propOverride?.maxPositionSize || config.MAX_CONTRACTS;
 
         // ==========================================
-        // PROP FIRM OVERRIDE — Mega Heist Scaling Ladder
+        // PROP FIRM OVERRIDE — Dynamic 9% Drawdown Sizing
         // ==========================================
-        if (propOverride) {
-            // EVAL Phase: Topstep 3-Day Sniper Playbook
-            if (propOverride.phase === 'EVAL') {
-                const buffer = Number(propOverride.currentBuffer);
-                let qty = 6;
-                let tier = 'Day 1 Buffer Trade';
+        if (propOverride && propOverride.maxLossLimit) {
+            const lossLimit = Math.abs(propOverride.maxLossLimit);
+            const buffer = Math.max(0, Number(propOverride.currentBuffer));
+            
+            // 1. Calculate how much dollar loss we can actually sustain before hitting the limit
+            const availableLoss = lossLimit + buffer;
 
-                if (buffer >= 2000) {
-                    qty = 8;
-                    tier = 'Day 2/3 Scaling Trade';
+            // 2. Reverse-engineer Safe Virtual Capital based on the historical 9% max drawdown metric
+            //    This ensures that a 9% drawdown will exactly equal the available loss
+            const safeVirtualCapital = availableLoss / 0.09;
+
+            // 3. Apply standard configured risk % against the Virtual Capital
+            const safeRisk = Math.min(10, Math.max(1, config.RISK));
+            const riskBudget = safeVirtualCapital * (safeRisk / 100);
+
+            // 4. Calculate max contracts affordable within this budget
+            const esRisk = slPoints * ES_DOLLAR_PER_POINT;
+            const mesRisk = slPoints * MES_DOLLAR_PER_POINT;
+
+            let finalQty = 0;
+            let finalSymbol: 'ES' | 'MES' = 'MES';
+
+            if (baseIndex === 'ES') {
+                let potentialES = Math.floor(riskBudget / esRisk);
+                if (maxCap > 0) potentialES = Math.min(potentialES, maxCap);
+
+                if (potentialES >= 1) {
+                    finalQty = potentialES;
+                    finalSymbol = 'ES';
+                } else {
+                    // Fallback to MES
+                    let potentialMES = Math.floor(riskBudget / mesRisk);
+                    if (maxCap > 0) potentialMES = Math.min(potentialMES, maxCap);
+                    
+                    if (potentialMES >= 1) {
+                        finalQty = potentialMES;
+                        finalSymbol = 'MES';
+                    }
                 }
-
-                console.log(`📐 [PositionSizer] - PROP EVAL: Buffer $${buffer.toFixed(2)} → ${tier} → ES × ${qty}`);
-                return { symbolRoot: 'ES', qty, riskBudget: 0 };
+            } else {
+                // MES Only
+                let potentialMES = Math.floor(riskBudget / mesRisk);
+                if (maxCap > 0) potentialMES = Math.min(potentialMES, maxCap);
+                
+                if (potentialMES >= 1) {
+                    finalQty = potentialMES;
+                    finalSymbol = 'MES';
+                }
             }
 
-            // FUNDED Phase: The Scaling Ladder
-            if (propOverride.phase === 'FUNDED') {
-                const buffer = Number(propOverride.currentBuffer);
-                let qty = 1;
-                let tier = '';
-
-                if (propOverride.riskProfile === 'SAFE') {
-                    if (buffer < 4500)       { qty = 1;  tier = 'The Trench'; }
-                    else if (buffer < 10000) { qty = 3;  tier = 'The Armor'; }
-                    else if (buffer < 20000) { qty = 5;  tier = 'Momentum'; }
-                    else if (buffer < 30000) { qty = 10; tier = 'Heavyweight'; }
-                    else                     { qty = 15; tier = 'Final Boss'; }
-                } else if (propOverride.riskProfile === 'AGGRESSIVE') {
-                    if (buffer < 10000)      { qty = 3;  tier = 'The Sprint'; }
-                    else if (buffer < 25000) { qty = 5;  tier = 'Momentum'; }
-                    else if (buffer < 45000) { qty = 10; tier = 'Heavyweight'; }
-                    else                     { qty = 15; tier = 'Mega Heist'; }
-                }
-
+            if (finalQty >= 1) {
                 console.log(
-                    `📐 [PositionSizer] - PROP FUNDED [${propOverride.riskProfile}]:` +
-                    ` Buffer $${buffer.toFixed(2)} → ${tier} → ES × ${qty}`
+                    `📐 [PositionSizer] - PROP DYNAMIC (9% DD Rule) | Buffer $${buffer.toFixed(2)}` +
+                    ` | MaxLoss: $${lossLimit} | VirtCap: $${Math.floor(safeVirtualCapital)}` +
+                    ` → Risk: $${riskBudget.toFixed(2)} → ${finalSymbol} × ${finalQty}`
                 );
-                return { symbolRoot: 'ES', qty, riskBudget: 0 };
+                return { symbolRoot: finalSymbol, qty: finalQty, riskBudget };
             }
+
+            console.log(
+                `📐 [PositionSizer] - PROP REJECTED | Buffer $${buffer.toFixed(2)}` +
+                ` | MaxLoss: $${lossLimit} | VirtCap: $${Math.floor(safeVirtualCapital)}` +
+                ` → Insufficient Risk Budget ($${riskBudget.toFixed(2)})`
+            );
+            return null;
         }
 
         // ==========================================
