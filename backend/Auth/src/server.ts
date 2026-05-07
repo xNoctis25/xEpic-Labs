@@ -664,14 +664,16 @@ The user's name is: ${decoded.username}`,
 
 // ── PROP FIRM ACCOUNTS (Protected) ──────────────────────────────────────────
 app.get('/api/auth/trading/prop-accounts', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ message: 'No token provided.' });
-        }
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET); // Throws if invalid
-
-        // Fetch all accounts, ordered by ID
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+    } catch (jwtErr) {
+        return res.status(401).json({ message: 'Token expired or invalid. Please log in again.' });
+    }
+    try {
         const result = await pool.query('SELECT * FROM prop_accounts ORDER BY id ASC');
         res.status(200).json(result.rows);
     } catch (error) {

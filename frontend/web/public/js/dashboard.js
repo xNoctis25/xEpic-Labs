@@ -948,9 +948,14 @@ async function loadPropAccounts() {
         fundedList.innerHTML = fundedHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
     } catch (err) {
         console.error('Failed to load prop accounts:', err);
-        const msg = err.status === 404 ? 'No accounts found.' : (err.message || 'Error loading accounts.');
-        evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
-        fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        if (err.status === 401) {
+            evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Session expired. <a href="/" style="color: var(--primary);">Please log in again.</a></td></tr>`;
+            fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Session expired. <a href="/" style="color: var(--primary);">Please log in again.</a></td></tr>`;
+        } else {
+            const msg = err.status === 404 ? 'No accounts found.' : (err.message || 'Error loading accounts.');
+            evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+            fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        }
     }
 }
 
