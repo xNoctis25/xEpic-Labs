@@ -152,7 +152,22 @@ export async function hydrate(
         return candles;
 
     } catch (err: any) {
-        const body = err.response?.data ? String(err.response.data).slice(0, 200) : '';
+        if (err.response?.status === 422 && typeof err.response?.data === 'object') {
+            const detail = err.response.data.detail;
+            if (detail?.case === 'data_schema_not_fully_available') {
+                const msg = detail.message || '';
+                const match = msg.match(/and\s+(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)/);
+                if (match && match[1]) {
+                    const fallbackEnd = new Date(match[1]).getTime();
+                    if (fallbackEnd > startTime.getTime() && fallbackEnd < rawEnd) {
+                        console.warn(`[Hydration] ${dataset} 422 Schema not fully available. Fallback to ${new Date(fallbackEnd).toISOString()}`);
+                        return hydrate(dataset, symbols, minutes, fallbackEnd);
+                    }
+                }
+            }
+        }
+
+        const body = err.response?.data ? JSON.stringify(err.response.data).slice(0, 200) : '';
         console.warn(
             `[Hydration] ${dataset} FAILED: ${err.response?.status ?? ''} | ` +
             `start=${startTime.toISOString()} end=${endTime.toISOString()} | ${body}`

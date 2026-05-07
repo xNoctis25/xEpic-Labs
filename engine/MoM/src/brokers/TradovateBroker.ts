@@ -302,11 +302,28 @@ export class TradovateBroker {
 
             const { id: accountId } = await this.getAccountId();
 
-            const balanceRes = await this.withTokenRetry(() =>
-                this.axiosInstance.get('/cashBalance/getCashBalanceSnapshot', {
-                    params: { accountId },
-                })
-            );
+            let balanceRes;
+            try {
+                balanceRes = await this.withTokenRetry(() =>
+                    this.axiosInstance.get('/cashBalance/getCashBalanceSnapshot', {
+                        params: { accountId },
+                        timeout: 15000,
+                    })
+                );
+            } catch (firstErr: any) {
+                if (firstErr.code === 'ECONNABORTED' || firstErr.message.includes('timeout')) {
+                    console.warn('⚠️ [TradovateBroker] - getCashBalance timeout. Retrying in 2s...');
+                    await new Promise(r => setTimeout(r, 2000));
+                    balanceRes = await this.withTokenRetry(() =>
+                        this.axiosInstance.get('/cashBalance/getCashBalanceSnapshot', {
+                            params: { accountId },
+                            timeout: 15000,
+                        })
+                    );
+                } else {
+                    throw firstErr;
+                }
+            }
 
             const balance = balanceRes.data?.totalCashValue ?? balanceRes.data?.cashBalance ?? 0;
             return balance;
