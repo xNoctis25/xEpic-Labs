@@ -793,6 +793,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // ── Restore last active view on refresh ───────────────────────────────
     var savedView = localStorage.getItem(ACTIVE_VIEW_KEY) || 'home';
     window.switchView(savedView);
+    // ── Auto-load data for the restored view ──────────────────────────────────
+    if (savedView === 'trading') {
+        loadPropAccounts();
+    }
     if (savedView === 'nova') {
         // Layout engine needs view to be visible — wait for render
         setTimeout(novaApplyLayout, 500);
@@ -1081,7 +1085,14 @@ window.openEditAccountModal = async function(id) {
         const balInput = document.getElementById('editAccountBalance');
         balInput.value       = formatCurrencyInput(currentBalance);
         balInput.placeholder = balPlaceholder;
-        // Reformat on blur
+        // Live format while typing
+        balInput.oninput = () => {
+            const raw = balInput.value.replace(/[^0-9.]/g, '');
+            const parts = raw.split('.');
+            const intFormatted = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            balInput.value = '$' + intFormatted + (parts.length > 1 ? '.' + parts[1].slice(0, 2) : '');
+        };
+        // Reformat on blur (adds .00 if missing)
         balInput.onblur = () => { const formatted = formatCurrencyInput(balInput.value); if (formatted) balInput.value = formatted; };
         document.getElementById('editAccountId').value        = acc.id;
         document.getElementById('editAccountName').value      = acc.account_name;
