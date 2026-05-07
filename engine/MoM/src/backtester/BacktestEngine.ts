@@ -136,6 +136,7 @@ export class BacktestEngine {
         let equity = this.initialCapital;
         let peakEquity = this.initialCapital;
         let maxDrawdown = 0;
+        let maxDrawdownDollars = 0;
         const trades: TradeRecord[] = [];
 
         let position: SimulatedPosition | null = null;
@@ -152,7 +153,9 @@ export class BacktestEngine {
             // Trailing Max Drawdown
             if (equity > peakEquity) peakEquity = equity;
             const currentDrawdown = ((peakEquity - equity) / peakEquity) * 100;
+            const currentDrawdownDollars = peakEquity - equity;
             if (currentDrawdown > maxDrawdown) maxDrawdown = currentDrawdown;
+            if (currentDrawdownDollars > maxDrawdownDollars) maxDrawdownDollars = currentDrawdownDollars;
 
             // ── SIMULATE FILLS on existing position (before TradingCore sees the candle) ──
             if (position) {
@@ -438,7 +441,7 @@ export class BacktestEngine {
         console.log(`[BacktestEngine] ═══════════════════════════════════════`);
         console.log(`[BacktestEngine]  Win Rate:     ${winRate.toFixed(1)}% (${winningTrades}W / ${losingTrades}L)`);
         console.log(`[BacktestEngine]  Net Profit:   $${(equity - this.initialCapital).toFixed(2)}`);
-        console.log(`[BacktestEngine]  Max Drawdown: ${maxDrawdown.toFixed(2)}%`);
+        console.log(`[BacktestEngine]  Max Drawdown: ${maxDrawdown.toFixed(2)}% ($${maxDrawdownDollars.toFixed(2)} | ${maxDrawdownDollars / 50} ES pts | ${maxDrawdownDollars / 5} MES pts)`);
         console.log(`[BacktestEngine]  Avg Win:      $${avgWin.toFixed(2)}`);
         console.log(`[BacktestEngine]  Avg Loss:     $${avgLoss.toFixed(2)}`);
         console.log(`[BacktestEngine]  Avg R-Mult:   ${avgRMult.toFixed(2)}R`);

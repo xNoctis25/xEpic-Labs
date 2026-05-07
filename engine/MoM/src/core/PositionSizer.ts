@@ -68,41 +68,36 @@ export class PositionSizer {
         const maxCap = propOverride?.maxPositionSize || config.MAX_CONTRACTS;
 
         // ==========================================
-        // PROP FIRM OVERRIDE — Dynamic 9% Drawdown Sizing
+        // PROP FIRM OVERRIDE — Dynamic Linear Scaling ($1500 = 1 ES)
         // ==========================================
         if (propOverride && propOverride.maxLossLimit) {
             const lossLimit = Math.abs(propOverride.maxLossLimit);
-            const buffer = Math.max(0, Number(propOverride.currentBuffer));
+            // Allow negative buffer (drawdown) so Available Loss shrinks appropriately
+            const buffer = Number(propOverride.currentBuffer);
             
             // 1. Calculate how much dollar loss we can actually sustain before hitting the limit
             const availableLoss = lossLimit + buffer;
 
-            // 2. Reverse-engineer Safe Virtual Capital based on the historical 9% max drawdown metric
-            //    This ensures that a 9% drawdown will exactly equal the available loss
-            const safeVirtualCapital = availableLoss / 0.09;
+            // 2. Linear Scaling Model: 1 ES per $1500 of Available Loss
+            //    This mathematically guarantees starting with 3 ES on a $4500 limit at $0 buffer.
+            let potentialES = Math.floor(availableLoss / 1500);
 
-            // 3. Apply standard configured risk % against the Virtual Capital
-            const safeRisk = Math.min(10, Math.max(1, config.RISK));
-            const riskBudget = safeVirtualCapital * (safeRisk / 100);
-
-            // 4. Calculate max contracts affordable within this budget
-            const esRisk = slPoints * ES_DOLLAR_PER_POINT;
-            const mesRisk = slPoints * MES_DOLLAR_PER_POINT;
+            // 3. Ensure we don't exceed the prop firm's hard max contract limit (expressed in Minis)
+            if (maxCap > 0) potentialES = Math.min(potentialES, maxCap);
 
             let finalQty = 0;
             let finalSymbol: 'ES' | 'MES' = 'MES';
 
             if (baseIndex === 'ES') {
-                let potentialES = Math.floor(riskBudget / esRisk);
-                if (maxCap > 0) potentialES = Math.min(potentialES, maxCap);
-
                 if (potentialES >= 1) {
                     finalQty = potentialES;
                     finalSymbol = 'ES';
                 } else {
-                    // Fallback to MES
-                    let potentialMES = Math.floor(riskBudget / mesRisk);
-                    if (maxCap > 0) potentialMES = Math.min(potentialMES, maxCap);
+                    // Fallback to MES if Available Loss drops below $1500
+                    // $150 per MES (1/10th scale)
+                    let potentialMES = Math.floor(availableLoss / 150);
+                    // Topstep max capacity is expressed in Minis, so Micros limit is 10x
+                    if (maxCap > 0) potentialMES = Math.min(potentialMES, maxCap * 10);
                     
                     if (potentialMES >= 1) {
                         finalQty = potentialMES;
@@ -110,9 +105,9 @@ export class PositionSizer {
                     }
                 }
             } else {
-                // MES Only
-                let potentialMES = Math.floor(riskBudget / mesRisk);
-                if (maxCap > 0) potentialMES = Math.min(potentialMES, maxCap);
+                // MES Only mode
+                let potentialMES = Math.floor(availableLoss / 150);
+                if (maxCap > 0) potentialMES = Math.min(potentialMES, maxCap * 10);
                 
                 if (potentialMES >= 1) {
                     finalQty = potentialMES;
@@ -120,19 +115,22 @@ export class PositionSizer {
                 }
             }
 
+            // Estimate theoretical risk budget for reporting
+            const riskBudget = finalSymbol === 'ES' ? finalQty * 1000 : finalQty * 100;
+
             if (finalQty >= 1) {
                 console.log(
-                    `📐 [PositionSizer] - PROP DYNAMIC (9% DD Rule) | Buffer $${buffer.toFixed(2)}` +
-                    ` | MaxLoss: $${lossLimit} | VirtCap: $${Math.floor(safeVirtualCapital)}` +
-                    ` → Risk: $${riskBudget.toFixed(2)} → ${finalSymbol} × ${finalQty}`
+                    `📐 [PositionSizer] - PROP LINEAR ($1500/ES) | Buffer $${buffer.toFixed(2)}` +
+                    ` | MaxLoss: $${lossLimit} | AvailLoss: $${availableLoss.toFixed(2)}` +
+                    ` → ${finalSymbol} × ${finalQty}`
                 );
                 return { symbolRoot: finalSymbol, qty: finalQty, riskBudget };
             }
 
             console.log(
                 `📐 [PositionSizer] - PROP REJECTED | Buffer $${buffer.toFixed(2)}` +
-                ` | MaxLoss: $${lossLimit} | VirtCap: $${Math.floor(safeVirtualCapital)}` +
-                ` → Insufficient Risk Budget ($${riskBudget.toFixed(2)})`
+                ` | AvailLoss: $${availableLoss.toFixed(2)}` +
+                ` → Dangerously close to blowout limit! Trading halted.`
             );
             return null;
         }
