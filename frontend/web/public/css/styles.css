@@ -812,6 +812,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 /* Pin Session pill to longest label so it never resizes between London/New York */
 #uiSessionLabel  { display: inline-block; width: 126px; } /* "Session: New York" */
 
+/* Non-intrusive column dividers for prop firm tables */
+#tradingView th + th,
+#tradingView td + td { border-left: 1px solid rgba(255,255,255,0.05); }
+
+
 /* Semantic Dot States */
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .dot.green { background: #00e676; box-shadow: 0 0 8px #00e676; }
