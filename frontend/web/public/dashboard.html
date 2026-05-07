@@ -145,22 +145,22 @@
             </div>
 
             <div id="tradingView" class="view-section hidden" style="padding: 30px; max-width: 1000px; margin: 0 auto; width: 100%;">
-                <div class="profile-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
-                    <div>
-                        <h2>Prop Firm Accounts</h2>
-                        <p class="subtitle">Manage Active Evaluation and Funded Engine Risk</p>
-                    </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn" id="globalRiskToggleBtn" style="width: 160px; text-align: center; padding: 10px 20px; font-size: 0.9rem; background: rgba(52, 211, 153, 0.2); color: #34d399; border: 1px solid #34d399; transition: all 0.3s ease;">Risk: SAFE</button>
-                        <button class="btn" id="openPropModalBtn" style="width: auto; padding: 10px 20px; font-size: 0.9rem;">+ Add Account</button>
-                    </div>
+                <div class="profile-header" style="text-align: center; margin-bottom: 40px;">
+                    <h2 style="font-size: 1.8rem; margin-bottom: 8px;">Prop Firm Accounts</h2>
+                    <p class="subtitle" style="font-size: 0.95rem; opacity: 0.8;">Manage Active Evaluation and Funded Engine Risk</p>
                 </div>
                 
                 <div style="display: flex; gap: 30px; align-items: flex-start; flex-wrap: wrap;">
                     <!-- Active Accounts Roster -->
-                    <div style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 20px;">
+                    <div style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 30px;">
                         <div>
-                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px;">EVALUATION</h3>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <h3 style="color: var(--primary); margin: 0; font-size: 1.1rem; letter-spacing: 1px;">EVALUATION</h3>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <button class="btn" id="globalRiskToggleBtn" style="width: 175px; height: 42px; display: flex; align-items: center; justify-content: center; padding: 0 15px; font-size: 0.85rem; font-weight: 700; background: rgba(52, 211, 153, 0.2); color: #34d399; border: 1px solid #34d399; transition: all 0.3s ease; margin-top: 0;">Risk: SAFE 🛡️</button>
+                                    <button class="btn" id="openPropModalBtn" style="width: 175px; height: 42px; display: flex; align-items: center; justify-content: center; padding: 0 15px; font-size: 0.85rem; font-weight: 700; margin-top: 0;">+ Add Account</button>
+                                </div>
+                            </div>
                             <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>

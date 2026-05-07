@@ -487,15 +487,15 @@ const globalRiskToggleBtn = document.getElementById('globalRiskToggleBtn');
 
 function updateGlobalRiskToggle(riskProfile) {
     if (!globalRiskToggleBtn) return;
-    globalRiskToggleBtn.style.display = 'inline-block';
+    globalRiskToggleBtn.style.display = 'flex';
     
     if (riskProfile === 'SAFE') {
-        globalRiskToggleBtn.textContent = 'Risk: SAFE';
+        globalRiskToggleBtn.textContent = 'Risk: SAFE 🛡️';
         globalRiskToggleBtn.style.background = 'rgba(52, 211, 153, 0.2)';
         globalRiskToggleBtn.style.color = '#34d399';
         globalRiskToggleBtn.style.borderColor = '#34d399';
     } else {
-        globalRiskToggleBtn.textContent = 'Risk: AGGRESSIVE';
+        globalRiskToggleBtn.textContent = 'Risk: AGGRESSIVE 🚀';
         globalRiskToggleBtn.style.background = 'rgba(248, 113, 113, 0.2)';
         globalRiskToggleBtn.style.color = '#f87171';
         globalRiskToggleBtn.style.borderColor = '#f87171';
