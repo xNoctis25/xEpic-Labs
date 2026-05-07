@@ -908,8 +908,9 @@ async function loadPropAccounts() {
                               (acc.status === 'BLOWN' ? 'var(--error)' : 'var(--text-light)');
             
             const pnlColor = acc.current_pnl >= 0 ? 'var(--primary)' : 'var(--error)';
+            const sizeFormatted = Number(acc.account_size).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+            const lossFormatted = Number(acc.max_loss_limit).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const pnlFormatted = Number(acc.current_pnl).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
-            const targetFormatted = Number(acc.profit_target).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
 
             const rowHtml = `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -917,11 +918,14 @@ async function loadPropAccounts() {
                         ${acc.account_name}
                         <div style="font-size: 0.75rem; color: var(--text-muted);">${acc.firm}</div>
                     </td>
+                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
+                        ${sizeFormatted}
+                    </td>
                     <td style="padding: 10px 15px;">
                         <span style="color: ${acc.risk_profile === 'SAFE' ? 'var(--primary)' : 'var(--error)'}; font-size: 0.85rem;">${acc.risk_profile}</span>
                     </td>
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
-                        ${targetFormatted}
+                        ${lossFormatted}
                     </td>
                     <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">
                         ${pnlFormatted}
@@ -942,38 +946,44 @@ async function loadPropAccounts() {
             }
         });
 
-        evalList.innerHTML = evalHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
-        fundedList.innerHTML = fundedHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
+        evalList.innerHTML = evalHtml || '<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
+        fundedList.innerHTML = fundedHtml || '<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
     } catch (err) {
         console.error('Failed to load prop accounts:', err);
         const msg = err.status === 404 ? 'No accounts found.' : (err.message || 'Error loading accounts.');
-        evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
-        fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        evalList.innerHTML = `<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        fundedList.innerHTML = `<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
     }
 }
 
 // ── PHASE TOGGLE LOGIC ────────────────────────────────────────────────────────
-document.querySelectorAll('input[name="propPhase"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-        const evalLabel = document.querySelector('label[for="phaseEval"]');
-        const fundedLabel = document.querySelector('label[for="phaseFunded"]');
-        if (e.target.value === 'EVAL') {
-            evalLabel.style.background = 'rgba(52, 211, 153, 0.2)';
-            evalLabel.style.borderColor = '#34d399';
-            evalLabel.style.color = '#34d399';
-            fundedLabel.style.background = 'rgba(255, 255, 255, 0.05)';
-            fundedLabel.style.borderColor = 'var(--glass-border)';
-            fundedLabel.style.color = 'var(--text-muted)';
-        } else {
-            fundedLabel.style.background = 'rgba(52, 211, 153, 0.2)';
-            fundedLabel.style.borderColor = '#34d399';
-            fundedLabel.style.color = '#34d399';
-            evalLabel.style.background = 'rgba(255, 255, 255, 0.05)';
-            evalLabel.style.borderColor = 'var(--glass-border)';
-            evalLabel.style.color = 'var(--text-muted)';
-        }
-    });
-});
+// ── PHASE TOGGLE LOGIC ────────────────────────────────────────────────────────
+const phaseBtnEval = document.getElementById('phaseBtnEval');
+const phaseBtnFunded = document.getElementById('phaseBtnFunded');
+const propPhaseValue = document.getElementById('propPhaseValue');
+
+function setPhaseToggle(phase) {
+    if (!phaseBtnEval || !phaseBtnFunded || !propPhaseValue) return;
+    propPhaseValue.value = phase;
+    if (phase === 'EVAL') {
+        phaseBtnEval.style.background = 'rgba(52, 211, 153, 0.2)';
+        phaseBtnEval.style.borderColor = '#34d399';
+        phaseBtnEval.style.color = '#34d399';
+        phaseBtnFunded.style.background = 'rgba(255, 255, 255, 0.05)';
+        phaseBtnFunded.style.borderColor = 'var(--glass-border)';
+        phaseBtnFunded.style.color = 'var(--text-muted)';
+    } else {
+        phaseBtnFunded.style.background = 'rgba(52, 211, 153, 0.2)';
+        phaseBtnFunded.style.borderColor = '#34d399';
+        phaseBtnFunded.style.color = '#34d399';
+        phaseBtnEval.style.background = 'rgba(255, 255, 255, 0.05)';
+        phaseBtnEval.style.borderColor = 'var(--glass-border)';
+        phaseBtnEval.style.color = 'var(--text-muted)';
+    }
+}
+
+if (phaseBtnEval) phaseBtnEval.addEventListener('click', () => setPhaseToggle('EVAL'));
+if (phaseBtnFunded) phaseBtnFunded.addEventListener('click', () => setPhaseToggle('FUNDED'));
 
 const propForm = document.getElementById('addPropAccountForm');
 if (propForm) {
@@ -990,26 +1000,17 @@ if (propForm) {
                 method: 'POST',
                 body: JSON.stringify({
                     account_name: document.getElementById('propAccountName').value,
-                    firm: document.getElementById('propFirm').value,
-                    phase: document.querySelector('input[name="propPhase"]:checked').value,
+                    firm: 'Topstep',
+                    phase: document.getElementById('propPhaseValue').value,
                     risk_profile: localStorage.getItem('globalRiskProfile') || 'SAFE',
-                    profit_target: Number(document.getElementById('propTarget').value)
+                    account_size: Number(document.getElementById('propSize').value)
                 })
             });
             
             propForm.reset();
             
             // Reset phase toggle UI to EVAL
-            const evalLabel = document.querySelector('label[for="phaseEval"]');
-            const fundedLabel = document.querySelector('label[for="phaseFunded"]');
-            if (evalLabel && fundedLabel) {
-                evalLabel.style.background = 'rgba(52, 211, 153, 0.2)';
-                evalLabel.style.borderColor = '#34d399';
-                evalLabel.style.color = '#34d399';
-                fundedLabel.style.background = 'rgba(255, 255, 255, 0.05)';
-                fundedLabel.style.borderColor = 'var(--glass-border)';
-                fundedLabel.style.color = 'var(--text-muted)';
-            }
+            setPhaseToggle('EVAL');
 
             await loadPropAccounts();
             

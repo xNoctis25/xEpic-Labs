@@ -166,14 +166,15 @@
                                     <thead>
                                         <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Account</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Size</th>
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Risk</th>
-                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Target</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Max Loss</th>
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Current P&L</th>
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody id="evalAccountList">
-                                        <tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading evaluation accounts...</td></tr>
+                                        <tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading evaluation accounts...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -186,14 +187,15 @@
                                     <thead>
                                         <tr style="background: rgba(255,255,255,0.05); border-bottom: 1px solid var(--glass-border);">
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Account</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Size</th>
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Risk</th>
-                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Target</th>
+                                            <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Max Loss</th>
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Current P&L</th>
                                             <th style="padding: 10px 15px; font-weight: 500; color: var(--text-muted); font-size: 0.9rem;">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody id="fundedAccountList">
-                                        <tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading funded accounts...</td></tr>
+                                        <tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--text-muted);">Loading funded accounts...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -210,21 +212,20 @@
                             <div class="form-group">
                                 <input type="text" id="propAccountName" required placeholder="Account Name (e.g. 150KTC-V2-DLL-585127...)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
                             </div>
-                            <div class="form-group">
-                                <input type="text" id="propFirm" value="Topstep" disabled required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text-muted); cursor: not-allowed;">
+                            <div class="form-group" style="margin-top: 15px;">
+                                <select id="propSize" required style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
+                                    <option value="" disabled selected>Select Account Type</option>
+                                    <option value="50000">TopStep - No Activation - 50K</option>
+                                    <option value="100000">TopStep - No Activation - 100K</option>
+                                    <option value="150000">TopStep - No Activation - 150K</option>
+                                </select>
                             </div>
-                            <div class="form-row">
-                                <div class="form-group">
+                            <div class="form-row" style="margin-top: 15px;">
                                     <div class="phase-toggle" style="display: flex; gap: 10px;">
-                                        <input type="radio" id="phaseEval" name="propPhase" value="EVAL" checked style="display:none;">
-                                        <label for="phaseEval" class="toggle-btn" style="flex: 1; text-align: center; padding: 10px; background: rgba(52, 211, 153, 0.2); border: 1px solid #34d399; color: #34d399; border-radius: 8px; cursor: pointer; transition: all 0.2s;">Evaluation</label>
-                                        
-                                        <input type="radio" id="phaseFunded" name="propPhase" value="FUNDED" style="display:none;">
-                                        <label for="phaseFunded" class="toggle-btn" style="flex: 1; text-align: center; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: all 0.2s;">Funded</label>
+                                        <input type="hidden" id="propPhaseValue" value="EVAL">
+                                        <button type="button" id="phaseBtnEval" style="flex: 1; text-align: center; padding: 10px; background: rgba(52, 211, 153, 0.2); border: 1px solid #34d399; color: #34d399; border-radius: 8px; cursor: pointer; transition: all 0.2s;">Evaluation</button>
+                                        <button type="button" id="phaseBtnFunded" style="flex: 1; text-align: center; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--glass-border); color: var(--text-muted); border-radius: 8px; cursor: pointer; transition: all 0.2s;">Funded</button>
                                     </div>
-                                </div>
-                                <div class="form-group">
-                                    <input type="number" id="propTarget" required placeholder="Profit Target ($)" style="width: 100%; padding: 12px; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); border-radius: 8px; color: white;">
                                 </div>
                             </div>
                             <button type="submit" class="btn" style="width: 100%; margin-top: 10px;">Initialize Account</button>

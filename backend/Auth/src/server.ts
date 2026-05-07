@@ -56,7 +56,44 @@ pool.query(`
     ADD COLUMN IF NOT EXISTS otp_resends INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS failed_credential_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
-`).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
+
+    CREATE TABLE IF NOT EXISTS prop_firm_metrics (
+        id SERIAL PRIMARY KEY,
+        firm_name VARCHAR(50) NOT NULL,
+        account_size NUMERIC(10,2) NOT NULL,
+        profit_target NUMERIC(10,2) NOT NULL,
+        max_loss_limit NUMERIC(10,2) NOT NULL,
+        max_position_size INT NOT NULL,
+        UNIQUE(firm_name, account_size)
+    );
+
+    ALTER TABLE prop_accounts 
+    ADD COLUMN IF NOT EXISTS account_size NUMERIC(10,2) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS max_loss_limit NUMERIC(10,2) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS max_position_size INT DEFAULT 0;
+`).then(async () => {
+    try {
+        console.log('[DB] Seeding Topstep configurations...');
+        const metrics = [
+            ['Topstep', 50000, 3000, 2000, 5],
+            ['Topstep', 100000, 6000, 3000, 10],
+            ['Topstep', 150000, 9000, 4500, 15]
+        ];
+        for (const m of metrics) {
+            await pool.query(`
+                INSERT INTO prop_firm_metrics (firm_name, account_size, profit_target, max_loss_limit, max_position_size)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (firm_name, account_size) DO UPDATE SET
+                    profit_target = EXCLUDED.profit_target,
+                    max_loss_limit = EXCLUDED.max_loss_limit,
+                    max_position_size = EXCLUDED.max_position_size;
+            `, m);
+        }
+        console.log('[DB] Migration complete. ✅');
+    } catch (e) {
+        console.error('[DB] Failed to seed Topstep configurations', e);
+    }
+}).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
 
 // ── SIGN UP ──────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
@@ -678,9 +715,9 @@ app.post('/api/auth/trading/prop-accounts', async (req, res) => {
         }
         jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
 
-        const { account_name, firm, phase, risk_profile, profit_target } = req.body;
+        const { account_name, firm, phase, risk_profile, account_size } = req.body;
 
-        if (!account_name || !firm || !phase || !risk_profile || !profit_target) {
+        if (!account_name || !firm || !phase || !risk_profile || !account_size) {
             return res.status(400).json({ message: 'All fields are required.' });
         }
 
@@ -688,11 +725,23 @@ app.post('/api/auth/trading/prop-accounts', async (req, res) => {
             return res.status(400).json({ message: 'Invalid phase or risk profile enum.' });
         }
 
+        // Fetch firm metrics
+        const metricsRes = await pool.query(
+            'SELECT profit_target, max_loss_limit, max_position_size FROM prop_firm_metrics WHERE firm_name = $1 AND account_size = $2',
+            [firm, account_size]
+        );
+
+        if (metricsRes.rows.length === 0) {
+            return res.status(400).json({ message: 'Unsupported firm or account size.' });
+        }
+
+        const metrics = metricsRes.rows[0];
+
         const result = await pool.query(`
-            INSERT INTO prop_accounts (account_name, firm, phase, risk_profile, profit_target, current_pnl, best_day_pnl, days_traded, status)
-            VALUES ($1, $2, $3, $4, $5, 0, 0, 0, 'ACTIVE')
+            INSERT INTO prop_accounts (account_name, firm, phase, risk_profile, account_size, profit_target, max_loss_limit, max_position_size, current_pnl, best_day_pnl, days_traded, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, 0, 'ACTIVE')
             RETURNING *
-        `, [account_name, firm, phase, risk_profile, profit_target]);
+        `, [account_name, firm, phase, risk_profile, account_size, metrics.profit_target, metrics.max_loss_limit, metrics.max_position_size]);
 
         console.log(`[API] ✅ Prop Firm Account Added: ${account_name} (${phase})`);
         res.status(201).json(result.rows[0]);
