@@ -921,7 +921,8 @@ async function loadPropAccounts() {
             };
             const statusStyle = STATUS_MAP[acc.status] || { color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.05)' };
 
-            const pnlColor = acc.current_pnl >= 0 ? 'var(--primary)' : 'var(--error)';
+            const pnlValue   = (Number(acc.account_balance ?? acc.account_size) - Number(acc.account_size));
+            const pnlColor   = pnlValue >= 0 ? 'var(--primary)' : 'var(--error)';
             const sizeNum = Number(acc.account_size);
             const sizeFormatted = sizeNum >= 1000 ? (sizeNum / 1000) + 'K' : sizeNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const balanceNum = Number(acc.account_balance ?? acc.account_size);
@@ -938,7 +939,7 @@ async function loadPropAccounts() {
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${sizeFormatted}</td>
                     <td style="padding: 10px 15px; color: var(--text-light); font-family: monospace; font-size: 0.9rem; font-weight: 600;">${balanceFormatted}</td>
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${lossFormatted}</td>
-                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">${pnlFormatted}</td>
+                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">${pnlValue >= 0 ? '+' : ''}${pnlValue.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}</td>
                     <td style="padding: 10px 15px;">
                         <span style="color: ${statusStyle.color}; background: ${statusStyle.bg}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.5px;">${acc.status}</span>
                     </td>
@@ -1064,9 +1065,13 @@ window.openEditAccountModal = async function(id) {
         const acc = accounts.find(a => a.id === id || String(a.id) === String(id));
         if (!acc) { await xConfirm({ title: 'Error', message: 'Account not found.', okLabel: 'OK', icon: '❌' }); return; }
 
+        const currentBalance = Number(acc.account_balance ?? acc.account_size);
+        const balPlaceholder = 'Balance: ' + currentBalance.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+        const balInput = document.getElementById('editAccountBalance');
+        balInput.value       = currentBalance || '';
+        balInput.placeholder = balPlaceholder;
         document.getElementById('editAccountId').value        = acc.id;
         document.getElementById('editAccountName').value      = acc.account_name;
-        document.getElementById('editAccountBalance').value   = acc.account_balance ?? acc.account_size ?? '';
         document.getElementById('editAccountError').style.display = 'none';
         document.getElementById('editAccountSubtitle').textContent = acc.firm + ' · ' + (Number(acc.account_size) / 1000) + 'K';
         _setEditStatusToggle(acc.status || 'ACTIVE');
