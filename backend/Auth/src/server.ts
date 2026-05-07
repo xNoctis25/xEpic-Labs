@@ -759,16 +759,27 @@ app.get('/api/auth/trading/engine/status', async (req, res) => {
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
             return res.status(401).json({ message: 'No token provided.' });
         }
-        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+        catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
 
-        const result = await pool.query(
+        const haltResult = await pool.query(
             "SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1"
         );
 
-        if (result.rows.length > 0) {
-            res.status(200).json({ status: 'HALTED', reason: result.rows[0].halt_type });
+        // Detect active trade: last telemetry log action is TRADE_OPENED (not yet TRADE_CLOSED)
+        const tradeResult = await pool.query(`
+            SELECT action FROM mom_telemetry_logs
+            WHERE action IN ('TRADE_OPENED', 'TRADE_CLOSED', 'EMERGENCY_EXIT', 'SYSTEM_RESET')
+              AND created_at > NOW() - INTERVAL '24 hours'
+            ORDER BY created_at DESC LIMIT 1
+        `);
+        const lastAction = tradeResult.rows[0]?.action;
+        const inTrade = lastAction === 'TRADE_OPENED';
+
+        if (haltResult.rows.length > 0) {
+            res.status(200).json({ status: 'HALTED', reason: haltResult.rows[0].halt_type, in_trade: inTrade });
         } else {
-            res.status(200).json({ status: 'ACTIVE' });
+            res.status(200).json({ status: 'ACTIVE', in_trade: inTrade });
         }
     } catch (error) {
         console.error('[API ERROR] /engine/status GET:', error);

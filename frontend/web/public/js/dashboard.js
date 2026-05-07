@@ -678,12 +678,15 @@ setInterval(updateMarketClock, 10000);
 
 // ── MOM ENGINE STATUS POLLING ──────────────────────────────────────────────────
 async function updateEngineStatus() {
-    const uiEngineLabel = document.getElementById('uiEngineLabel');
-    const uiEngineDot   = document.getElementById('uiEngineDot');
+    const uiEngineLabel  = document.getElementById('uiEngineLabel');
+    const uiEngineDot    = document.getElementById('uiEngineDot');
+    const uiKillzoneDot  = document.getElementById('uiKillzoneDot');
     if (!uiEngineLabel || !uiEngineDot) return;
 
     try {
         const res = await auth.request('/trading/engine/status', { method: 'GET' });
+
+        // ── Engine pill ───────────────────────────────────────────────
         if (res.status === 'HALTED') {
             uiEngineLabel.textContent = 'MoM: Halted';
             uiEngineDot.className = 'dot pulse-yellow';
@@ -691,6 +694,16 @@ async function updateEngineStatus() {
             uiEngineLabel.textContent = 'MoM Engine';
             uiEngineDot.className = 'dot green';
         }
+
+        // ── Killzone pill: pulse green ONLY while a trade is live ─────
+        // updateMarketClock() normally owns the killzone dot color.
+        // We override it here if in_trade=true, and release it back to
+        // the clock when the trade is closed.
+        if (uiKillzoneDot && res.in_trade) {
+            uiKillzoneDot.className = 'dot pulse-green';
+        }
+        // (If not in_trade, updateMarketClock() will restore the correct color on next tick)
+
     } catch (err) {
         console.error('Failed to get engine status:', err);
         uiEngineLabel.textContent = 'MoM: Offline';
