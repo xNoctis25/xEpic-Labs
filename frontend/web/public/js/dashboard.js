@@ -973,23 +973,140 @@ async function loadPropAccounts() {
     }
 }
 
+// ── CUSTOM CONFIRM MODAL ──────────────────────────────────────────────────────
+function xConfirm({ title = 'Confirm', message = '', okLabel = 'Confirm', icon = '⚠️' } = {}) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('xConfirmOverlay');
+        const titleEl = document.getElementById('xConfirmTitle');
+        const msgEl   = document.getElementById('xConfirmMsg');
+        const okBtn   = document.getElementById('xConfirmOk');
+        const cancelBtn = document.getElementById('xConfirmCancel');
+        const iconEl  = document.getElementById('xConfirmIcon');
+        if (!overlay) { resolve(window.confirm(message)); return; }
+
+        titleEl.textContent = title;
+        msgEl.textContent   = message;
+        okBtn.textContent   = okLabel;
+        iconEl.textContent  = icon;
+        overlay.style.display = 'flex';
+
+        const cleanup = (result) => {
+            overlay.style.display = 'none';
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            overlay.removeEventListener('click', onOverlay);
+            resolve(result);
+        };
+        const onOk      = () => cleanup(true);
+        const onCancel  = () => cleanup(false);
+        const onOverlay = (e) => { if (e.target === overlay) cleanup(false); };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        overlay.addEventListener('click', onOverlay);
+    });
+}
+
 // ── DELETE ACCOUNT ────────────────────────────────────────────────────────────
 window.deletePropAccount = async function(id) {
-    if (!confirm('Delete this account? This cannot be undone.')) return;
+    const confirmed = await xConfirm({
+        title:   'Delete Account',
+        message: 'This account will be permanently removed. This action cannot be undone.',
+        okLabel: 'Delete',
+        icon:    '🗑️',
+    });
+    if (!confirmed) return;
     try {
         await auth.request(`/trading/prop-accounts/${id}`, { method: 'DELETE' });
         loadPropAccounts();
     } catch (err) {
-        alert('Failed to delete account: ' + (err.message || 'Unknown error'));
+        await xConfirm({ title: 'Error', message: 'Failed to delete: ' + (err.message || 'Unknown error'), okLabel: 'OK', icon: '❌' });
     }
 };
 
 // ── EDIT ACCOUNT (stub — opens modal pre-filled) ──────────────────────────────
-window.openEditAccountModal = async function(id) {
-    // For now just re-use the add modal but pre-fill with account name
-    // A proper edit flow can be wired in if needed
-    alert('Edit for account ID ' + id + ' coming soon.');
+// ── EDIT ACCOUNT MODAL ────────────────────────────────────────────────────────
+const editAccountModal = document.getElementById('editAccountModal');
+const closeEditModalBtn = document.getElementById('closeEditModalBtn');
+const editPropAccountForm = document.getElementById('editPropAccountForm');
+
+// Status toggle styling
+const STATUS_STYLES = {
+    ACTIVE: { bg: 'rgba(0,230,118,0.15)', border: '#00e676', color: '#00e676' },
+    PAUSED: { bg: 'rgba(255,214,0,0.15)', border: '#ffd600', color: '#ffd600' },
+    BLOWN:  { bg: 'rgba(255,23,68,0.15)',  border: '#ff1744', color: '#ff1744' },
 };
+
+function _setEditStatusToggle(status) {
+    document.getElementById('editAccountStatus').value = status;
+    document.querySelectorAll('.edit-status-btn').forEach(btn => {
+        const s = btn.dataset.status;
+        const active = s === status;
+        const styles = STATUS_STYLES[s] || {};
+        btn.style.background = active ? styles.bg : 'rgba(255,255,255,0.04)';
+        btn.style.border     = '1px solid ' + (active ? styles.border : 'rgba(255,255,255,0.1)');
+        btn.style.color      = active ? styles.color : 'rgba(255,255,255,0.4)';
+    });
+}
+
+document.querySelectorAll('.edit-status-btn').forEach(btn => {
+    btn.addEventListener('click', () => _setEditStatusToggle(btn.dataset.status));
+});
+
+if (closeEditModalBtn) closeEditModalBtn.addEventListener('click', () => { editAccountModal.style.display = 'none'; });
+if (editAccountModal) editAccountModal.addEventListener('click', (e) => { if (e.target === editAccountModal) editAccountModal.style.display = 'none'; });
+
+window.openEditAccountModal = async function(id) {
+    // Fetch fresh account list to find this row
+    try {
+        const accounts = await auth.request('/trading/prop-accounts', { method: 'GET' });
+        const acc = accounts.find(a => a.id === id || String(a.id) === String(id));
+        if (!acc) { await xConfirm({ title: 'Error', message: 'Account not found.', okLabel: 'OK', icon: '❌' }); return; }
+
+        document.getElementById('editAccountId').value        = acc.id;
+        document.getElementById('editAccountName').value      = acc.account_name;
+        document.getElementById('editAccountError').style.display = 'none';
+        document.getElementById('editAccountSubtitle').textContent = acc.firm + ' · ' + (Number(acc.account_size) / 1000) + 'K';
+        _setEditStatusToggle(acc.status || 'ACTIVE');
+
+        editAccountModal.style.display = 'flex';
+    } catch (err) {
+        await xConfirm({ title: 'Error', message: 'Could not load account data.', okLabel: 'OK', icon: '❌' });
+    }
+};
+
+if (editPropAccountForm) {
+    editPropAccountForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id     = document.getElementById('editAccountId').value;
+        const name   = document.getElementById('editAccountName').value.trim();
+        const status = document.getElementById('editAccountStatus').value;
+        const errEl  = document.getElementById('editAccountError');
+        const submitBtn = editPropAccountForm.querySelector('[type=submit]');
+
+        if (!name) { errEl.textContent = 'Account name is required.'; errEl.style.display = 'block'; return; }
+        errEl.style.display = 'none';
+        submitBtn.textContent = 'Saving...';
+        submitBtn.disabled = true;
+
+        try {
+            await auth.request(`/trading/prop-accounts/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ account_name: name, status }),
+            });
+            editAccountModal.style.display = 'none';
+            loadPropAccounts();
+        } catch (err) {
+            errEl.textContent = err.message || 'Failed to save. Please try again.';
+            errEl.style.display = 'block';
+        } finally {
+            submitBtn.textContent = 'Save Changes';
+            submitBtn.disabled = false;
+        }
+    });
+}
+
+
 
 // ── CUSTOM SELECT LOGIC ────────────────────────────────────────────────────────
 const customSelectTrigger = document.getElementById('customSelectTrigger');

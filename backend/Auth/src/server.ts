@@ -774,6 +774,40 @@ app.delete('/api/auth/trading/prop-accounts/:id', async (req, res) => {
     }
 });
 
+app.patch('/api/auth/trading/prop-accounts/:id', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const { id } = req.params;
+        const { account_name, status } = req.body;
+        if (!account_name && !status) {
+            return res.status(400).json({ message: 'Nothing to update.' });
+        }
+        if (status && !['ACTIVE', 'PAUSED', 'BLOWN'].includes(status)) {
+            return res.status(400).json({ message: 'Invalid status value.' });
+        }
+        const result = await pool.query(
+            `UPDATE prop_accounts SET
+                account_name = COALESCE($1, account_name),
+                status       = COALESCE($2, status)
+             WHERE id = $3 RETURNING *`,
+            [account_name || null, status || null, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Account not found.' });
+        }
+        console.log(`[API] ✅ Prop Firm Account Updated: ID ${id}`);
+        res.status(200).json(result.rows[0]);
+    } catch (error: any) {
+        console.error('[API ERROR] /prop-accounts PATCH:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 app.get('/api/auth/trading/engine/status', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
