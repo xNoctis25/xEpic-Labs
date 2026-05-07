@@ -226,6 +226,8 @@ async function handleTradeCommand(
                         phase: acc.phase,
                         riskProfile: acc.risk_profile,
                         currentBuffer: Number(acc.current_pnl),
+                        maxLossLimit: Number(acc.max_loss_limit),
+                        maxPositionSize: Number(acc.max_position_size)
                     };
                 }
             } catch (err) {

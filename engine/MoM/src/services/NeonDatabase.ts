@@ -449,20 +449,23 @@ export class NeonDatabase {
             const currentPnl = Number(acc.current_pnl);
             const bestDay = Number(acc.best_day_pnl);
 
+            const currentTarget = Number(acc.profit_target);
+            const lossLimit = Number(acc.max_loss_limit);
+
             if (acc.phase === 'EVAL') {
                 // Topstep 50% Consistency Rule: Best day cannot exceed 50% of total profit target
                 // If it does, the new target effectively becomes best_day * 2.
-                const dynamicTarget = Math.max(9000, bestDay * 2);
+                const dynamicTarget = Math.max(currentTarget, bestDay * 2);
                 
-                if (Number(acc.profit_target) !== dynamicTarget) {
+                if (currentTarget !== dynamicTarget) {
                     await this.pool.query(`UPDATE prop_accounts SET profit_target = $1 WHERE id = $2`, [dynamicTarget, id]);
                     console.log(`⚠️ [NeonDB] - Consistency Rule Triggered! Target raised to $${dynamicTarget.toFixed(2)}`);
                 }
 
                 // BLOWN Condition (Trailing Drawdown)
-                if (currentPnl <= -4500) {
+                if (currentPnl <= -Math.abs(lossLimit)) {
                     await this.updateAccountStatus(id, 'BLOWN');
-                    console.log(`🔴 [NeonDB] - Account ${acc.account_name} BLOWN. Drawdown exceeded -$4500.`);
+                    console.log(`🔴 [NeonDB] - Account ${acc.account_name} BLOWN. Drawdown exceeded -$${Math.abs(lossLimit)}.`);
                 }
                 // PASSED Condition
                 else if (currentPnl >= dynamicTarget) {
@@ -475,9 +478,9 @@ export class NeonDatabase {
                 }
             } else if (acc.phase === 'FUNDED') {
                 // BLOWN Condition for Funded
-                if (currentPnl <= -4500) {
+                if (currentPnl <= -Math.abs(lossLimit)) {
                     await this.updateAccountStatus(id, 'BLOWN');
-                    console.log(`🔴 [NeonDB] - Account ${acc.account_name} BLOWN. Drawdown exceeded -$4500.`);
+                    console.log(`🔴 [NeonDB] - Account ${acc.account_name} BLOWN. Drawdown exceeded -$${Math.abs(lossLimit)}.`);
                 }
                 // Payout Check Logic for FUNDED accounts
                 else if (acc.days_traded >= 5 && currentPnl >= (bestDay * 2)) {

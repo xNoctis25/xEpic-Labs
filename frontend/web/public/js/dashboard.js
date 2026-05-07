@@ -956,7 +956,61 @@ async function loadPropAccounts() {
     }
 }
 
-// ── PHASE TOGGLE LOGIC ────────────────────────────────────────────────────────
+// ── CUSTOM SELECT LOGIC ────────────────────────────────────────────────────────
+const customSelectTrigger = document.getElementById('customSelectTrigger');
+const customOptionsContainer = document.getElementById('customOptionsContainer');
+const customSelectLabel = document.getElementById('customSelectLabel');
+const propSizeInput = document.getElementById('propSize');
+
+if (customSelectTrigger && customOptionsContainer) {
+    customSelectTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = customOptionsContainer.style.display === 'block';
+        if (isOpen) {
+            customOptionsContainer.style.opacity = '0';
+            customOptionsContainer.style.transform = 'translateY(-10px)';
+            customSelectTrigger.classList.remove('open');
+            setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
+        } else {
+            customOptionsContainer.style.display = 'block';
+            setTimeout(() => {
+                customOptionsContainer.style.opacity = '1';
+                customOptionsContainer.style.transform = 'translateY(0)';
+            }, 10);
+            customSelectTrigger.classList.add('open');
+        }
+    });
+
+    document.querySelectorAll('.custom-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const value = e.target.getAttribute('data-value');
+            const text = e.target.textContent;
+            
+            // Update UI & Hidden Input
+            customSelectLabel.textContent = text;
+            customSelectLabel.style.color = 'var(--text-main)';
+            propSizeInput.value = value;
+            
+            // Close Dropdown
+            customOptionsContainer.style.opacity = '0';
+            customOptionsContainer.style.transform = 'translateY(-10px)';
+            customSelectTrigger.classList.remove('open');
+            setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
+        });
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!customSelectTrigger.contains(e.target) && !customOptionsContainer.contains(e.target)) {
+            customOptionsContainer.style.opacity = '0';
+            customOptionsContainer.style.transform = 'translateY(-10px)';
+            customSelectTrigger.classList.remove('open');
+            setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
+        }
+    });
+}
+
 // ── PHASE TOGGLE LOGIC ────────────────────────────────────────────────────────
 const phaseBtnEval = document.getElementById('phaseBtnEval');
 const phaseBtnFunded = document.getElementById('phaseBtnFunded');
@@ -1008,6 +1062,13 @@ if (propForm) {
             });
             
             propForm.reset();
+            
+            // Reset custom select UI
+            if (customSelectLabel && propSizeInput) {
+                customSelectLabel.textContent = 'Select Account Type';
+                customSelectLabel.style.color = 'var(--text-muted)';
+                propSizeInput.value = '';
+            }
             
             // Reset phase toggle UI to EVAL
             setPhaseToggle('EVAL');

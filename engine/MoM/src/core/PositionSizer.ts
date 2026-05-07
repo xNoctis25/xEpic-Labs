@@ -36,6 +36,8 @@ export interface PropOverride {
     phase: PropPhase;
     riskProfile: PropRiskProfile;
     currentBuffer: number;   // Total P&L buffer from the DB
+    maxLossLimit?: number;   // Limit for trailing drawdown
+    maxPositionSize?: number;// Limit for max contracts
 }
 
 // Dollar-per-point multipliers for CME S&P futures
@@ -61,6 +63,10 @@ export class PositionSizer {
         baseIndex: string,
         propOverride?: PropOverride,
     ): SizingResult | null {
+        
+        // Dynamic ceiling: override config if Prop Firm provides a strict limit
+        const maxCap = propOverride?.maxPositionSize || config.MAX_CONTRACTS;
+
         // ==========================================
         // PROP FIRM OVERRIDE — Mega Heist Scaling Ladder
         // ==========================================
@@ -125,8 +131,8 @@ export class PositionSizer {
             let potentialMES = Math.floor(riskBudget / mesRisk);
 
             // Apply Topstep / Prop Firm Cap
-            if (config.MAX_CONTRACTS > 0) {
-                potentialMES = Math.min(potentialMES, config.MAX_CONTRACTS);
+            if (maxCap > 0) {
+                potentialMES = Math.min(potentialMES, maxCap);
             }
 
             if (potentialMES >= 1) {
@@ -154,8 +160,8 @@ export class PositionSizer {
             let potentialES = Math.floor(riskBudget / esRisk);
 
             // Apply Topstep / Prop Firm Cap
-            if (config.MAX_CONTRACTS > 0) {
-                potentialES = Math.min(potentialES, config.MAX_CONTRACTS);
+            if (maxCap > 0) {
+                potentialES = Math.min(potentialES, maxCap);
             }
 
             if (potentialES >= 1) {
@@ -171,8 +177,8 @@ export class PositionSizer {
             let potentialMES = Math.floor(riskBudget / mesRisk);
 
             // Apply Topstep / Prop Firm Cap
-            if (config.MAX_CONTRACTS > 0) {
-                potentialMES = Math.min(potentialMES, config.MAX_CONTRACTS);
+            if (maxCap > 0) {
+                potentialMES = Math.min(potentialMES, maxCap);
             }
 
             if (potentialMES >= 1) {
