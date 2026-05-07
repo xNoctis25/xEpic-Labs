@@ -946,7 +946,7 @@ async function loadPropAccounts() {
 
             // ── Formatted values ──────────────────────────────────────────────
             const sizeFormatted    = sizeNum >= 1000 ? (sizeNum / 1000) + 'K' : '$' + sizeNum;
-            const balanceFormatted = balanceNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+            const balanceFormatted = balanceNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2});
             const lossFormatted    = maxLoss.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const pnlColor         = pnlValue >= 0 ? 'var(--primary)' : 'var(--error)';
             const pnlFormatted     = (pnlValue >= 0 ? '+' : '') + pnlValue.toLocaleString('en-US', {style: 'currency', currency: 'USD'});
@@ -1374,9 +1374,40 @@ if (editPropAccountForm) {
         }
     });
 
-    // ── Poll badge every 30s ───────────────────────────────────────────────
+    // ── Initial badge load ─────────────────────────────────────────────────
     refreshBadge();
-    setInterval(refreshBadge, 30_000);
+
+    // ── SSE — real-time notification push ─────────────────────────────────
+    // EventSource cannot set custom headers, so auth token passed as ?token=
+    const sseToken = auth.getToken();
+    if (sseToken && typeof EventSource !== 'undefined') {
+        const sseUrl = `/api/auth/trading/notifications/stream?token=${encodeURIComponent(sseToken)}`;
+        const evtSource = new EventSource(sseUrl);
+
+        evtSource.addEventListener('connected', () => {
+            console.log('[Notif SSE] 🟢 Stream connected — real-time notifications active');
+        });
+
+        evtSource.addEventListener('notification', async () => {
+            // New notification arrived — refresh badge instantly
+            await refreshBadge();
+            // If dropdown is already open, reload it so new item appears
+            if (dropdown.classList.contains('open')) {
+                await loadDropdown(currentPage);
+            }
+        });
+
+        evtSource.onerror = () => {
+            // EventSource auto-reconnects; this fires on every retry attempt
+            // No action needed — reconnect is handled natively
+        };
+
+        // 60s fallback poll: keeps badge accurate even during extended SSE outages
+        setInterval(refreshBadge, 60_000);
+    } else {
+        // No EventSource support (very old browser) → fall back to 30s poll
+        setInterval(refreshBadge, 30_000);
+    }
 })();
 
 

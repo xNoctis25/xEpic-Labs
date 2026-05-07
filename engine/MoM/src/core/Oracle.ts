@@ -196,6 +196,36 @@ function getActiveBlackout(): string | null {
     return null;
 }
 
+// ─── Blackout transition tracker ─────────────────────────────────────────────
+let isInBlackout = false;
+
+/**
+ * Checks every minute if a news blackout has started or ended.
+ * On transition → broadcasts to MomWorker (to pause/resume hunting)
+ *              → broadcasts to index.ts (to push a dashboard notification).
+ */
+function checkBlackoutTransition(): void {
+    const activeBlackout = getActiveBlackout();
+    const nowInBlackout  = activeBlackout !== null;
+
+    if (nowInBlackout && !isInBlackout) {
+        // ── Blackout just started ──────────────────────────────────────────
+        isInBlackout = true;
+        console.log(`📰 [Oracle] NEWS BLACKOUT STARTED: ${activeBlackout}`);
+        const msg = { type: 'news_blackout_start', event: activeBlackout, ts: Date.now() };
+        momPort?.postMessage(msg);
+        parentPort!.postMessage(msg);
+
+    } else if (!nowInBlackout && isInBlackout) {
+        // ── Blackout just ended ────────────────────────────────────────────
+        isInBlackout = false;
+        console.log('✅ [Oracle] News blackout cleared — hunting resumed');
+        const msg = { type: 'news_blackout_end', ts: Date.now() };
+        momPort?.postMessage(msg);
+        parentPort!.postMessage(msg);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Macro Radar
 // ─────────────────────────────────────────────────────────────────────────────
@@ -398,6 +428,9 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
                 console.log('[Oracle] 📅 Daily calendar refresh (08:00 ET)...');
                 fetchTodaysCalendar().catch(() => {});
             }, { timezone: 'America/New_York' });
+
+            // Check blackout transitions every minute
+            setInterval(checkBlackoutTransition, 60_000);
 
             // Phase 1: Stream ticks immediately (no hydration — test trade first)
             feed.start(onTick, (label, status) => {

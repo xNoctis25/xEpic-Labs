@@ -44,6 +44,43 @@ if (!JWT_SECRET) {
 }
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ── SSE: real-time notification push ─────────────────────────────────────────
+// Tracks all connected dashboard clients
+const sseClients = new Set<any>();
+let lastBroadcastId = 0;
+
+/**
+ * Polls the DB every 5 seconds for new notifications.
+ * Broadcasts any new rows to all connected SSE clients.
+ */
+async function startSsePoller(): Promise<void> {
+    try {
+        const maxRes = await pool.query('SELECT COALESCE(MAX(id), 0) AS maxid FROM engine_notifications');
+        lastBroadcastId = parseInt(maxRes.rows[0]?.maxid ?? '0', 10) || 0;
+        console.log(`[SSE] Poller started — watching from notification id > ${lastBroadcastId}`);
+    } catch (_) {}
+
+    setInterval(async () => {
+        if (sseClients.size === 0) return;  // nothing connected, skip
+        try {
+            const res = await pool.query(
+                `SELECT id, event_type, message, read, created_at
+                   FROM engine_notifications WHERE id > $1 ORDER BY id ASC`,
+                [lastBroadcastId]
+            );
+            if (res.rows.length === 0) return;
+
+            lastBroadcastId = res.rows[res.rows.length - 1].id;
+            const msg = `event: notification\ndata: ${JSON.stringify({ count: res.rows.length })}\n\n`;
+
+            for (const client of sseClients) {
+                try { client.write(msg); }
+                catch (_) { sseClients.delete(client); }
+            }
+        } catch (_) { /* DB error — next tick will retry */ }
+    }, 5_000);
+}
+
 // --- DYNAMIC SECURITY MIGRATION ---
 pool.query(`
     CREATE TABLE IF NOT EXISTS ip_blacklist (
@@ -1119,8 +1156,42 @@ app.delete('/api/auth/trading/notifications', async (req, res) => {
     }
 });
 
+// ── SSE STREAM ENDPOINT ───────────────────────────────────────────────────────
+// EventSource cannot set custom headers, so auth token is passed as ?token=
+app.get('/api/auth/trading/notifications/stream', (req: any, res: any) => {
+    const token = req.query.token as string | undefined;
+    if (!token) return res.status(401).end();
+    try { jwt.verify(token, JWT_SECRET); }
+    catch { return res.status(401).end(); }
+
+    // SSE headers
+    res.setHeader('Content-Type',  'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection',    'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');  // Disable Nginx / Cloudflare proxy buffering
+    res.flushHeaders();
+
+    // Confirm connection to client
+    res.write(`event: connected\ndata: ${JSON.stringify({ ts: new Date().toISOString() })}\n\n`);
+
+    sseClients.add(res);
+    console.log(`[SSE] Client connected (${sseClients.size} total)`);
+
+    // 25s heartbeat — keeps connection alive through proxies that kill idle streams
+    const hb = setInterval(() => {
+        try { res.write(':heartbeat\n\n'); }
+        catch { clearInterval(hb); }
+    }, 25_000);
+
+    req.on('close', () => {
+        clearInterval(hb);
+        sseClients.delete(res);
+        console.log(`[SSE] Client disconnected (${sseClients.size} remaining)`);
+    });
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', (_req: any, res: any) => {
     res.status(200).json({ status: 'Auth API Online', timestamp: new Date().toISOString() });
 });
 
@@ -1131,4 +1202,5 @@ app.listen(PORT, () => {
     console.log(`║  Running on port ${PORT}                                  ║`);
     console.log(`║  Neon DB: ${process.env.NEON_DATABASE_URL ? '✅ Connected' : '❌ MISSING URL'}                     ║`);
     console.log(`╚══════════════════════════════════════════════════════╝`);
+    void startSsePoller();
 });

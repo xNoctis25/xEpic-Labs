@@ -449,6 +449,22 @@ parentPort.on('message', (msg: { type: string; [key: string]: unknown }) => {
             break;
         }
 
+        case 'news_blackout_start': {
+            // Oracle detected a news event — pause hunting to avoid noisy rejections
+            core.isHuntingActive = false;
+            console.log(`📰 [MoMEngine] News blackout active — hunting paused (${msg.event ?? ''})`);
+            break;
+        }
+
+        case 'news_blackout_end': {
+            // News window cleared — restore hunting if we were previously active
+            if (isHuntingActive) {
+                core.isHuntingActive = true;
+                console.log('✅ [MoMEngine] News blackout cleared — hunting resumed');
+            }
+            break;
+        }
+
         case 'HALT_STATE': {
             isHalted = !!msg.payload;
             if (isHalted) {

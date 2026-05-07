@@ -215,6 +215,28 @@ async function handleTradeCommand(
 
     switch (action) {
 
+        case 'REJECTED': {
+            const gate      = payload.gate      as string || 'UNKNOWN';
+            const reason    = payload.reason    as string || '';
+            const conf      = payload.confidence as number || 0;
+            const direction = payload.direction as string || '';
+            const price     = payload.price     as number || 0;
+            const regime    = payload.regime    as string || '';
+
+            const gateEmoji: Record<string, string> = {
+                PROBABILITY_GATE: '📊',
+                DEFCON:           '🚨',
+                SL_TOO_TIGHT:     '📏',
+                STRUCTURE_CAP:    '🏗️',
+            };
+            const emoji = gateEmoji[gate] ?? '❌';
+
+            void db.pushNotification('TRADE_REJECTED',
+                `${emoji} REJECTED [${gate}] ${direction} @ ${price} | Prob: ${conf}% | ${regime}`
+            );
+            break;
+        }
+
         case 'TEST_ENTER': {
             const symbol = payload.symbol as string;
             const price  = payload.price as number;
@@ -671,6 +693,20 @@ function wireOracleHandler(): void {
             case 'defcon_change':
                 console.log(`[M.o.M] 🚨 DEFCON → ${msg.level} | ${msg.reason}`);
                 void db.pushNotification('DEFCON_CHANGE', `⚠️ DEFCON ${msg.level} — ${msg.reason}`);
+                break;
+
+            case 'news_blackout_start': {
+                const event = msg.event as string || 'Unknown event';
+                console.log(`📰 [M.o.M] NEWS BLACKOUT — ${event}`);
+                void db.pushNotification('NEWS_BLACKOUT', `📰 NEWS BLACKOUT: ${event} — hunting paused`);
+                void db.setEngineState('HALTED');  // reuse HALTED so Nova reports correctly
+                break;
+            }
+
+            case 'news_blackout_end':
+                console.log('✅ [M.o.M] News blackout cleared — hunting resumed');
+                void db.pushNotification('NEWS_CLEAR', '✅ News blackout cleared — M.o.M hunting resumed');
+                void db.setEngineState('HUNTING');
                 break;
 
             case 'VERIFY_FLAT': {
