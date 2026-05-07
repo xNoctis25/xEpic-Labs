@@ -954,7 +954,7 @@ async function loadPropAccounts() {
 
             const rowHtml = `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 10px 15px; color: var(--text-light); font-weight: 500;">
+                    <td style="padding: 10px 15px; color: var(--text-light); font-weight: 500; white-space: nowrap;">
                         ${acc.account_name}
                         <div style="font-size: 0.75rem; color: var(--text-muted);">${acc.firm}</div>
                     </td>
