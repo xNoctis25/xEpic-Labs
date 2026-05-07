@@ -908,7 +908,8 @@ async function loadPropAccounts() {
                               (acc.status === 'BLOWN' ? 'var(--error)' : 'var(--text-light)');
             
             const pnlColor = acc.current_pnl >= 0 ? 'var(--primary)' : 'var(--error)';
-            const sizeFormatted = Number(acc.account_size).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+            const sizeNum = Number(acc.account_size);
+            const sizeFormatted = sizeNum >= 1000 ? (sizeNum / 1000) + 'K' : sizeNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const lossFormatted = Number(acc.max_loss_limit).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const pnlFormatted = Number(acc.current_pnl).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
 
@@ -920,9 +921,6 @@ async function loadPropAccounts() {
                     </td>
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
                         ${sizeFormatted}
-                    </td>
-                    <td style="padding: 10px 15px;">
-                        <span style="color: ${acc.risk_profile === 'SAFE' ? 'var(--primary)' : 'var(--error)'}; font-size: 0.85rem;">${acc.risk_profile === 'SAFE' ? 'SAFE' : 'MAX'}</span>
                     </td>
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
                         ${lossFormatted}
@@ -946,13 +944,13 @@ async function loadPropAccounts() {
             }
         });
 
-        evalList.innerHTML = evalHtml || '<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
-        fundedList.innerHTML = fundedHtml || '<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
+        evalList.innerHTML = evalHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
+        fundedList.innerHTML = fundedHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
     } catch (err) {
         console.error('Failed to load prop accounts:', err);
         const msg = err.status === 404 ? 'No accounts found.' : (err.message || 'Error loading accounts.');
-        evalList.innerHTML = `<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
-        fundedList.innerHTML = `<tr><td colspan="6" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+        fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
     }
 }
 

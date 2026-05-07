@@ -89,7 +89,45 @@ db_1.default.query(`
     ADD COLUMN IF NOT EXISTS otp_resends INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS failed_credential_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
-`).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
+
+    CREATE TABLE IF NOT EXISTS prop_firm_metrics (
+        id SERIAL PRIMARY KEY,
+        firm_name VARCHAR(50) NOT NULL,
+        account_size NUMERIC(10,2) NOT NULL,
+        profit_target NUMERIC(10,2) NOT NULL,
+        max_loss_limit NUMERIC(10,2) NOT NULL,
+        max_position_size INT NOT NULL,
+        UNIQUE(firm_name, account_size)
+    );
+
+    ALTER TABLE prop_accounts 
+    ADD COLUMN IF NOT EXISTS account_size NUMERIC(10,2) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS max_loss_limit NUMERIC(10,2) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS max_position_size INT DEFAULT 0;
+`).then(async () => {
+    try {
+        console.log('[DB] Seeding Topstep configurations...');
+        const metrics = [
+            ['Topstep', 50000, 3000, 2000, 5],
+            ['Topstep', 100000, 6000, 3000, 10],
+            ['Topstep', 150000, 9000, 4500, 15]
+        ];
+        for (const m of metrics) {
+            await db_1.default.query(`
+                INSERT INTO prop_firm_metrics (firm_name, account_size, profit_target, max_loss_limit, max_position_size)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (firm_name, account_size) DO UPDATE SET
+                    profit_target = EXCLUDED.profit_target,
+                    max_loss_limit = EXCLUDED.max_loss_limit,
+                    max_position_size = EXCLUDED.max_position_size;
+            `, m);
+        }
+        console.log('[DB] Migration complete. ✅');
+    }
+    catch (e) {
+        console.error('[DB] Failed to seed Topstep configurations', e);
+    }
+}).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
 // ── SIGN UP ──────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
     try {
@@ -477,19 +515,164 @@ Your core expertise:
 
 Your personality:
 - Confident, articulate, and substantive — never give a one-liner when depth is warranted
-- Professional but personable — like a sharp colleague who actually knows their stuff
-- When you lack real-time data (live prices, today's news feed), acknowledge it briefly then immediately pivot to what you CAN provide: analysis, context, historical patterns, frameworks
+- Professional but personable
+- When you lack real-time data, acknowledge it briefly then provide analysis
 - Never refuse to engage. Always find an angle that adds value.
-- Format clearly: use **bold** for key terms, bullet points for lists, and structured breakdowns when helpful
 
-The user's name is: ${decoded.username}`
+You also have the ability to control the M.o.M trading engine. If the user tells you to stop trading, halt the engine, or close positions, you MUST execute the appropriate tool.
+- Halt Trading: Halts new entries.
+- Resume Trading: Clears all halts.
+- Close Trade: Wipes the board and halts permanently.
+
+The user's name is: ${decoded.username}`,
+                tools: [{
+                        functionDeclarations: [
+                            {
+                                name: "halt_engine",
+                                description: "Halts the trading engine normally. The engine will not enter new trades, but will manage existing ones. Use this when the user says 'stop trading'.",
+                                parameters: { type: "OBJECT", properties: {} }
+                            },
+                            {
+                                name: "resume_engine",
+                                description: "Resumes the trading engine and clears all halts. Use this when the user says 'resume trading'.",
+                                parameters: { type: "OBJECT", properties: {} }
+                            },
+                            {
+                                name: "close_engine",
+                                description: "Emergency closes the trading engine. It immediately wipes the board (closes all open positions and orders) and halts permanently. Use this when the user says 'close the trade' or 'emergency stop'.",
+                                parameters: { type: "OBJECT", properties: {} }
+                            }
+                        ]
+                    }]
             }
         });
+        if (response.functionCalls && response.functionCalls.length > 0) {
+            const call = response.functionCalls[0];
+            let toolOutput = "";
+            try {
+                if (call.name === "halt_engine") {
+                    await db_1.default.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('MANUAL_HALT', TRUE)`);
+                    toolOutput = "Engine successfully halted.";
+                }
+                else if (call.name === "resume_engine") {
+                    await db_1.default.query(`UPDATE engine_halts SET is_active = FALSE WHERE is_active = TRUE`);
+                    toolOutput = "Engine successfully resumed. All halts cleared.";
+                }
+                else if (call.name === "close_engine") {
+                    await db_1.default.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('EMERGENCY_CLOSE', TRUE)`);
+                    toolOutput = "Engine emergency closed. All positions will be flattened immediately.";
+                }
+            }
+            catch (err) {
+                console.error("[NOVA TOOL ERROR]", err);
+                toolOutput = "Failed to execute engine command due to database error.";
+            }
+            // Re-prompt model with tool output
+            const followUp = await ai.models.generateContent({
+                model: targetModel,
+                contents: [
+                    ...contents,
+                    { role: 'model', parts: [{ functionCall: call }] },
+                    { role: 'user', parts: [{ functionResponse: { name: call.name, response: { result: toolOutput } } }] }
+                ]
+            });
+            return res.status(200).json({ reply: followUp.text });
+        }
         res.status(200).json({ reply: response.text });
     }
     catch (error) {
         console.error('[NOVA ERROR]', error);
-        res.status(500).json({ reply: 'Error communicating with Nova core.', message: 'Error communicating with Nova core.' });
+        res.status(500).json({ reply: 'Error communicating with Nova core.', message: error.message || String(error) });
+    }
+});
+// ── PROP FIRM ACCOUNTS (Protected) ──────────────────────────────────────────
+app.get('/api/auth/trading/prop-accounts', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jsonwebtoken_1.default.verify(authHeader.split(' ')[1], JWT_SECRET); // Throws if invalid
+        // Fetch all accounts, ordered by ID
+        const result = await db_1.default.query('SELECT * FROM prop_accounts ORDER BY id ASC');
+        res.status(200).json(result.rows);
+    }
+    catch (error) {
+        console.error('[API ERROR] /prop-accounts GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+app.patch('/api/auth/trading/risk', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jsonwebtoken_1.default.verify(authHeader.split(' ')[1], JWT_SECRET);
+        const { risk_profile } = req.body;
+        if (!['SAFE', 'AGGRESSIVE'].includes(risk_profile)) {
+            return res.status(400).json({ message: 'Invalid risk profile.' });
+        }
+        // Update all prop accounts to use the same risk profile (global risk)
+        await db_1.default.query('UPDATE prop_accounts SET risk_profile = $1', [risk_profile]);
+        res.status(200).json({ message: 'Global risk updated', risk_profile });
+    }
+    catch (error) {
+        console.error('[API ERROR] /trading/risk PATCH:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+app.post('/api/auth/trading/prop-accounts', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jsonwebtoken_1.default.verify(authHeader.split(' ')[1], JWT_SECRET);
+        const { account_name, firm, phase, risk_profile, account_size } = req.body;
+        if (!account_name || !firm || !phase || !risk_profile || !account_size) {
+            return res.status(400).json({ message: 'All fields are required.' });
+        }
+        if (!['EVAL', 'FUNDED'].includes(phase) || !['SAFE', 'AGGRESSIVE'].includes(risk_profile)) {
+            return res.status(400).json({ message: 'Invalid phase or risk profile enum.' });
+        }
+        // Fetch firm metrics
+        const metricsRes = await db_1.default.query('SELECT profit_target, max_loss_limit, max_position_size FROM prop_firm_metrics WHERE firm_name = $1 AND account_size = $2', [firm, account_size]);
+        if (metricsRes.rows.length === 0) {
+            return res.status(400).json({ message: 'Unsupported firm or account size.' });
+        }
+        const metrics = metricsRes.rows[0];
+        const result = await db_1.default.query(`
+            INSERT INTO prop_accounts (account_name, firm, phase, risk_profile, account_size, profit_target, max_loss_limit, max_position_size, current_pnl, best_day_pnl, days_traded, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, 0, 'ACTIVE')
+            RETURNING *
+        `, [account_name, firm, phase, risk_profile, account_size, metrics.profit_target, metrics.max_loss_limit, metrics.max_position_size]);
+        console.log(`[API] ✅ Prop Firm Account Added: ${account_name} (${phase})`);
+        res.status(201).json(result.rows[0]);
+    }
+    catch (error) {
+        console.error('[API ERROR] /prop-accounts POST:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+app.get('/api/auth/trading/engine/status', async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'No token provided.' });
+        }
+        jsonwebtoken_1.default.verify(authHeader.split(' ')[1], JWT_SECRET);
+        const result = await db_1.default.query("SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1");
+        if (result.rows.length > 0) {
+            res.status(200).json({ status: 'HALTED', reason: result.rows[0].halt_type });
+        }
+        else {
+            res.status(200).json({ status: 'ACTIVE' });
+        }
+    }
+    catch (error) {
+        console.error('[API ERROR] /engine/status GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 });
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
