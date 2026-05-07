@@ -19,7 +19,7 @@ import * as path   from 'path';
 import { Worker, MessageChannel } from 'worker_threads';
 
 import { TradovateBroker }                  from './brokers/TradovateBroker';
-import { NeonDatabase }                     from './services/NeonDatabase';
+import { NeonDatabase, PropAccount }                from './services/NeonDatabase';
 import { ExecutionEngine }                  from './core/ExecutionEngine';
 import { SessionLedger }                    from './services/SessionLedger';
 import { PositionSizer, ES_DAY_MARGIN, MES_DAY_MARGIN } from './core/PositionSizer';
@@ -50,6 +50,35 @@ const riskEngine      = new RiskEngine();
 const haltManager     = new HaltManager(db);
 const evalEngine      = new EvaluationEngine(db, haltManager);
 let positionMonitor: NodeJS.Timeout | null = null;
+
+// ─── Playbook State (DB-driven, polled every 30s) ─────────────────────────────
+let activePlaybook: 'PROP_FIRM' | 'CASH_ACCOUNT' = 'PROP_FIRM';
+let propAccounts: PropAccount[] = [];
+let propMinBuffer = 0;
+
+async function pollPlaybook(): Promise<void> {
+    try {
+        const cfg = await db.getEngineConfig();
+        activePlaybook = cfg.active_playbook;
+        if (activePlaybook === 'PROP_FIRM') {
+            propAccounts = await db.getActiveAccounts();
+            if (propAccounts.length > 0) {
+                propMinBuffer = Math.min(...propAccounts.map(acc => {
+                    const bal = Number(acc.account_balance ?? acc.account_size);
+                    return Number(acc.max_loss_limit) + (bal - Number(acc.account_size));
+                }));
+            } else {
+                propMinBuffer = 0;
+                console.warn('[M.o.M] ⚠️  PROP_FIRM mode — NO ACTIVE ACCOUNTS. Entries will be blocked.');
+            }
+        } else {
+            propAccounts = [];
+            propMinBuffer = 0;
+        }
+    } catch (err: any) {
+        console.warn(`[M.o.M] ⚠️ Playbook poll failed: ${err.message}`);
+    }
+}
 
 // ─── Worker handles ──────────────────────────────────────────────────────────
 let momWorker:       Worker;
@@ -155,6 +184,21 @@ async function reconcileLedgerOnClose(reason: string): Promise<void> {
             const initialRiskTotal = initialRiskPerContract * ctx.qty;
             await executionEngine.gradeAndJournalTrade(exitPrice, realizedPnL, durationSeconds, initialRiskTotal);
         }
+
+        // PROP_FIRM: write realized PnL back to all active accounts after every close
+        if (activePlaybook === 'PROP_FIRM' && propAccounts.length > 0) {
+            const isLive = config.TRADING_MODE === 'LIVE';
+            for (const acc of propAccounts) {
+                await db.patchAccountBalance(acc.id, realizedPnL, ctx.qty, ctx.symbol, isLive);
+            }
+            await pollPlaybook(); // refresh buffer immediately after write-back
+        }
+
+        // Push trade-close notification to dashboard
+        void db.pushNotification('TRADE_CLOSED',
+            `💰 CLOSED ${pnlStr} | ${ctx.qty}×${ctx.symbol} ${ctx.direction} | ${reason}`
+        );
+
     } catch (err: any) {
         // Fallback: release margin with 0 PnL, ghost sync will correct
         ledger.releaseMarginAndApplyPnL(ctx.margin, 0);
@@ -205,6 +249,15 @@ async function handleTradeCommand(
             if (!riskEngine.canTrade()) {
                 console.warn('[M.o.M] ❌ Trade BLOCKED — RiskEngine daily halt (3x stop-out limit).');
                 void db.logTelemetry('Core4', 'Risk', 'DAILY_HALT: Trade blocked by RiskEngine.');
+                void db.pushNotification('TRADE_REJECTED', '🔴 Trade BLOCKED — RiskEngine daily halt (3x stop-out)');
+                return;
+            }
+
+            // PROP_FIRM gate: block entry if no active accounts
+            if (activePlaybook === 'PROP_FIRM' && propAccounts.length === 0) {
+                const skipMsg = '🔕 Trade SKIPPED — No active prop accounts. PROP_FIRM playbook requires at least 1 ACTIVE account.';
+                console.warn(`[M.o.M] ${skipMsg}`);
+                void db.pushNotification('TRADE_SKIPPED', skipMsg);
                 return;
             }
 
@@ -215,23 +268,16 @@ async function handleTradeCommand(
                 ? Math.abs(entryPrice - actualStopPrice)
                 : 20;  // fallback only if no stop provided
 
-            // ── Real-Time Prop Firm Context ──
-            // Query the DB right before entry to ensure we have the live buffer and phase.
+            // ── Prop Firm Context (from polled playbook state — uses min buffer across all active accounts) ──
             let propOverride;
-            try {
-                const activeProps = await (db as any).pool.query(`SELECT * FROM prop_accounts WHERE status = 'ACTIVE' LIMIT 1`);
-                if (activeProps.rows.length > 0) {
-                    const acc = activeProps.rows[0];
-                    propOverride = {
-                        phase: acc.phase,
-                        riskProfile: acc.risk_profile,
-                        currentBuffer: Number(acc.current_pnl),
-                        maxLossLimit: Number(acc.max_loss_limit),
-                        maxPositionSize: Number(acc.max_position_size)
-                    };
-                }
-            } catch (err) {
-                console.warn('[M.o.M] ⚠️ Failed to fetch Prop Account context. Falling back to Cash Account sizing.');
+            if (activePlaybook === 'PROP_FIRM' && propAccounts.length > 0) {
+                propOverride = {
+                    phase:           propAccounts[0].phase,
+                    riskProfile:     propAccounts[0].risk_profile,
+                    currentBuffer:   propMinBuffer,
+                    maxLossLimit:    Number(propAccounts[0].max_loss_limit),
+                    maxPositionSize: Number(propAccounts[0].max_position_size),
+                };
             }
 
             const sizing = PositionSizer.calculate(
@@ -257,6 +303,10 @@ async function handleTradeCommand(
             };
 
             await executionEngine.executeBracket(symbol, price, side, sizing.qty, payload.stopPrice as number | undefined);
+            // Push trade-entry notification to dashboard
+            void db.pushNotification('TRADE_ENTERED',
+                `🟢 ${side} ${sizing.qty}×${symbol} @ ${price} | Src: ${src} | Prob: ${conf}%`
+            );
             if (positionMonitor) clearInterval(positionMonitor);
             let failsafeInjected = false;
             const monitorStartTs = Date.now();
@@ -380,6 +430,11 @@ async function boot(): Promise<void> {
     await db.initialize();
     const botState = await db.getState();
 
+    // Poll playbook + active accounts immediately on boot (used by banner + entry gate)
+    await pollPlaybook();
+    // Re-poll every 30s to pick up Nova playbook switches without restart
+    setInterval(() => void pollPlaybook(), 30_000);
+
     const connected = await broker.connect();
     if (!connected) throw new Error('Broker auth failed');
     console.log('[M.o.M] ✅ Broker authenticated');
@@ -447,16 +502,37 @@ async function boot(): Promise<void> {
     console.log('[M.o.M] ✅ Test trade passed — triple-sweep verified');
     */
 
+    // ── Dynamic Startup Banner (DB-driven) ─────────────────────────────────
+    const evalCount   = propAccounts.filter(a => a.phase === 'EVAL').length;
+    const fundedCount = propAccounts.filter(a => a.phase === 'FUNDED').length;
+    let bufferTag = '';
+    if (activePlaybook === 'PROP_FIRM') {
+        if (propAccounts.length === 0) {
+            bufferTag = 'No Active Accounts — Entries BLOCKED 🚫';
+        } else if (propMinBuffer >= 1_500) {
+            bufferTag = `Buffer: $${propMinBuffer.toFixed(0)} → ${Math.floor(propMinBuffer / 1_500)} ES`;
+        } else {
+            bufferTag = `Buffer: $${propMinBuffer.toFixed(0)} → ${Math.floor(propMinBuffer / 150)} MES (auto-scaled)`;
+        }
+    }
     console.log('\n==========================================');
     console.log('  M.o.M — Institutional Quant Engine v5.1');
-    console.log(`  ${tradingMode} | ${config.INDICES} | Risk: ${config.RISK}%`);
-    console.log(`  Playbook: ${playbookLabel}`);
-    
+    console.log(`  ${tradingMode} | Playbook: ${activePlaybook}`);
+    if (activePlaybook === 'PROP_FIRM') {
+        console.log(`  Accounts: ${evalCount} EVAL | ${fundedCount} FUNDED`);
+        console.log(`  ${bufferTag}`);
+    }
+
     await haltManager.initialize();
 
     haltManager.onStateChange(async (isHalted, haltType) => {
         if (momWorker) momWorker.postMessage({ type: 'HALT_STATE', payload: isHalted });
-
+        // Push halt/resume notification to dashboard
+        if (isHalted) {
+            void db.pushNotification('ENGINE_HALTED', `🛑 Engine halted — ${haltType}`);
+        } else {
+            void db.pushNotification('ENGINE_RESUMED', '🟢 Engine resumed');
+        }
         // If an EMERGENCY_CLOSE manual halt is triggered from an external script
         if (isHalted && haltType === 'EMERGENCY_CLOSE') {
             console.log(`\n🚨 [M.o.M] EMERGENCY CLOSE DETECTED via HALT MANAGER. Flattening all positions...`);
@@ -578,6 +654,7 @@ function wireOracleHandler(): void {
 
             case 'defcon_change':
                 console.log(`[M.o.M] 🚨 DEFCON → ${msg.level} | ${msg.reason}`);
+                void db.pushNotification('DEFCON_CHANGE', `⚠️ DEFCON ${msg.level} — ${msg.reason}`);
                 break;
 
             case 'VERIFY_FLAT': {
