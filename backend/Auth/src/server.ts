@@ -613,6 +613,33 @@ app.post('/api/auth/chat', async (req, res) => {
         }
         contents.push({ role: 'user', parts: [{ text: message }] });
 
+        // ── Inject live engine state into context ─────────────────────────────
+        const [haltRes, configRes] = await Promise.all([
+            pool.query(`SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1`),
+            pool.query(`SELECT active_playbook, engine_state FROM engine_config WHERE id = 1`),
+        ]);
+        const activeHalt    = haltRes.rows[0]?.halt_type ?? null;
+        const engineState   = configRes.rows[0]?.engine_state ?? 'OFFLINE';
+        const activePlaybook= configRes.rows[0]?.active_playbook ?? 'PROP_FIRM';
+
+        const engineStateLabel: Record<string, string> = {
+            OFFLINE:   '⚫ OFFLINE — not running',
+            BOOTING:   '🟡 BOOTING — starting up, not yet hydrated',
+            HYDRATING: '🔵 HYDRATING — loading historical market data, not yet ready',
+            WARM_UP:   '🟠 WARM_UP — experts initializing, almost ready',
+            HUNTING:   '🟢 HUNTING — fully operational, scanning for setups',
+            HALTED:    `🔴 HALTED — entries blocked (${activeHalt ?? 'MANUAL_HALT'})`,
+        };
+        const stateDesc = engineStateLabel[engineState] ?? engineState;
+        const liveContext = `
+
+[LIVE ENGINE STATE — as of this message]
+- Operational State: ${stateDesc}
+- Active Playbook: ${activePlaybook}
+- Halt Status: ${activeHalt ? `HALTED (${activeHalt})` : 'CLEAR — no active halts'}
+
+IMPORTANT: Use this data to answer questions about the engine. Do NOT infer or guess the engine state from the conversation history. The above is ground truth pulled directly from the database.`;
+
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
             model: targetModel,
@@ -639,7 +666,7 @@ You also have the ability to control the M.o.M trading engine. If the user tells
 - Close Trade: Wipes the board and halts permanently.
 - Switch Playbook: Switches the engine between PROP_FIRM (prop firm risk rules, buffer-based sizing) and CASH_ACCOUNT (standard buying power sizing). Use when the user says 'switch to prop firm', 'use prop firm playbook', 'switch to cash account', 'use cash account mode', etc.
 
-The user's name is: ${decoded.username}`,
+The user's name is: ${decoded.username}${liveContext}`,
                 tools: [{
                     functionDeclarations: [
                         {

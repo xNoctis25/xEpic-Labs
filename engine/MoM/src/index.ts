@@ -540,6 +540,8 @@ async function boot(): Promise<void> {
             if (momWorker) momWorker.postMessage({ type: 'position_closed', reason: 'EMERGENCY_CLOSE' });
             await reconcileLedgerOnClose('EMERGENCY_CLOSE');
         }
+        // Keep engine_state in sync with halt state
+        void db.setEngineState(isHalted ? 'HALTED' : 'HUNTING');
     });
 
     // Initialize halt manager — callback is now registered so boot-halt will fire it
@@ -548,6 +550,9 @@ async function boot(): Promise<void> {
     // If engine booted in halt state, emit a dedicated boot notification
     if (haltManager.isHalted()) {
         void db.pushNotification('ENGINE_HALTED', `🛑 Engine booted in HALT state — awaiting manual reset`);
+        void db.setEngineState('HALTED');
+    } else {
+        void db.setEngineState('BOOTING');
     }
 
     console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
@@ -556,6 +561,7 @@ async function boot(): Promise<void> {
     // 4. Start warm up sequence
     console.log('\n[M.o.M] 🔄 Starting Warm Up...');
     console.log('[M.o.M] 📡 Requesting Hydration (from 6 PM ET session open)...');
+    void db.setEngineState('HYDRATING');
     oracle.postMessage({ type: 'TRIGGER_HYDRATION' });
 
     await new Promise<void>((resolve) => {
@@ -580,6 +586,9 @@ async function boot(): Promise<void> {
     console.log('\n==========================================');
     momWorker.postMessage({ type: 'HUNTING_ACTIVE' });
     assistantWorker.postMessage({ type: 'HUNTING_ACTIVE' });
+
+    // Update engine state: HUNTING unless already halted
+    void db.setEngineState(haltManager.isHalted() ? 'HALTED' : 'HUNTING');
 
     console.log('  🎯 ALL SYSTEMS PRIMED — HUNTING');
     console.log('==========================================\n');

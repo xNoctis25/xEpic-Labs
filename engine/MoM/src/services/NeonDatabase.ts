@@ -211,9 +211,14 @@ export class NeonDatabase {
                 id              SERIAL PRIMARY KEY,
                 active_playbook VARCHAR(20) NOT NULL DEFAULT 'PROP_FIRM'
                                 CHECK (active_playbook IN ('PROP_FIRM', 'CASH_ACCOUNT')),
+                engine_state    TEXT        NOT NULL DEFAULT 'OFFLINE',
                 updated_at      TIMESTAMPTZ DEFAULT NOW()
             );
             INSERT INTO engine_config (id) VALUES (1) ON CONFLICT DO NOTHING;
+        `);
+        // Safe migration for existing tables
+        await this.pool.query(`
+            ALTER TABLE engine_config ADD COLUMN IF NOT EXISTS engine_state TEXT NOT NULL DEFAULT 'OFFLINE';
         `);
 
         // Create engine_notifications table — persistent notification feed
@@ -439,9 +444,20 @@ export class NeonDatabase {
     // ==========================================
 
     /** Returns the active engine playbook from the DB. */
-    public async getEngineConfig(): Promise<{ active_playbook: 'PROP_FIRM' | 'CASH_ACCOUNT' }> {
-        const res = await this.pool.query(`SELECT active_playbook FROM engine_config WHERE id = 1`);
-        return { active_playbook: (res.rows[0]?.active_playbook ?? 'PROP_FIRM') as 'PROP_FIRM' | 'CASH_ACCOUNT' };
+    public async getEngineConfig(): Promise<{ active_playbook: 'PROP_FIRM' | 'CASH_ACCOUNT'; engine_state: string }> {
+        const res = await this.pool.query(`SELECT active_playbook, engine_state FROM engine_config WHERE id = 1`);
+        return {
+            active_playbook: (res.rows[0]?.active_playbook ?? 'PROP_FIRM') as 'PROP_FIRM' | 'CASH_ACCOUNT',
+            engine_state:    res.rows[0]?.engine_state ?? 'OFFLINE',
+        };
+    }
+
+    /** Updates the operational state of the engine (BOOTING, HYDRATING, HUNTING, HALTED, OFFLINE). */
+    public async setEngineState(state: 'OFFLINE' | 'BOOTING' | 'HYDRATING' | 'WARM_UP' | 'HUNTING' | 'HALTED'): Promise<void> {
+        await this.pool.query(
+            `UPDATE engine_config SET engine_state = $1, updated_at = NOW() WHERE id = 1`,
+            [state]
+        );
     }
 
     /** Switches the engine playbook and records the timestamp. */
