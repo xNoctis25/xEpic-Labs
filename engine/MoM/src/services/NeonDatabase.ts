@@ -223,9 +223,13 @@ export class NeonDatabase {
                 event_type  VARCHAR(30) NOT NULL,
                 message     TEXT        NOT NULL,
                 read        BOOLEAN     DEFAULT FALSE,
-                created_at  TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
+                created_at  TIMESTAMPTZ DEFAULT NOW()
             );
         `);
+        // Fix any existing deployments with wrong default
+        await this.pool.query(
+            `ALTER TABLE engine_notifications ALTER COLUMN created_at SET DEFAULT NOW()`
+        );
     }
 
     // ==========================================

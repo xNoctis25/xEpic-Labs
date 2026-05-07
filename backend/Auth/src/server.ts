@@ -90,12 +90,26 @@ pool.query(`
         event_type  VARCHAR(30) NOT NULL,
         message     TEXT        NOT NULL,
         read        BOOLEAN     DEFAULT FALSE,
-        created_at  TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
+        created_at  TIMESTAMPTZ DEFAULT NOW()
     );
+    -- Fix existing deployments with wrong default (AT TIME ZONE naive-UTC bug)
+    ALTER TABLE engine_notifications ALTER COLUMN created_at SET DEFAULT NOW();
 `).then(async () => {
     try {
         // Seed engine_config row 1 (idempotent)
         await pool.query(`INSERT INTO engine_config (id) VALUES (1) ON CONFLICT DO NOTHING`);
+
+        // One-time repair: fix notifications stored with wrong timestamps due to
+        // AT TIME ZONE naive-UTC bug (stored ET local time as if UTC → 4h too early).
+        // Only fix rows that are clearly off (created_at < NOW() - 2h, meaning they
+        // appear older than they should relative to real UTC now).
+        await pool.query(`
+            UPDATE engine_notifications
+            SET created_at = created_at + INTERVAL '4 hours'
+            WHERE created_at < NOW() - INTERVAL '2 hours'
+              AND created_at + INTERVAL '4 hours' <= NOW() + INTERVAL '1 minute'
+        `);
+
         console.log('[DB] Seeding Topstep configurations...');
         const metrics = [
             ['Topstep', 50000, 3000, 2000, 5],
