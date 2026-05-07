@@ -144,14 +144,14 @@
                 </div>
             </div>
 
-            <div id="tradingView" class="view-section hidden" style="padding: 30px;">
+            <div id="tradingView" class="view-section hidden" style="padding: 30px; max-width: 1000px; margin: 0 auto; width: 100%;">
                 <div class="profile-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                     <div>
                         <h2>Prop Firm Accounts</h2>
                         <p class="subtitle">Manage Active Evaluation and Funded Engine Risk</p>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn" id="globalRiskToggleBtn" style="width: auto; padding: 10px 20px; font-size: 0.9rem; background: rgba(52, 211, 153, 0.2); color: #34d399; border: 1px solid #34d399;">Risk: SAFE</button>
+                        <button class="btn" id="globalRiskToggleBtn" style="width: 160px; text-align: center; padding: 10px 20px; font-size: 0.9rem; background: rgba(52, 211, 153, 0.2); color: #34d399; border: 1px solid #34d399; transition: all 0.3s ease;">Risk: SAFE</button>
                         <button class="btn" id="openPropModalBtn" style="width: auto; padding: 10px 20px; font-size: 0.9rem;">+ Add Account</button>
                     </div>
                 </div>
@@ -160,7 +160,7 @@
                     <!-- Active Accounts Roster -->
                     <div style="flex: 2; min-width: 400px; display: flex; flex-direction: column; gap: 20px;">
                         <div>
-                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">EVALUATION ACCOUNTS</h3>
+                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px;">EVALUATION</h3>
                             <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>
@@ -180,7 +180,7 @@
                         </div>
 
                         <div>
-                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem;">FUNDED ACCOUNTS</h3>
+                            <h3 style="color: var(--primary); margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px;">FUNDED</h3>
                             <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 12px; overflow: hidden;">
                                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
                                     <thead>
