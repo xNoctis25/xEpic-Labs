@@ -75,6 +75,8 @@ pool.query(`
     ALTER TABLE prop_accounts DROP CONSTRAINT IF EXISTS prop_accounts_status_check;
     ALTER TABLE prop_accounts ADD CONSTRAINT prop_accounts_status_check
         CHECK (status IN ('ACTIVE','PAUSED','PASSED','PAYOUT_READY','BLOWN'));
+
+    ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS account_balance NUMERIC(12,2) DEFAULT NULL;
 `).then(async () => {
     try {
         console.log('[DB] Seeding Topstep configurations...');
@@ -787,8 +789,8 @@ app.patch('/api/auth/trading/prop-accounts/:id', async (req, res) => {
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
         const { id } = req.params;
-        const { account_name, status } = req.body;
-        if (!account_name && !status) {
+        const { account_name, status, account_balance } = req.body;
+        if (!account_name && !status && account_balance === undefined) {
             return res.status(400).json({ message: 'Nothing to update.' });
         }
         if (status && !['ACTIVE', 'PAUSED', 'BLOWN'].includes(status)) {
@@ -796,10 +798,11 @@ app.patch('/api/auth/trading/prop-accounts/:id', async (req, res) => {
         }
         const result = await pool.query(
             `UPDATE prop_accounts SET
-                account_name = COALESCE($1, account_name),
-                status       = COALESCE($2, status)
-             WHERE id = $3 RETURNING *`,
-            [account_name || null, status || null, id]
+                account_name    = COALESCE($1, account_name),
+                status          = COALESCE($2, status),
+                account_balance = COALESCE($3, account_balance)
+             WHERE id = $4 RETURNING *`,
+            [account_name || null, status || null, account_balance ?? null, id]
         );
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Account not found.' });

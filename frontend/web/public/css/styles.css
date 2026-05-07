@@ -806,9 +806,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
    MINIMALIST HORIZONTAL STATUS PILLS
    ========================================= */
 .system-status-pills { display: flex; gap: 14px; align-items: center; justify-content: flex-end; }
-.status-pill { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 215px; flex-shrink: 0; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 8px 18px; border-radius: 50px; font-size: 0.85rem; font-weight: 500; color: #e3e3e3; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: background 0.3s; }
+.status-pill { display: inline-flex; align-items: center; justify-content: flex-start; gap: 10px; min-width: 175px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 8px 18px; border-radius: 50px; font-size: 0.85rem; font-weight: 500; color: #e3e3e3; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: background 0.3s; white-space: nowrap; }
 .status-pill:hover { background: rgba(255,255,255,0.05); }
-.status-pill .status-label { letter-spacing: 0.5px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity 0.4s ease; }
+.status-pill .status-label { letter-spacing: 0.5px; opacity: 0.9; transition: opacity 0.4s ease; }
 
 /* Semantic Dot States */
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }

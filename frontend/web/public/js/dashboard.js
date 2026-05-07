@@ -914,12 +914,18 @@ async function loadPropAccounts() {
 
 
         accounts.forEach(acc => {
-            const statusColor = acc.status === 'ACTIVE' ? 'var(--primary)' : 
-                              (acc.status === 'BLOWN' ? 'var(--error)' : 'var(--text-light)');
-            
+            const STATUS_MAP = {
+                ACTIVE: { color: '#00e676', bg: 'rgba(0,230,118,0.12)' },
+                PAUSED: { color: '#ffd600', bg: 'rgba(255,214,0,0.12)' },
+                BLOWN:  { color: '#ff1744', bg: 'rgba(255,23,68,0.12)'  },
+            };
+            const statusStyle = STATUS_MAP[acc.status] || { color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.05)' };
+
             const pnlColor = acc.current_pnl >= 0 ? 'var(--primary)' : 'var(--error)';
             const sizeNum = Number(acc.account_size);
             const sizeFormatted = sizeNum >= 1000 ? (sizeNum / 1000) + 'K' : sizeNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+            const balanceNum = Number(acc.account_balance ?? acc.account_size);
+            const balanceFormatted = balanceNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const lossFormatted = Number(acc.max_loss_limit).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
             const pnlFormatted = Number(acc.current_pnl).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
 
@@ -929,17 +935,12 @@ async function loadPropAccounts() {
                         ${acc.account_name}
                         <div style="font-size: 0.75rem; color: var(--text-muted);">${acc.firm}</div>
                     </td>
-                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
-                        ${sizeFormatted}
-                    </td>
-                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
-                        ${lossFormatted}
-                    </td>
-                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">
-                        ${pnlFormatted}
-                    </td>
+                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${sizeFormatted}</td>
+                    <td style="padding: 10px 15px; color: var(--text-light); font-family: monospace; font-size: 0.9rem; font-weight: 600;">${balanceFormatted}</td>
+                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${lossFormatted}</td>
+                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">${pnlFormatted}</td>
                     <td style="padding: 10px 15px;">
-                        <span style="color: ${statusColor}; font-weight: bold; font-size: 0.85rem;">${acc.status}</span>
+                        <span style="color: ${statusStyle.color}; background: ${statusStyle.bg}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.5px;">${acc.status}</span>
                     </td>
                     <td style="padding: 10px 15px; text-align: right; white-space: nowrap;">
                         <button onclick="openEditAccountModal(${acc.id})" title="Edit" style="background: none; border: 1px solid rgba(102,252,241,0.3); color: var(--primary); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; margin-right: 6px; transition: all 0.2s;">✏️</button>
@@ -1065,6 +1066,7 @@ window.openEditAccountModal = async function(id) {
 
         document.getElementById('editAccountId').value        = acc.id;
         document.getElementById('editAccountName').value      = acc.account_name;
+        document.getElementById('editAccountBalance').value   = acc.account_balance ?? acc.account_size ?? '';
         document.getElementById('editAccountError').style.display = 'none';
         document.getElementById('editAccountSubtitle').textContent = acc.firm + ' · ' + (Number(acc.account_size) / 1000) + 'K';
         _setEditStatusToggle(acc.status || 'ACTIVE');
@@ -1078,10 +1080,12 @@ window.openEditAccountModal = async function(id) {
 if (editPropAccountForm) {
     editPropAccountForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const id     = document.getElementById('editAccountId').value;
-        const name   = document.getElementById('editAccountName').value.trim();
-        const status = document.getElementById('editAccountStatus').value;
-        const errEl  = document.getElementById('editAccountError');
+        const id      = document.getElementById('editAccountId').value;
+        const name    = document.getElementById('editAccountName').value.trim();
+        const status  = document.getElementById('editAccountStatus').value;
+        const balRaw  = document.getElementById('editAccountBalance').value;
+        const balance = balRaw !== '' ? parseFloat(balRaw) : undefined;
+        const errEl   = document.getElementById('editAccountError');
         const submitBtn = editPropAccountForm.querySelector('[type=submit]');
 
         if (!name) { errEl.textContent = 'Account name is required.'; errEl.style.display = 'block'; return; }
@@ -1092,7 +1096,7 @@ if (editPropAccountForm) {
         try {
             await auth.request(`/trading/prop-accounts/${id}`, {
                 method: 'PATCH',
-                body: JSON.stringify({ account_name: name, status }),
+                body: JSON.stringify({ account_name: name, status, account_balance: balance }),
             });
             editAccountModal.style.display = 'none';
             loadPropAccounts();
