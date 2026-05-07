@@ -1017,6 +1017,24 @@ app.patch('/api/auth/trading/notifications/read-all', async (req, res) => {
     }
 });
 
+// ── Mark individual notification as read ───────────────────────────────────────
+app.patch('/api/auth/trading/notifications/:id/read', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const { id } = req.params;
+        await pool.query(`UPDATE engine_notifications SET read = TRUE WHERE id = $1`, [id]);
+        res.status(200).json({ message: 'Notification marked as read.' });
+    } catch (error: any) {
+        console.error('[API ERROR] /notifications/:id/read PATCH:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 app.get('/api/auth/trading/notifications/unread-count', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -1029,6 +1047,42 @@ app.get('/api/auth/trading/notifications/unread-count', async (req, res) => {
         res.status(200).json({ unread: parseInt(res2.rows[0].cnt, 10) });
     } catch (error: any) {
         console.error('[API ERROR] /notifications/unread-count GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+
+// ── DELETE notification (single) ──────────────────────────────────────────────
+app.delete('/api/auth/trading/notifications/:id', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const { id } = req.params;
+        await pool.query(`DELETE FROM engine_notifications WHERE id = $1`, [id]);
+        res.status(200).json({ message: 'Notification deleted.' });
+    } catch (error: any) {
+        console.error('[API ERROR] /notifications/:id DELETE:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+// ── DELETE all notifications ───────────────────────────────────────────────────
+app.delete('/api/auth/trading/notifications', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        await pool.query(`DELETE FROM engine_notifications`);
+        res.status(200).json({ message: 'All notifications cleared.' });
+    } catch (error: any) {
+        console.error('[API ERROR] /notifications DELETE:', error);
         res.status(500).json({ message: 'Internal server error.' });
     }
 });

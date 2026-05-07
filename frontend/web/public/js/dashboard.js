@@ -1162,30 +1162,34 @@ if (editPropAccountForm) {
 // 🔔 NOTIFICATION CENTER
 // ─────────────────────────────────────────────────────────────────────────────
 (function initNotificationCenter() {
-    const bellBtn      = document.getElementById('notifBellBtn');
-    const dropdown     = document.getElementById('notifDropdown');
-    const badge        = document.getElementById('notifBadge');
-    const list         = document.getElementById('notifList');
-    const pagination   = document.getElementById('notifPagination');
-    const markReadBtn  = document.getElementById('notifMarkRead');
-    const historyLink  = document.getElementById('notifHistoryLink');
+    const bellBtn     = document.getElementById('notifBellBtn');
+    const dropdown    = document.getElementById('notifDropdown');
+    const badge       = document.getElementById('notifBadge');
+    const list        = document.getElementById('notifList');
+    const pagination  = document.getElementById('notifPagination');
+    const markReadBtn = document.getElementById('notifMarkRead');
+    const historyLink = document.getElementById('notifHistoryLink');
+
+    // History modal elements
+    const overlay     = document.getElementById('notifHistoryOverlay');
+    const historyBody = document.getElementById('notifHistoryBody');
+    const historyPag  = document.getElementById('notifHistoryPagination');
+    const historyMark = document.getElementById('notifHistoryMarkAll');
+    const historyClose= document.getElementById('notifHistoryClose');
 
     if (!bellBtn || !dropdown) return;
 
     let currentPage = 1;
     const PAGE_LIMIT = 20;
 
-    // ── Relative time helper (EST) ─────────────────────────────────────────
+    // ── Time helpers (UTC → EST display) ──────────────────────────────────
     function relativeTime(isoStr) {
-        const now  = Date.now();
-        const then = new Date(isoStr).getTime();
-        const diff = Math.floor((now - then) / 1000);
-        if (diff < 60)   return 'just now';
-        if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+        const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+        if (diff < 60)    return 'just now';
+        if (diff < 3600)  return `${Math.floor(diff / 60)} min ago`;
         if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
         return `${Math.floor(diff / 86400)}d ago`;
     }
-
     function absTimeEST(isoStr) {
         return new Date(isoStr).toLocaleString('en-US', {
             timeZone: 'America/New_York',
@@ -1194,10 +1198,28 @@ if (editPropAccountForm) {
         }) + ' ET';
     }
 
-    // ── Badge updater ──────────────────────────────────────────────────────
+    // ── Renders an array of notification items into a container ───────────
+    function renderItems(items, container) {
+        if (items.length === 0) {
+            container.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
+            return;
+        }
+        container.innerHTML = items.map(n => `
+            <div class="notif-item ${n.read ? '' : 'unread'}" data-id="${n.id}">
+                <span class="notif-msg">${n.message}</span>
+                <div class="notif-time-wrap">
+                    <span class="notif-rel-time">${relativeTime(n.created_at)}</span>
+                    <span class="notif-abs-time">${absTimeEST(n.created_at)}</span>
+                    ${!n.read ? `<button class="notif-dismiss-btn" data-id="${n.id}" title="Mark as read">\u2713</button>` : ''}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // ── Badge updater ─────────────────────────────────────────────────────
     async function refreshBadge() {
         try {
-            const data = await auth.request('/trading/notifications/unread-count', { method: 'GET' });
+            const data  = await auth.request('/trading/notifications/unread-count', { method: 'GET' });
             const count = data.unread || 0;
             if (count > 0) {
                 badge.textContent = count > 99 ? '99+' : count;
@@ -1210,58 +1232,67 @@ if (editPropAccountForm) {
         } catch (_) { /* silent */ }
     }
 
-    // ── Render notification list ───────────────────────────────────────────
-    async function loadNotifications(page = 1) {
+    // ── Load notifications into dropdown ──────────────────────────────────
+    async function loadDropdown(page = 1) {
         currentPage = page;
         try {
-            const data = await auth.request(
-                `/trading/notifications?page=${page}&limit=${PAGE_LIMIT}`,
-                { method: 'GET' }
-            );
+            const data  = await auth.request(`/trading/notifications?page=${page}&limit=${PAGE_LIMIT}`, { method: 'GET' });
             const items = data.notifications || [];
             const total = data.total || 0;
+            renderItems(items, list);
 
-            if (items.length === 0) {
-                list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
-            } else {
-                list.innerHTML = items.map(n => `
-                    <div class="notif-item ${n.read ? '' : 'unread'}">
-                        <span class="notif-msg">${n.message}</span>
-                        <div class="notif-time-wrap">
-                            <span class="notif-rel-time">${relativeTime(n.created_at)}</span>
-                            <span class="notif-abs-time">${absTimeEST(n.created_at)}</span>
-                        </div>
-                    </div>
-                `).join('');
-            }
-
-            // Render pagination
             const totalPages = Math.ceil(total / PAGE_LIMIT);
             if (totalPages > 1) {
                 pagination.innerHTML = Array.from({ length: totalPages }, (_, i) => i + 1)
                     .map(p => `<button class="notif-page-btn ${p === page ? 'active' : ''}" data-page="${p}">${p}</button>`)
                     .join('');
-                pagination.querySelectorAll('.notif-page-btn').forEach(btn => {
-                    btn.addEventListener('click', () => loadNotifications(parseInt(btn.dataset.page)));
-                });
-            } else {
-                pagination.innerHTML = '';
-            }
-        } catch (err) {
+                pagination.querySelectorAll('.notif-page-btn').forEach(btn =>
+                    btn.addEventListener('click', () => loadDropdown(parseInt(btn.dataset.page)))
+                );
+            } else { pagination.innerHTML = ''; }
+        } catch (_) {
             list.innerHTML = '<div class="notif-empty">Failed to load notifications.</div>';
         }
     }
 
-    // ── Bell click — toggle dropdown ───────────────────────────────────────
+    // ── Mark-as-read helper ───────────────────────────────────────────────
+    async function markOneRead(id, rowEl) {
+        try {
+            await auth.request(`/trading/notifications/${id}/read`, { method: 'PATCH' });
+            rowEl.classList.remove('unread');
+            rowEl.querySelector('.notif-dismiss-btn')?.remove();
+            await refreshBadge();
+        } catch (_) { /* silent */ }
+    }
+
+    // ── Event delegation — dropdown list ──────────────────────────────────
+    list.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.notif-dismiss-btn');
+        if (btn) {
+            e.stopPropagation();
+            await markOneRead(btn.dataset.id, btn.closest('.notif-item'));
+        }
+    });
+
+    // ── Event delegation — history modal list ─────────────────────────────
+    if (historyBody) {
+        historyBody.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.notif-dismiss-btn');
+            if (btn) {
+                e.stopPropagation();
+                await markOneRead(btn.dataset.id, btn.closest('.notif-item'));
+            }
+        });
+    }
+
+    // ── Bell click — toggle dropdown ──────────────────────────────────────
     bellBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const isOpen = dropdown.classList.contains('open');
         dropdown.classList.toggle('open', !isOpen);
-
         if (!isOpen) {
-            // Load first page
-            await loadNotifications(1);
-            // Mark all as read
+            await loadDropdown(1);
+            // Auto-mark all as read when opening
             try {
                 await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
                 badge.style.display = 'none';
@@ -1270,34 +1301,72 @@ if (editPropAccountForm) {
         }
     });
 
-    // ── Mark all read button ───────────────────────────────────────────────
-    markReadBtn.addEventListener('click', async () => {
+    // ── Mark all read button (dropdown header) ────────────────────────────
+    markReadBtn?.addEventListener('click', async () => {
         try {
             await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
             badge.style.display = 'none';
             bellBtn.classList.remove('has-unread');
-            // Re-render to remove unread highlight
-            await loadNotifications(currentPage);
+            list.querySelectorAll('.notif-item.unread').forEach(el => {
+                el.classList.remove('unread');
+                el.querySelector('.notif-dismiss-btn')?.remove();
+            });
         } catch (_) { /* silent */ }
     });
 
-    // ── View All History link ──────────────────────────────────────────────
-    if (historyLink) {
-        historyLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            // Loads page 1 — user can paginate through history
-            loadNotifications(1);
-        });
+    // ── View All History — open modal ─────────────────────────────────────
+    async function loadHistoryModal(page = 1) {
+        if (!overlay || !historyBody) return;
+        overlay.classList.add('open');
+        dropdown.classList.remove('open');
+        historyBody.innerHTML = '<div class="notif-empty">Loading...</div>';
+        try {
+            const data  = await auth.request(`/trading/notifications?page=${page}&limit=${PAGE_LIMIT}`, { method: 'GET' });
+            const items = data.notifications || [];
+            const total = data.total || 0;
+            renderItems(items, historyBody);
+
+            const totalPages = Math.ceil(total / PAGE_LIMIT);
+            if (historyPag) {
+                if (totalPages > 1) {
+                    historyPag.innerHTML = Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .map(p => `<button class="notif-page-btn ${p === page ? 'active' : ''}" data-page="${p}">${p}</button>`)
+                        .join('');
+                    historyPag.querySelectorAll('.notif-page-btn').forEach(btn =>
+                        btn.addEventListener('click', () => loadHistoryModal(parseInt(btn.dataset.page)))
+                    );
+                } else { historyPag.innerHTML = ''; }
+            }
+        } catch (_) {
+            historyBody.innerHTML = '<div class="notif-empty">Failed to load history.</div>';
+        }
     }
 
-    // ── Close on outside click ────────────────────────────────────────────
+    historyLink?.addEventListener('click', (e) => { e.preventDefault(); loadHistoryModal(1); });
+
+    historyClose?.addEventListener('click', () => overlay?.classList.remove('open'));
+    overlay?.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('open'); });
+
+    historyMark?.addEventListener('click', async () => {
+        try {
+            await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
+            badge.style.display = 'none';
+            bellBtn.classList.remove('has-unread');
+            historyBody.querySelectorAll('.notif-item.unread').forEach(el => {
+                el.classList.remove('unread');
+                el.querySelector('.notif-dismiss-btn')?.remove();
+            });
+        } catch (_) { /* silent */ }
+    });
+
+    // ── Close dropdown on outside click ───────────────────────────────────
     document.addEventListener('click', (e) => {
         if (!document.getElementById('notifBellWrap')?.contains(e.target)) {
             dropdown.classList.remove('open');
         }
     });
 
-    // ── Poll badge every 30s ──────────────────────────────────────────────
+    // ── Poll badge every 30s ───────────────────────────────────────────────
     refreshBadge();
     setInterval(refreshBadge, 30_000);
 })();
