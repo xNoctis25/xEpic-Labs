@@ -918,21 +918,39 @@ async function loadPropAccounts() {
 
 
         accounts.forEach(acc => {
+            // ── Core calculations ─────────────────────────────────────────────
+            const maxLoss    = Number(acc.max_loss_limit) || 0;
+            const sizeNum    = Number(acc.account_size)   || 0;
+            const balanceNum = Number(acc.account_balance ?? acc.account_size) || sizeNum;
+            const pnlValue   = balanceNum - sizeNum;
+            const buffer     = maxLoss + pnlValue; // maxLoss - |pnl| when pnl is negative
+
+            // ── Auto-BLOWN: if buffer ≤ 0, override status regardless of DB ──
+            const isBlown    = buffer <= 0;
+            const displayStatus = isBlown ? 'BLOWN' : acc.status;
+
+            // ── Status badge style ────────────────────────────────────────────
             const STATUS_MAP = {
                 ACTIVE: { color: '#00e676', bg: 'rgba(0,230,118,0.12)' },
                 PAUSED: { color: '#ffd600', bg: 'rgba(255,214,0,0.12)' },
                 BLOWN:  { color: '#ff1744', bg: 'rgba(255,23,68,0.12)'  },
             };
-            const statusStyle = STATUS_MAP[acc.status] || { color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.05)' };
+            const statusStyle = STATUS_MAP[displayStatus] || { color: 'rgba(255,255,255,0.4)', bg: 'rgba(255,255,255,0.05)' };
 
-            const pnlValue   = (Number(acc.account_balance ?? acc.account_size) - Number(acc.account_size));
-            const pnlColor   = pnlValue >= 0 ? 'var(--primary)' : 'var(--error)';
-            const sizeNum = Number(acc.account_size);
-            const sizeFormatted = sizeNum >= 1000 ? (sizeNum / 1000) + 'K' : sizeNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
-            const balanceNum = Number(acc.account_balance ?? acc.account_size);
+            // ── Buffer color: green >50% left, yellow ≤50%, red ≤20% ─────────
+            const bufferPct = maxLoss > 0 ? buffer / maxLoss : 1;
+            const bufferColor = buffer <= 0    ? '#ff1744'
+                              : bufferPct <= 0.2 ? '#ff6d00'
+                              : bufferPct <= 0.5 ? '#ffd600'
+                              :                   '#00e676';
+
+            // ── Formatted values ──────────────────────────────────────────────
+            const sizeFormatted    = sizeNum >= 1000 ? (sizeNum / 1000) + 'K' : '$' + sizeNum;
             const balanceFormatted = balanceNum.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
-            const lossFormatted = Number(acc.max_loss_limit).toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
-            const pnlFormatted = Number(acc.current_pnl).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+            const lossFormatted    = maxLoss.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
+            const pnlColor         = pnlValue >= 0 ? 'var(--primary)' : 'var(--error)';
+            const pnlFormatted     = (pnlValue >= 0 ? '+' : '') + pnlValue.toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+            const bufferFormatted  = buffer.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
 
             const rowHtml = `
                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
@@ -940,12 +958,13 @@ async function loadPropAccounts() {
                         ${acc.account_name}
                         <div style="font-size: 0.75rem; color: var(--text-muted);">${acc.firm}</div>
                     </td>
-                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${sizeFormatted}</td>
                     <td style="padding: 10px 15px; color: var(--text-light); font-family: monospace; font-size: 0.9rem; font-weight: 600;">${balanceFormatted}</td>
+                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.9rem; font-weight: 600;">${pnlFormatted}</td>
+                    <td style="padding: 10px 15px; color: ${bufferColor}; font-family: monospace; font-size: 0.9rem; font-weight: 600;">${bufferFormatted}</td>
+                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${sizeFormatted}</td>
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">${lossFormatted}</td>
-                    <td style="padding: 10px 15px; color: ${pnlColor}; font-family: monospace; font-size: 0.95rem;">${pnlValue >= 0 ? '+' : ''}${pnlValue.toLocaleString('en-US', {style: 'currency', currency: 'USD'})}</td>
                     <td style="padding: 10px 15px;">
-                        <span style="color: ${statusStyle.color}; background: ${statusStyle.bg}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.5px;">${acc.status}</span>
+                        <span style="color: ${statusStyle.color}; background: ${statusStyle.bg}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.5px;">${displayStatus}</span>
                     </td>
                     <td style="padding: 10px 15px; text-align: right; white-space: nowrap;">
                         <button onclick="openEditAccountModal(${acc.id})" title="Edit" style="background: none; border: 1px solid rgba(102,252,241,0.3); color: var(--primary); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; margin-right: 6px; transition: all 0.2s;">✏️</button>
@@ -964,17 +983,17 @@ async function loadPropAccounts() {
             }
         });
 
-        evalList.innerHTML = evalHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
-        fundedList.innerHTML = fundedHtml || '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
+        evalList.innerHTML   = evalHtml   || '<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
+        fundedList.innerHTML = fundedHtml || '<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts.</td></tr>';
     } catch (err) {
         console.error('Failed to load prop accounts:', err);
         if (err.status === 401) {
-            evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Session expired. <a href="/" style="color: var(--primary);">Please log in again.</a></td></tr>`;
-            fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">Session expired. <a href="/" style="color: var(--primary);">Please log in again.</a></td></tr>`;
+            evalList.innerHTML   = `<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--error);">Session expired. <a href="/" style="color: var(--primary);">Please log in again.</a></td></tr>`;
+            fundedList.innerHTML = `<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--error);">Session expired. <a href="/" style="color: var(--primary);">Please log in again.</a></td></tr>`;
         } else {
-            const msg = err.status === 404 ? 'No accounts found.' : (err.message || 'Error loading accounts.');
-            evalList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
-            fundedList.innerHTML = `<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+            const msg = err.message || 'Error loading accounts. <a href="#" onclick="loadPropAccounts();return false;" style="color:var(--primary);">Retry</a>';
+            evalList.innerHTML   = `<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
+            fundedList.innerHTML = `<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--error);">${msg}</td></tr>`;
         }
     }
 }
