@@ -77,8 +77,25 @@ pool.query(`
         CHECK (status IN ('ACTIVE','PAUSED','PASSED','PAYOUT_READY','BLOWN'));
 
     ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS account_balance NUMERIC(12,2) DEFAULT NULL;
+
+    CREATE TABLE IF NOT EXISTS engine_config (
+        id              SERIAL PRIMARY KEY,
+        active_playbook VARCHAR(20) NOT NULL DEFAULT 'PROP_FIRM'
+                        CHECK (active_playbook IN ('PROP_FIRM', 'CASH_ACCOUNT')),
+        updated_at      TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS engine_notifications (
+        id          SERIAL PRIMARY KEY,
+        event_type  VARCHAR(30) NOT NULL,
+        message     TEXT        NOT NULL,
+        read        BOOLEAN     DEFAULT FALSE,
+        created_at  TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
+    );
 `).then(async () => {
     try {
+        // Seed engine_config row 1 (idempotent)
+        await pool.query(`INSERT INTO engine_config (id) VALUES (1) ON CONFLICT DO NOTHING`);
         console.log('[DB] Seeding Topstep configurations...');
         const metrics = [
             ['Topstep', 50000, 3000, 2000, 5],
@@ -853,6 +870,101 @@ app.get('/api/auth/trading/engine/status', async (req, res) => {
         }
     } catch (error) {
         console.error('[API ERROR] /engine/status GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+// ── ENGINE PLAYBOOK (Nova command) ───────────────────────────────────────────
+app.patch('/api/auth/trading/engine/playbook', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const { playbook } = req.body;
+        if (!['PROP_FIRM', 'CASH_ACCOUNT'].includes(playbook)) {
+            return res.status(400).json({ message: 'Invalid playbook. Use PROP_FIRM or CASH_ACCOUNT.' });
+        }
+        await pool.query(
+            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW() WHERE id = 1`,
+            [playbook]
+        );
+        // Push a notification so dashboard immediately reflects the switch
+        await pool.query(
+            `INSERT INTO engine_notifications (event_type, message) VALUES ($1, $2)`,
+            ['PLAYBOOK_SWITCH', `🔄 Playbook → ${playbook} via Nova`]
+        );
+        console.log(`[API] ✅ Engine playbook switched to: ${playbook}`);
+        res.status(200).json({ message: `Playbook switched to ${playbook}.`, playbook });
+    } catch (error: any) {
+        console.error('[API ERROR] /engine/playbook PATCH:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+app.get('/api/auth/trading/notifications', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
+        const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
+        const offset = (page - 1) * limit;
+        const [rowsRes, countRes, unreadRes] = await Promise.all([
+            pool.query(
+                `SELECT id, event_type, message, read, created_at FROM engine_notifications ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+                [limit, offset]
+            ),
+            pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications`),
+            pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`),
+        ]);
+        res.status(200).json({
+            notifications: rowsRes.rows,
+            total:  parseInt(countRes.rows[0].cnt,  10),
+            unread: parseInt(unreadRes.rows[0].cnt, 10),
+            page,
+            limit,
+        });
+    } catch (error: any) {
+        console.error('[API ERROR] /notifications GET:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+app.patch('/api/auth/trading/notifications/read-all', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        await pool.query(`UPDATE engine_notifications SET read = TRUE WHERE read = FALSE`);
+        res.status(200).json({ message: 'All notifications marked as read.' });
+    } catch (error: any) {
+        console.error('[API ERROR] /notifications/read-all PATCH:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
+app.get('/api/auth/trading/notifications/unread-count', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const res2 = await pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`);
+        res.status(200).json({ unread: parseInt(res2.rows[0].cnt, 10) });
+    } catch (error: any) {
+        console.error('[API ERROR] /notifications/unread-count GET:', error);
         res.status(500).json({ message: 'Internal server error.' });
     }
 });

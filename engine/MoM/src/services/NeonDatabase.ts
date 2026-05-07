@@ -28,7 +28,7 @@ export interface BotState {
 // ==========================================
 export type PropPhase = 'EVAL' | 'FUNDED';
 export type PropRiskProfile = 'SAFE' | 'AGGRESSIVE';
-export type PropStatus = 'ACTIVE' | 'PASSED' | 'PAYOUT_READY' | 'BLOWN';
+export type PropStatus = 'ACTIVE' | 'PAUSED' | 'PASSED' | 'PAYOUT_READY' | 'BLOWN';
 
 export interface PropAccount {
     id: number;
@@ -41,6 +41,10 @@ export interface PropAccount {
     best_day_pnl: number;
     days_traded: number;
     status: PropStatus;
+    account_size: number;
+    max_loss_limit: number;
+    max_position_size: number;
+    account_balance: number | null;
 }
 
 export class NeonDatabase {
@@ -198,6 +202,28 @@ export class NeonDatabase {
                 is_active BOOLEAN DEFAULT TRUE,
                 unlock_time TIMESTAMP,
                 created_at TIMESTAMP DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
+            );
+        `);
+
+        // Create engine_config table — stores active playbook (PROP_FIRM | CASH_ACCOUNT)
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS engine_config (
+                id              SERIAL PRIMARY KEY,
+                active_playbook VARCHAR(20) NOT NULL DEFAULT 'PROP_FIRM'
+                                CHECK (active_playbook IN ('PROP_FIRM', 'CASH_ACCOUNT')),
+                updated_at      TIMESTAMPTZ DEFAULT NOW()
+            );
+            INSERT INTO engine_config (id) VALUES (1) ON CONFLICT DO NOTHING;
+        `);
+
+        // Create engine_notifications table — persistent notification feed
+        await this.pool.query(`
+            CREATE TABLE IF NOT EXISTS engine_notifications (
+                id          SERIAL PRIMARY KEY,
+                event_type  VARCHAR(30) NOT NULL,
+                message     TEXT        NOT NULL,
+                read        BOOLEAN     DEFAULT FALSE,
+                created_at  TIMESTAMPTZ DEFAULT (CURRENT_TIMESTAMP AT TIME ZONE 'America/New_York')
             );
         `);
     }
@@ -402,6 +428,101 @@ export class NeonDatabase {
         const result = await this.pool.query('SELECT NOW() AS server_time');
         const serverTime = result.rows[0].server_time;
         console.log(`🧠 [NeonDB] - Connection verified. Server time: ${serverTime}`);
+    }
+
+    // ==========================================
+    // Engine Config — Playbook & Notifications
+    // ==========================================
+
+    /** Returns the active engine playbook from the DB. */
+    public async getEngineConfig(): Promise<{ active_playbook: 'PROP_FIRM' | 'CASH_ACCOUNT' }> {
+        const res = await this.pool.query(`SELECT active_playbook FROM engine_config WHERE id = 1`);
+        return { active_playbook: (res.rows[0]?.active_playbook ?? 'PROP_FIRM') as 'PROP_FIRM' | 'CASH_ACCOUNT' };
+    }
+
+    /** Switches the engine playbook and records the timestamp. */
+    public async setPlaybook(mode: 'PROP_FIRM' | 'CASH_ACCOUNT'): Promise<void> {
+        await this.pool.query(
+            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW() WHERE id = 1`,
+            [mode]
+        );
+        console.log(`🔄 [NeonDB] Playbook switched to: ${mode}`);
+    }
+
+    /**
+     * Patches account_balance after a trade close.
+     * Applies RT fees only in LIVE mode. Auto-marks account BLOWN if buffer ≤ 0.
+     * ES RT fee: $3.80/contract | MES RT fee: $1.24/contract
+     */
+    public async patchAccountBalance(id: number, tradePnl: number, qty: number, symbol: string, isLive: boolean): Promise<void> {
+        const feePerRT  = isLive ? (symbol.includes('MES') ? 1.24 : 3.80) : 0;
+        const totalFees = qty * feePerRT;
+        const netPnl    = tradePnl - totalFees;
+
+        const res = await this.pool.query(`
+            UPDATE prop_accounts
+            SET account_balance = COALESCE(account_balance, account_size) + $1
+            WHERE id = $2
+            RETURNING account_balance, account_size, max_loss_limit, account_name
+        `, [netPnl, id]);
+
+        if (res.rows.length === 0) return;
+        const acc    = res.rows[0];
+        const newBal = Number(acc.account_balance);
+        const size   = Number(acc.account_size);
+        const maxL   = Number(acc.max_loss_limit);
+        const buffer = maxL + (newBal - size);
+
+        if (buffer <= 0) {
+            await this.pool.query(`UPDATE prop_accounts SET status = 'BLOWN' WHERE id = $1`, [id]);
+            const msg = `💥 Account ${acc.account_name} BLOWN — buffer hit $0`;
+            console.log(`🔴 [NeonDB] ${msg}`);
+            await this.pushNotification('ACCOUNT_BLOWN', msg);
+        } else {
+            const sign = netPnl >= 0 ? '+' : '';
+            console.log(`🏦 [NeonDB] Account #${id} balance: ${sign}$${netPnl.toFixed(2)} (fees: $${totalFees.toFixed(2)}) | Buffer: $${buffer.toFixed(2)}`);
+        }
+    }
+
+    /** Fire-and-forget — writes a notification row to engine_notifications. */
+    public async pushNotification(eventType: string, message: string): Promise<void> {
+        try {
+            await this.pool.query(
+                `INSERT INTO engine_notifications (event_type, message) VALUES ($1, $2)`,
+                [eventType, message]
+            );
+        } catch (err: any) {
+            console.warn(`[NeonDB] Notification write failed: ${err.message}`);
+        }
+    }
+
+    /** Paginated notification fetch with total + unread counts. */
+    public async getNotifications(page: number = 1, limit: number = 20): Promise<{ rows: any[]; total: number; unread: number }> {
+        const offset = (page - 1) * limit;
+        const [rowsRes, countRes, unreadRes] = await Promise.all([
+            this.pool.query(
+                `SELECT id, event_type, message, read, created_at FROM engine_notifications ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+                [limit, offset]
+            ),
+            this.pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications`),
+            this.pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`),
+        ]);
+        return {
+            rows:   rowsRes.rows,
+            total:  parseInt(countRes.rows[0].cnt,  10),
+            unread: parseInt(unreadRes.rows[0].cnt, 10),
+        };
+    }
+
+    /** Returns the count of unread notifications for the badge. */
+    public async getUnreadCount(): Promise<number> {
+        const res = await this.pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`);
+        return parseInt(res.rows[0].cnt, 10);
+    }
+
+    /** Marks all unread notifications as read. */
+    public async markAllRead(): Promise<void> {
+        await this.pool.query(`UPDATE engine_notifications SET read = TRUE WHERE read = FALSE`);
     }
 
     // ==========================================

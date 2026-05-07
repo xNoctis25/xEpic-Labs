@@ -816,6 +816,145 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 #tradingView th + th,
 #tradingView td + td { border-left: 1px solid rgba(255,255,255,0.05); }
 
+/* ── Notification Bell ─────────────────────────────────────────────────── */
+.notif-divider { color: rgba(255,255,255,0.18); font-size: 1.1rem; user-select: none; margin: 0 2px; }
+
+.notif-bell-wrap { position: relative; }
+
+.notif-bell-btn {
+    position: relative;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 50%;
+    width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    color: rgba(255,255,255,0.7);
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.notif-bell-btn svg { width: 18px; height: 18px; }
+.notif-bell-btn:hover {
+    background: rgba(102,252,241,0.08);
+    color: var(--primary);
+    box-shadow: 0 0 14px rgba(102,252,241,0.2);
+}
+.notif-bell-btn.has-unread { color: var(--primary); }
+
+.notif-badge {
+    position: absolute;
+    top: -4px; right: -4px;
+    background: #ff1744;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    min-width: 17px; height: 17px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 3px;
+    border: 2px solid var(--bg-base, #0b0c10);
+    animation: badgePop 0.25s ease;
+}
+@keyframes badgePop {
+    from { transform: scale(0.5); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+}
+
+/* ── Notification Dropdown ─────────────────────────────────────────────── */
+.notif-dropdown {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: 370px;
+    background: rgba(10,11,18,0.97);
+    border: 1px solid rgba(102,252,241,0.12);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(102,252,241,0.05);
+    backdrop-filter: blur(20px);
+    z-index: 9000;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    animation: notifSlideIn 0.18s ease;
+}
+.notif-dropdown.open { display: flex; }
+@keyframes notifSlideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.notif-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.notif-title { font-size: 0.9rem; font-weight: 600; color: #e3e3e3; letter-spacing: 0.3px; }
+.notif-mark-read {
+    background: none; border: none;
+    color: var(--primary); font-size: 0.78rem; cursor: pointer;
+    opacity: 0.8; transition: opacity 0.2s;
+    padding: 0;
+}
+.notif-mark-read:hover { opacity: 1; }
+
+.notif-list { max-height: 340px; overflow-y: auto; }
+.notif-list::-webkit-scrollbar { width: 4px; }
+.notif-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.notif-item {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 11px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s;
+    cursor: default;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: rgba(255,255,255,0.03); }
+.notif-item.unread { background: rgba(102,252,241,0.04); }
+.notif-item.unread .notif-msg { color: #e3e3e3; }
+
+.notif-msg { flex: 1; font-size: 0.82rem; color: rgba(255,255,255,0.65); line-height: 1.45; }
+.notif-time-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.notif-rel-time { font-size: 0.72rem; color: rgba(255,255,255,0.35); white-space: nowrap; }
+.notif-abs-time { font-size: 0.68rem; color: rgba(255,255,255,0.22); white-space: nowrap; }
+
+.notif-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: rgba(255,255,255,0.3);
+    font-size: 0.85rem;
+}
+
+.notif-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+}
+.notif-pagination { display: flex; gap: 4px; }
+.notif-page-btn {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.6);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.notif-page-btn:hover, .notif-page-btn.active {
+    background: rgba(102,252,241,0.12);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.notif-history-link {
+    font-size: 0.75rem;
+    color: var(--primary);
+    opacity: 0.75;
+    text-decoration: none;
+    transition: opacity 0.2s;
+}
+.notif-history-link:hover { opacity: 1; }
+
+
 
 /* Semantic Dot States */
 .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }

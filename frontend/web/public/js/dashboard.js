@@ -1158,6 +1158,149 @@ if (editPropAccountForm) {
     });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔔 NOTIFICATION CENTER
+// ─────────────────────────────────────────────────────────────────────────────
+(function initNotificationCenter() {
+    const bellBtn      = document.getElementById('notifBellBtn');
+    const dropdown     = document.getElementById('notifDropdown');
+    const badge        = document.getElementById('notifBadge');
+    const list         = document.getElementById('notifList');
+    const pagination   = document.getElementById('notifPagination');
+    const markReadBtn  = document.getElementById('notifMarkRead');
+    const historyLink  = document.getElementById('notifHistoryLink');
+
+    if (!bellBtn || !dropdown) return;
+
+    let currentPage = 1;
+    const PAGE_LIMIT = 20;
+
+    // ── Relative time helper (EST) ─────────────────────────────────────────
+    function relativeTime(isoStr) {
+        const now  = Date.now();
+        const then = new Date(isoStr).getTime();
+        const diff = Math.floor((now - then) / 1000);
+        if (diff < 60)   return 'just now';
+        if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+        if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+        return `${Math.floor(diff / 86400)}d ago`;
+    }
+
+    function absTimeEST(isoStr) {
+        return new Date(isoStr).toLocaleString('en-US', {
+            timeZone: 'America/New_York',
+            month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true
+        }) + ' ET';
+    }
+
+    // ── Badge updater ──────────────────────────────────────────────────────
+    async function refreshBadge() {
+        try {
+            const data = await auth.request('/trading/notifications/unread-count', { method: 'GET' });
+            const count = data.unread || 0;
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.style.display = 'flex';
+                bellBtn.classList.add('has-unread');
+            } else {
+                badge.style.display = 'none';
+                bellBtn.classList.remove('has-unread');
+            }
+        } catch (_) { /* silent */ }
+    }
+
+    // ── Render notification list ───────────────────────────────────────────
+    async function loadNotifications(page = 1) {
+        currentPage = page;
+        try {
+            const data = await auth.request(
+                `/trading/notifications?page=${page}&limit=${PAGE_LIMIT}`,
+                { method: 'GET' }
+            );
+            const items = data.notifications || [];
+            const total = data.total || 0;
+
+            if (items.length === 0) {
+                list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
+            } else {
+                list.innerHTML = items.map(n => `
+                    <div class="notif-item ${n.read ? '' : 'unread'}">
+                        <span class="notif-msg">${n.message}</span>
+                        <div class="notif-time-wrap">
+                            <span class="notif-rel-time">${relativeTime(n.created_at)}</span>
+                            <span class="notif-abs-time">${absTimeEST(n.created_at)}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Render pagination
+            const totalPages = Math.ceil(total / PAGE_LIMIT);
+            if (totalPages > 1) {
+                pagination.innerHTML = Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .map(p => `<button class="notif-page-btn ${p === page ? 'active' : ''}" data-page="${p}">${p}</button>`)
+                    .join('');
+                pagination.querySelectorAll('.notif-page-btn').forEach(btn => {
+                    btn.addEventListener('click', () => loadNotifications(parseInt(btn.dataset.page)));
+                });
+            } else {
+                pagination.innerHTML = '';
+            }
+        } catch (err) {
+            list.innerHTML = '<div class="notif-empty">Failed to load notifications.</div>';
+        }
+    }
+
+    // ── Bell click — toggle dropdown ───────────────────────────────────────
+    bellBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const isOpen = dropdown.classList.contains('open');
+        dropdown.classList.toggle('open', !isOpen);
+
+        if (!isOpen) {
+            // Load first page
+            await loadNotifications(1);
+            // Mark all as read
+            try {
+                await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
+                badge.style.display = 'none';
+                bellBtn.classList.remove('has-unread');
+            } catch (_) { /* silent */ }
+        }
+    });
+
+    // ── Mark all read button ───────────────────────────────────────────────
+    markReadBtn.addEventListener('click', async () => {
+        try {
+            await auth.request('/trading/notifications/read-all', { method: 'PATCH' });
+            badge.style.display = 'none';
+            bellBtn.classList.remove('has-unread');
+            // Re-render to remove unread highlight
+            await loadNotifications(currentPage);
+        } catch (_) { /* silent */ }
+    });
+
+    // ── View All History link ──────────────────────────────────────────────
+    if (historyLink) {
+        historyLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            // Loads page 1 — user can paginate through history
+            loadNotifications(1);
+        });
+    }
+
+    // ── Close on outside click ────────────────────────────────────────────
+    document.addEventListener('click', (e) => {
+        if (!document.getElementById('notifBellWrap')?.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+
+    // ── Poll badge every 30s ──────────────────────────────────────────────
+    refreshBadge();
+    setInterval(refreshBadge, 30_000);
+})();
 
 
 // ── CUSTOM SELECT LOGIC ────────────────────────────────────────────────────────
