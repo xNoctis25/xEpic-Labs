@@ -495,7 +495,7 @@ function updateGlobalRiskToggle(riskProfile) {
         globalRiskToggleBtn.style.color = '#34d399';
         globalRiskToggleBtn.style.borderColor = '#34d399';
     } else {
-        globalRiskToggleBtn.textContent = 'Risk: AGGRESSIVE 🚀';
+        globalRiskToggleBtn.textContent = 'Risk: MAX 🚀';
         globalRiskToggleBtn.style.background = 'rgba(248, 113, 113, 0.2)';
         globalRiskToggleBtn.style.color = '#f87171';
         globalRiskToggleBtn.style.borderColor = '#f87171';
@@ -922,7 +922,7 @@ async function loadPropAccounts() {
                         ${sizeFormatted}
                     </td>
                     <td style="padding: 10px 15px;">
-                        <span style="color: ${acc.risk_profile === 'SAFE' ? 'var(--primary)' : 'var(--error)'}; font-size: 0.85rem;">${acc.risk_profile}</span>
+                        <span style="color: ${acc.risk_profile === 'SAFE' ? 'var(--primary)' : 'var(--error)'}; font-size: 0.85rem;">${acc.risk_profile === 'SAFE' ? 'SAFE' : 'MAX'}</span>
                     </td>
                     <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.9rem;">
                         ${lossFormatted}

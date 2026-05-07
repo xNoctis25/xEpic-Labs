@@ -1342,3 +1342,33 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .nova-scroll-thumb:hover {
     background: rgba(255, 255, 255, 0.35);
 }
+
+/* ── Custom Select ── */
+.form-group select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding: 12px 16px;
+  background-color: rgba(255,255,255,0.03);
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%2366fcf1' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position-x: 96%;
+  background-position-y: 50%;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  color: var(--text-light);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+.form-group select:focus {
+  border-color: rgba(102, 252, 241, 0.5);
+  box-shadow: 0 0 0 3px rgba(102, 252, 241, 0.08);
+  background-color: rgba(102, 252, 241, 0.03);
+}
+.form-group select option {
+  background: rgba(10, 10, 15, 0.95);
+  color: #fff;
+}
