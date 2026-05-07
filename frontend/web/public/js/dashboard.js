@@ -1231,13 +1231,19 @@ if (editPropAccountForm) {
         } catch (_) { /* silent */ }
     }
 
-    // ── Load notifications into dropdown ──────────────────────────────────
+    // ── Load UNREAD-only notifications into dropdown ───────────────────────
     async function loadDropdown(page = 1) {
         currentPage = page;
         try {
-            const data  = await auth.request(`/trading/notifications?page=${page}&limit=${PAGE_LIMIT}`, { method: 'GET' });
+            const data  = await auth.request(`/trading/notifications?page=${page}&limit=${PAGE_LIMIT}&unread_only=true`, { method: 'GET' });
             const items = data.notifications || [];
             const total = data.total || 0;
+
+            if (items.length === 0) {
+                list.innerHTML = '<div class="notif-empty">All caught up 🎉</div>';
+                pagination.innerHTML = '';
+                return;
+            }
             renderItems(items, list);
 
             const totalPages = Math.ceil(total / PAGE_LIMIT);

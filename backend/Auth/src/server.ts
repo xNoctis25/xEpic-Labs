@@ -977,15 +977,20 @@ app.get('/api/auth/trading/notifications', async (req, res) => {
     try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
-        const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
-        const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
-        const offset = (page - 1) * limit;
+        const page       = Math.max(1, parseInt(req.query.page  as string) || 1);
+        const limit      = Math.min(50, parseInt(req.query.limit as string) || 20);
+        const unreadOnly = req.query.unread_only === 'true';
+        const offset     = (page - 1) * limit;
+        const whereClause = unreadOnly ? 'WHERE read = FALSE' : '';
+
         const [rowsRes, countRes, unreadRes] = await Promise.all([
             pool.query(
-                `SELECT id, event_type, message, read, created_at FROM engine_notifications ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+                `SELECT id, event_type, message, read, created_at
+                   FROM engine_notifications ${whereClause}
+                  ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
                 [limit, offset]
             ),
-            pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications`),
+            pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications ${whereClause}`),
             pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`),
         ]);
         res.status(200).json({

@@ -523,8 +523,7 @@ async function boot(): Promise<void> {
         console.log(`  ${bufferTag}`);
     }
 
-    await haltManager.initialize();
-
+    // Register the state-change callback BEFORE initialize() so boot-halt fires it too
     haltManager.onStateChange(async (isHalted, haltType) => {
         if (momWorker) momWorker.postMessage({ type: 'HALT_STATE', payload: isHalted });
         // Push halt/resume notification to dashboard
@@ -542,6 +541,14 @@ async function boot(): Promise<void> {
             await reconcileLedgerOnClose('EMERGENCY_CLOSE');
         }
     });
+
+    // Initialize halt manager — callback is now registered so boot-halt will fire it
+    await haltManager.initialize();
+
+    // If engine booted in halt state, emit a dedicated boot notification
+    if (haltManager.isHalted()) {
+        void db.pushNotification('ENGINE_HALTED', `🛑 Engine booted in HALT state — awaiting manual reset`);
+    }
 
     console.log(`  Phase: ${botState.currentPhase} | Day ${botState.activeTradingDays} | PnL: $${botState.runningPnl.toFixed(2)}`);
     console.log(`  Buying Power: $${ledger.getAvailableBuyingPower().toFixed(0)}`);
