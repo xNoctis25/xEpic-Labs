@@ -753,6 +753,27 @@ app.post('/api/auth/trading/prop-accounts', async (req, res) => {
     }
 });
 
+app.delete('/api/auth/trading/prop-accounts/:id', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'No token provided.' });
+    }
+    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
+    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
+    try {
+        const { id } = req.params;
+        const result = await pool.query('DELETE FROM prop_accounts WHERE id = $1 RETURNING id', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Account not found.' });
+        }
+        console.log(`[API] ✅ Prop Firm Account Deleted: ID ${id}`);
+        res.status(200).json({ message: 'Account deleted.' });
+    } catch (error: any) {
+        console.error('[API ERROR] /prop-accounts DELETE:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+});
+
 app.get('/api/auth/trading/engine/status', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;

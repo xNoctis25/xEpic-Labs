@@ -941,6 +941,10 @@ async function loadPropAccounts() {
                     <td style="padding: 10px 15px;">
                         <span style="color: ${statusColor}; font-weight: bold; font-size: 0.85rem;">${acc.status}</span>
                     </td>
+                    <td style="padding: 10px 15px; text-align: right; white-space: nowrap;">
+                        <button onclick="openEditAccountModal(${acc.id})" title="Edit" style="background: none; border: 1px solid rgba(102,252,241,0.3); color: var(--primary); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; margin-right: 6px; transition: all 0.2s;">✏️</button>
+                        <button onclick="deletePropAccount(${acc.id})" title="Delete" style="background: none; border: 1px solid rgba(255,60,60,0.3); color: var(--error); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s;">🗑️</button>
+                    </td>
                 </tr>
             `;
 
@@ -969,11 +973,46 @@ async function loadPropAccounts() {
     }
 }
 
+// ── DELETE ACCOUNT ────────────────────────────────────────────────────────────
+window.deletePropAccount = async function(id) {
+    if (!confirm('Delete this account? This cannot be undone.')) return;
+    try {
+        await auth.request(`/trading/prop-accounts/${id}`, { method: 'DELETE' });
+        loadPropAccounts();
+    } catch (err) {
+        alert('Failed to delete account: ' + (err.message || 'Unknown error'));
+    }
+};
+
+// ── EDIT ACCOUNT (stub — opens modal pre-filled) ──────────────────────────────
+window.openEditAccountModal = async function(id) {
+    // For now just re-use the add modal but pre-fill with account name
+    // A proper edit flow can be wired in if needed
+    alert('Edit for account ID ' + id + ' coming soon.');
+};
+
 // ── CUSTOM SELECT LOGIC ────────────────────────────────────────────────────────
 const customSelectTrigger = document.getElementById('customSelectTrigger');
 const customOptionsContainer = document.getElementById('customOptionsContainer');
 const customSelectLabel = document.getElementById('customSelectLabel');
 const propSizeInput = document.getElementById('propSize');
+
+// Teleport dropdown to <body> to escape modal overflow clipping
+if (customOptionsContainer && customOptionsContainer.parentNode !== document.body) {
+    document.body.appendChild(customOptionsContainer);
+}
+
+function _positionDropdown() {
+    if (!customSelectTrigger || !customOptionsContainer) return;
+    const rect = customSelectTrigger.getBoundingClientRect();
+    customOptionsContainer.style.position   = 'fixed';
+    customOptionsContainer.style.top        = (rect.bottom + 6) + 'px';
+    customOptionsContainer.style.left       = rect.left + 'px';
+    customOptionsContainer.style.width      = rect.width + 'px';
+    customOptionsContainer.style.zIndex     = '2147483647';
+    customOptionsContainer.style.maxHeight  = '220px';
+    customOptionsContainer.style.overflowY  = 'auto';
+}
 
 if (customSelectTrigger && customOptionsContainer) {
     customSelectTrigger.addEventListener('click', (e) => {
@@ -981,10 +1020,11 @@ if (customSelectTrigger && customOptionsContainer) {
         const isOpen = customOptionsContainer.style.display === 'block';
         if (isOpen) {
             customOptionsContainer.style.opacity = '0';
-            customOptionsContainer.style.transform = 'translateY(-10px)';
+            customOptionsContainer.style.transform = 'translateY(-6px)';
             customSelectTrigger.classList.remove('open');
             setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
         } else {
+            _positionDropdown();
             customOptionsContainer.style.display = 'block';
             setTimeout(() => {
                 customOptionsContainer.style.opacity = '1';
