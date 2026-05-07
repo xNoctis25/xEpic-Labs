@@ -127,6 +127,9 @@ export class NeonDatabase {
             `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS mfe_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00`,
             `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS mae_points NUMERIC(8, 2) NOT NULL DEFAULT 0.00`,
             `ALTER TABLE trade_journal ADD COLUMN IF NOT EXISTS trade_metadata JSONB DEFAULT '{}'`,
+            // Expand prop_accounts.status to include PAUSED (drop old constraint, add new)
+            `ALTER TABLE prop_accounts DROP CONSTRAINT IF EXISTS prop_accounts_status_check`,
+            `ALTER TABLE prop_accounts ADD CONSTRAINT prop_accounts_status_check CHECK (status IN ('ACTIVE','PAUSED','PASSED','PAYOUT_READY','BLOWN'))`,
         ];
         for (const sql of migrations) {
             await this.pool.query(sql);

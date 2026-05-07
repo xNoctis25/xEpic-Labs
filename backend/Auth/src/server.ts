@@ -71,6 +71,10 @@ pool.query(`
     ADD COLUMN IF NOT EXISTS account_size NUMERIC(10,2) DEFAULT 0,
     ADD COLUMN IF NOT EXISTS max_loss_limit NUMERIC(10,2) DEFAULT 0,
     ADD COLUMN IF NOT EXISTS max_position_size INT DEFAULT 0;
+
+    ALTER TABLE prop_accounts DROP CONSTRAINT IF EXISTS prop_accounts_status_check;
+    ALTER TABLE prop_accounts ADD CONSTRAINT prop_accounts_status_check
+        CHECK (status IN ('ACTIVE','PAUSED','PASSED','PAYOUT_READY','BLOWN'));
 `).then(async () => {
     try {
         console.log('[DB] Seeding Topstep configurations...');
