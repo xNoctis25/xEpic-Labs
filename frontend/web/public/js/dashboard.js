@@ -1051,6 +1051,17 @@ function _setEditStatusToggle(status) {
     });
 }
 
+// ── CURRENCY INPUT HELPERS ────────────────────────────────────────────────────
+function formatCurrencyInput(val) {
+    const num = parseFloat(String(val).replace(/[$,]/g, ''));
+    if (isNaN(num) || val === '' || val === undefined) return '';
+    return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function parseCurrencyInput(val) {
+    const num = parseFloat(String(val).replace(/[$,]/g, ''));
+    return isNaN(num) ? undefined : num;
+}
+
 document.querySelectorAll('.edit-status-btn').forEach(btn => {
     btn.addEventListener('click', () => _setEditStatusToggle(btn.dataset.status));
 });
@@ -1068,8 +1079,10 @@ window.openEditAccountModal = async function(id) {
         const currentBalance = Number(acc.account_balance ?? acc.account_size);
         const balPlaceholder = 'Balance: ' + currentBalance.toLocaleString('en-US', {style: 'currency', currency: 'USD', maximumFractionDigits: 0});
         const balInput = document.getElementById('editAccountBalance');
-        balInput.value       = currentBalance || '';
+        balInput.value       = formatCurrencyInput(currentBalance);
         balInput.placeholder = balPlaceholder;
+        // Reformat on blur
+        balInput.onblur = () => { const formatted = formatCurrencyInput(balInput.value); if (formatted) balInput.value = formatted; };
         document.getElementById('editAccountId').value        = acc.id;
         document.getElementById('editAccountName').value      = acc.account_name;
         document.getElementById('editAccountError').style.display = 'none';
@@ -1089,7 +1102,7 @@ if (editPropAccountForm) {
         const name    = document.getElementById('editAccountName').value.trim();
         const status  = document.getElementById('editAccountStatus').value;
         const balRaw  = document.getElementById('editAccountBalance').value;
-        const balance = balRaw !== '' ? parseFloat(balRaw) : undefined;
+        const balance = parseCurrencyInput(balRaw);
         const errEl   = document.getElementById('editAccountError');
         const submitBtn = editPropAccountForm.querySelector('[type=submit]');
 
