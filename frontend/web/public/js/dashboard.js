@@ -648,6 +648,7 @@ function updateRealtimeClock() {
     // Use Intl.DateTimeFormat to get the EST time
     const options = {
         timeZone: 'America/New_York',
+        weekday: 'short',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
@@ -657,12 +658,16 @@ function updateRealtimeClock() {
     };
     
     const formatter = new Intl.DateTimeFormat('en-US', options);
-    // e.g. "May 08, 01:44:03 PM"
+    // e.g. "Fri, May 08, 01:44:03 PM"
     const formatted = formatter.format(new Date());
     
-    // Convert "May 08, 01:44:03 PM" to "May 08 • 01:44:03 PM ET"
-    const [datePart, timePart] = formatted.split(', ');
-    uiRealtimeClock.textContent = `${datePart} • ${timePart} ET`;
+    // Convert "Fri, May 08, 01:44:03 PM" to "Fri, May 08 • 01:44:03 PM ET"
+    const parts = formatted.split(', ');
+    if (parts.length === 3) {
+        uiRealtimeClock.textContent = `${parts[0]}, ${parts[1]} • ${parts[2]} ET`;
+    } else {
+        uiRealtimeClock.textContent = formatted + " ET";
+    }
 }
 
 updateRealtimeClock();
