@@ -1819,19 +1819,40 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: inline-block;
     width: 6px;
     height: 6px;
-    background: #ff4444;
+    background: #66fcf1; /* Default Cyan */
     border-radius: 50%;
-    box-shadow: 0 0 8px #ff4444;
-}
-
-.epic-events-list li.upcoming .epic-event-time::before {
-    background: #66fcf1;
     box-shadow: 0 0 8px #66fcf1;
 }
 
-.epic-events-list li.next-week .epic-event-time::before {
+/* Event Type Colors */
+.epic-events-list li.event-type-holiday .epic-event-time::before {
+    background: #d500f9;
+    box-shadow: 0 0 8px #d500f9;
+}
+
+.epic-events-list li.event-type-birthday .epic-event-time::before {
+    background: #00e676;
+    box-shadow: 0 0 8px #00e676;
+}
+
+.epic-events-list li.event-type-bill .epic-event-time::before {
+    background: #ff9100;
+    box-shadow: 0 0 8px #ff9100;
+}
+
+.epic-events-list li.event-type-fmp-yellow .epic-event-time::before {
     background: #ffd600;
     box-shadow: 0 0 8px #ffd600;
+}
+
+.epic-events-list li.event-type-fmp-red .epic-event-time::before {
+    background: #ff4444;
+    box-shadow: 0 0 8px #ff4444;
+}
+
+.epic-events-list li.event-type-default .epic-event-time::before {
+    background: #66fcf1;
+    box-shadow: 0 0 8px #66fcf1;
 }
 
 .epic-event-title {
@@ -1943,7 +1964,8 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start; /* changed to allow dots at bottom */
+    padding-top: 8px; /* push date down slightly */
     font-size: 0.85rem; /* Smaller text */
     font-weight: 400;
     color: #66fcf1;
@@ -1953,6 +1975,30 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     width: 100%;
     position: relative;
 }
+
+/* Calendar Event Indicators (Dots) */
+.epic-cal-indicators {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+    margin-top: 2px;
+    height: 4px; /* fixed height for the dots row */
+    align-items: center;
+    justify-content: center;
+}
+
+.epic-cal-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+}
+
+.epic-cal-dot.dot-holiday { background: #d500f9; box-shadow: 0 0 4px #d500f9; }
+.epic-cal-dot.dot-birthday { background: #00e676; box-shadow: 0 0 4px #00e676; }
+.epic-cal-dot.dot-bill { background: #ff9100; box-shadow: 0 0 4px #ff9100; }
+.epic-cal-dot.dot-fmp-yellow { background: #ffd600; box-shadow: 0 0 4px #ffd600; }
+.epic-cal-dot.dot-fmp-red { background: #ff4444; box-shadow: 0 0 4px #ff4444; }
+.epic-cal-dot.dot-default { background: #66fcf1; box-shadow: 0 0 4px #66fcf1; }
 
 
 

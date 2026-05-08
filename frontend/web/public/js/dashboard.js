@@ -1631,12 +1631,26 @@ function renderCalendar(dateToRender) {
         
         dayCell.textContent = day;
         
-        // Add dot for aesthetic flair on some dummy days
-        if (day === 7 || day === 12 || day === 25 || day === 31) {
-            dayCell.classList.add('has-event');
-            const dot = document.createElement('div');
-            dot.classList.add('dot');
-            dayCell.appendChild(dot);
+        // Find events for this specific day
+        const cellDate = new Date(year, month, day);
+        const nextDay = new Date(year, month, day + 1);
+        
+        if (window.epicEvents) {
+            const dayEvents = window.epicEvents.filter(e => e.date >= cellDate && e.date < nextDay);
+            if (dayEvents.length > 0) {
+                const uniqueTypes = new Set(dayEvents.map(e => e.type || 'default'));
+                
+                const indicators = document.createElement('div');
+                indicators.classList.add('epic-cal-indicators');
+                
+                uniqueTypes.forEach(type => {
+                    const dot = document.createElement('div');
+                    dot.classList.add('epic-cal-dot', `dot-${type}`);
+                    indicators.appendChild(dot);
+                });
+                
+                dayCell.appendChild(indicators);
+            }
         }
         
         if (isCurrentMonth && day === currentDay) {
@@ -1846,33 +1860,54 @@ function renderEvents() {
     const endOfNextWeek = new Date(endOfThisWeek);
     endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
     
-    // Mock events based on current time to ensure they always populate the UI
-    const mockEvents = [];
+    // Base array exported to window for Calendar access
+    window.epicEvents = window.epicEvents || [];
+    window.epicEvents.length = 0; // clear existing
     
-    // Generate enough data to trigger pagination (more than 4)
-    for (let i = 0; i < 7; i++) {
-        mockEvents.push({ title: `Today Event ${i + 1}`, date: new Date(now.getTime() + (i + 1) * 60 * 60 * 1000) });
+    // Hardcoded 2026 US Federal Holidays
+    const holidays2026 = [
+        { date: new Date(2026, 0, 1), title: "New Year's Day" },
+        { date: new Date(2026, 0, 19), title: "MLK Jr. Day" },
+        { date: new Date(2026, 1, 16), title: "Presidents' Day" },
+        { date: new Date(2026, 4, 25), title: "Memorial Day" },
+        { date: new Date(2026, 5, 19), title: "Juneteenth" },
+        { date: new Date(2026, 6, 3), title: "Independence Day (Observed)" },
+        { date: new Date(2026, 8, 7), title: "Labor Day" },
+        { date: new Date(2026, 9, 12), title: "Columbus Day" },
+        { date: new Date(2026, 10, 11), title: "Veterans Day" },
+        { date: new Date(2026, 10, 26), title: "Thanksgiving Day" },
+        { date: new Date(2026, 11, 25), title: "Christmas Day" }
+    ];
+    
+    holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
+
+    // Generate diverse typed data to trigger pagination
+    for (let i = 0; i < 3; i++) {
+        window.epicEvents.push({ title: `FMP Alert ${i + 1}`, date: new Date(now.getTime() + (i + 1) * 60 * 60 * 1000), type: i % 2 === 0 ? 'fmp-red' : 'fmp-yellow' });
     }
+    window.epicEvents.push({ title: `Server Bill`, date: new Date(now.getTime() + 5 * 60 * 60 * 1000), type: 'bill' });
+    window.epicEvents.push({ title: `Meeting`, date: new Date(now.getTime() + 6 * 60 * 60 * 1000), type: 'default' });
     
     if (daysUntilSaturday > 0) {
-        for (let i = 0; i < 6; i++) {
-            mockEvents.push({ title: `Upcoming Event ${i + 1}`, date: new Date(startOfToday.getTime() + 1 * 24 * 60 * 60 * 1000 + i * 4 * 60 * 60 * 1000) });
+        for (let i = 0; i < 3; i++) {
+            window.epicEvents.push({ title: `FMP Report ${i + 1}`, date: new Date(startOfToday.getTime() + 1 * 24 * 60 * 60 * 1000 + i * 4 * 60 * 60 * 1000), type: 'fmp-yellow' });
         }
+        window.epicEvents.push({ title: `Birthday Dinner`, date: new Date(startOfToday.getTime() + 2 * 24 * 60 * 60 * 1000), type: 'birthday' });
     }
     
-    for (let i = 0; i < 8; i++) {
-        mockEvents.push({ title: `Next Week Event ${i + 1}`, date: new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000 + i * 12 * 60 * 60 * 1000) });
+    for (let i = 0; i < 5; i++) {
+        window.epicEvents.push({ title: `Utility Bill`, date: new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000 + i * 12 * 60 * 60 * 1000), type: 'bill' });
     }
     
     // Sort events chronologically
-    mockEvents.sort((a, b) => a.date - b.date);
+    window.epicEvents.sort((a, b) => a.date - b.date);
     
     // Categorize
     const todayEvents = [];
     const thisWeekEvents = [];
     const nextWeekEvents = [];
     
-    mockEvents.forEach(evt => {
+    window.epicEvents.forEach(evt => {
         if (evt.date >= startOfToday && evt.date < endOfToday) {
             todayEvents.push(evt);
         } else if (evt.date >= endOfToday && evt.date < endOfThisWeek) {
@@ -1881,6 +1916,9 @@ function renderEvents() {
             nextWeekEvents.push(evt);
         }
     });
+    
+    // Trigger calendar re-render now that window.epicEvents is populated
+    renderCalendar(currentCalDate);
     
     function formatEventTime(date) {
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1921,7 +1959,8 @@ function renderEvents() {
         
         pageEvents.forEach(evt => {
             const li = document.createElement('li');
-            if (stylingClass) li.classList.add(stylingClass);
+            const eventTypeClass = evt.type ? `event-type-${evt.type}` : 'event-type-default';
+            li.classList.add(eventTypeClass);
             
             const timeSpan = document.createElement('span');
             timeSpan.classList.add('epic-event-time');
