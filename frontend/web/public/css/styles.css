@@ -1727,7 +1727,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-day.weekend.faded {
-    color: rgba(102, 252, 241, 0.3);
+    color: rgba(255, 255, 255, 0.15); /* Keep old/new month dates neutral faded */
 }
 
 .epic-cal-grid {
@@ -1753,9 +1753,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     position: relative;
 }
 
-.epic-cal-day.weekend {
-    color: rgba(255, 255, 255, 0.5); /* Dimmer for weekend dates */
-}
+
 
 .epic-cal-day:hover {
     background: rgba(255, 255, 255, 0.1);
