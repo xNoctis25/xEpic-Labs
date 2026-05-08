@@ -1719,11 +1719,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-grid-header .weekend {
-    color: #66fcf1;
+    color: #ff4444;
 }
 
 .epic-cal-day.weekend {
-    color: #66fcf1;
+    color: #ff4444;
 }
 
 .epic-cal-day.weekend.faded {
