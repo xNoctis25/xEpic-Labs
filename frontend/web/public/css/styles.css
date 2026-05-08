@@ -1715,7 +1715,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-grid-header .weekday {
-    color: rgba(255, 255, 255, 0.8);
+    color: #66fcf1;
 }
 
 .epic-cal-grid-header .weekend {
@@ -1745,7 +1745,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     justify-content: center;
     font-size: 0.85rem; /* Smaller text */
     font-weight: 400;
-    color: #f8fafc;
+    color: #66fcf1;
     border-radius: 50%; /* Perfect circle */
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
