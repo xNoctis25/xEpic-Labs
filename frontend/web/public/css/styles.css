@@ -1655,13 +1655,13 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 
 .epic-events-panel {
     padding: 15px 20px;
-    width: 320px;
+    width: 360px; /* Made wider to fit the tabs alongside Upcoming */
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 12px; /* Tighter gap to fit 4 events */
     border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -1674,25 +1674,28 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-events-title {
-    font-size: 1.2rem;
+    font-size: 1.1rem;
     font-weight: 600;
     margin: 0;
     color: #fff;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 0;
+    border-bottom: none;
 }
 
 .epic-events-header-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 5px;
 }
 
 .epic-events-tabs {
     display: flex;
-    gap: 15px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 5px;
+    gap: 12px;
+    border-bottom: none;
+    padding-bottom: 0;
 }
 
 .epic-event-tab {
@@ -1788,10 +1791,10 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    padding: 12px;
+    padding: 10px 12px; /* Tighter padding */
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px; /* Tighter gap */
     transition: all 0.2s ease;
 }
 
