@@ -1552,6 +1552,201 @@ if (propForm) {
         } finally {
             btn.disabled = false;
         }
+    // ── SSE — real-time notification push ─────────────────────────────────
+    // EventSource cannot set custom headers, so auth token passed as ?token=
+    const sseToken = auth.getToken();
+    if (sseToken && typeof EventSource !== 'undefined') {
+        const sseUrl = `/api/auth/trading/notifications/stream?token=${encodeURIComponent(sseToken)}`;
+        const evtSource = new EventSource(sseUrl);
+
+        evtSource.addEventListener('connected', () => {
+            console.log('[Notif SSE] 🟢 Stream connected — real-time notifications active');
+        });
+
+        evtSource.addEventListener('notification', async () => {
+            // New notification arrived — refresh badge instantly
+            await refreshBadge();
+            // If dropdown is already open, reload it so new item appears
+            if (dropdown.classList.contains('open')) {
+                await loadDropdown(currentPage);
+            }
+        });
+
+        evtSource.onerror = () => {
+            // EventSource auto-reconnects; this fires on every retry attempt
+            // No action needed — reconnect is handled natively
+        };
+
+        // 60s fallback poll: keeps badge accurate even during extended SSE outages
+        setInterval(refreshBadge, 60_000);
+    } else {
+        // No EventSource support (very old browser) → fall back to 30s poll
+        setInterval(refreshBadge, 30_000);
+    }
+})();
+
+
+// ── CUSTOM SELECT LOGIC ────────────────────────────────────────────────────────
+const customSelectTrigger = document.getElementById('customSelectTrigger');
+const customOptionsContainer = document.getElementById('customOptionsContainer');
+const customSelectLabel = document.getElementById('customSelectLabel');
+const propSizeInput = document.getElementById('propSize');
+
+// Teleport dropdown to <body> to escape modal overflow clipping
+if (customOptionsContainer && customOptionsContainer.parentNode !== document.body) {
+    document.body.appendChild(customOptionsContainer);
+}
+
+function _positionDropdown() {
+    if (!customSelectTrigger || !customOptionsContainer) return;
+    const rect = customSelectTrigger.getBoundingClientRect();
+    customOptionsContainer.style.position   = 'fixed';
+    customOptionsContainer.style.top        = (rect.bottom + 6) + 'px';
+    customOptionsContainer.style.left       = rect.left + 'px';
+    customOptionsContainer.style.width      = rect.width + 'px';
+    customOptionsContainer.style.zIndex     = '2147483647';
+    customOptionsContainer.style.maxHeight  = '220px';
+    customOptionsContainer.style.overflowY  = 'auto';
+}
+
+if (customSelectTrigger && customOptionsContainer) {
+    customSelectTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = customOptionsContainer.style.display === 'block';
+        if (isOpen) {
+            customOptionsContainer.style.opacity = '0';
+            customOptionsContainer.style.transform = 'translateY(-6px)';
+            customSelectTrigger.classList.remove('open');
+            setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
+        } else {
+            _positionDropdown();
+            customOptionsContainer.style.display = 'block';
+            setTimeout(() => {
+                customOptionsContainer.style.opacity = '1';
+                customOptionsContainer.style.transform = 'translateY(0)';
+            }, 10);
+            customSelectTrigger.classList.add('open');
+        }
+    });
+
+    // Dynamically inject options to bypass aggressive adblockers or HTML cache dropping the 150K node
+    customOptionsContainer.innerHTML = `
+        <div class="custom-option" data-value="50000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s; display: block !important; visibility: visible !important;">TopStep - No Activation - 50K</div>
+        <div class="custom-option" data-value="100000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s; display: block !important; visibility: visible !important;">TopStep - No Activation - 100K</div>
+        <div class="custom-option" data-value="150000" style="padding: 12px 16px; color: var(--text-light); cursor: pointer; transition: background 0.2s; display: block !important; visibility: visible !important;">TopStep - No Activation - 150K</div>
+    `;
+
+    document.querySelectorAll('.custom-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const value = e.target.getAttribute('data-value');
+            const text = e.target.textContent;
+            
+            // Update UI & Hidden Input
+            customSelectLabel.textContent = text;
+            customSelectLabel.style.color = 'var(--text-main)';
+            propSizeInput.value = value;
+            
+            // Close Dropdown
+            customOptionsContainer.style.opacity = '0';
+            customOptionsContainer.style.transform = 'translateY(-10px)';
+            customSelectTrigger.classList.remove('open');
+            setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
+        });
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!customSelectTrigger.contains(e.target) && !customOptionsContainer.contains(e.target)) {
+            customOptionsContainer.style.opacity = '0';
+            customOptionsContainer.style.transform = 'translateY(-10px)';
+            customSelectTrigger.classList.remove('open');
+            setTimeout(() => { customOptionsContainer.style.display = 'none'; }, 200);
+        }
+    });
+}
+
+// ── PHASE TOGGLE LOGIC ────────────────────────────────────────────────────────
+const phaseBtnEval = document.getElementById('phaseBtnEval');
+const phaseBtnFunded = document.getElementById('phaseBtnFunded');
+const propPhaseValue = document.getElementById('propPhaseValue');
+
+function setPhaseToggle(phase) {
+    if (!phaseBtnEval || !phaseBtnFunded || !propPhaseValue) return;
+    propPhaseValue.value = phase;
+    if (phase === 'EVAL') {
+        phaseBtnEval.style.background = 'rgba(52, 211, 153, 0.2)';
+        phaseBtnEval.style.borderColor = '#34d399';
+        phaseBtnEval.style.color = '#34d399';
+        phaseBtnFunded.style.background = 'rgba(255, 255, 255, 0.05)';
+        phaseBtnFunded.style.borderColor = 'var(--glass-border)';
+        phaseBtnFunded.style.color = 'var(--text-muted)';
+    } else {
+        phaseBtnFunded.style.background = 'rgba(52, 211, 153, 0.2)';
+        phaseBtnFunded.style.borderColor = '#34d399';
+        phaseBtnFunded.style.color = '#34d399';
+        phaseBtnEval.style.background = 'rgba(255, 255, 255, 0.05)';
+        phaseBtnEval.style.borderColor = 'var(--glass-border)';
+        phaseBtnEval.style.color = 'var(--text-muted)';
+    }
+}
+
+if (phaseBtnEval) phaseBtnEval.addEventListener('click', () => setPhaseToggle('EVAL'));
+if (phaseBtnFunded) phaseBtnFunded.addEventListener('click', () => setPhaseToggle('FUNDED'));
+
+const propForm = document.getElementById('addPropAccountForm');
+if (propForm) {
+    propForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = propForm.querySelector('button[type="submit"]');
+        const originalText = btn.textContent;
+        
+        try {
+            btn.disabled = true;
+            btn.textContent = 'Initializing...';
+            
+            await auth.request('/trading/prop-accounts', {
+                method: 'POST',
+                body: JSON.stringify({
+                    account_name: document.getElementById('propAccountName').value,
+                    firm: 'Topstep',
+                    phase: document.getElementById('propPhaseValue').value,
+                    risk_profile: localStorage.getItem('globalRiskProfile') || 'SAFE',
+                    account_size: Number(document.getElementById('propSize').value)
+                })
+            });
+            
+            propForm.reset();
+            
+            // Reset custom select UI
+            if (customSelectLabel && propSizeInput) {
+                customSelectLabel.textContent = 'Select Account Type';
+                customSelectLabel.style.color = 'var(--text-muted)';
+                propSizeInput.value = '';
+            }
+            
+            // Reset phase toggle UI to EVAL
+            setPhaseToggle('EVAL');
+
+            await loadPropAccounts();
+            
+            // Temporary success state
+            btn.textContent = 'Success!';
+            btn.style.background = 'var(--primary)';
+            btn.style.color = '#000';
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '';
+                btn.style.color = '';
+                if (propAccountModal) propAccountModal.style.display = 'none';
+            }, 1000);
+            
+        } catch (err) {
+            alert('Failed to add account: ' + (err.message || 'Unknown error'));
+            btn.textContent = originalText;
+        } finally {
+            btn.disabled = false;
+        }
     });
 }
 
@@ -1564,6 +1759,14 @@ const btnPrevMonth = document.getElementById('calPrevMonth');
 const btnNextMonth = document.getElementById('calNextMonth');
 
 let currentCalDate = new Date(); // Tracks the currently viewed month
+
+const calMonthYearBtn = document.getElementById('calMonthYearBtn');
+if (calMonthYearBtn) {
+    calMonthYearBtn.addEventListener('click', () => {
+        // Feature to be implemented later (Month/Year Picker)
+        alert('Month/Year picker feature is coming soon!');
+    });
+}
 
 function renderCalendar(dateToRender) {
     if (!calendarGrid || !calMonthYear) return;
