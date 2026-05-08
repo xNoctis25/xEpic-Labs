@@ -1688,7 +1688,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     justify-content: space-between;
     padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 10px; /* Reduced to save 2px */
+    margin-bottom: 14px; /* Perfect spacing */
 }
 
 .epic-events-tabs {
@@ -1755,7 +1755,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     align-items: center;
     gap: 8px;
     margin-top: auto; /* push to bottom */
-    padding-top: 10px; /* Reduced to save 2px */
+    padding-top: 20px; /* Perfect spacing from last event */
 }
 
 .epic-page-dot {
@@ -1785,17 +1785,17 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 8px; /* Reduced to save 6px total */
+    gap: 16px; /* Elegant gap that perfectly distributes 4 events */
 }
 
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 10px 12px; /* Reduced to save 16px total */
+    border-radius: 10px;
+    padding: 8px 12px; /* Perfect compact padding */
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
     transition: all 0.2s ease;
 }
 
@@ -1805,12 +1805,13 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-time {
-    font-size: 0.75rem; /* Elegant text size */
+    font-size: 0.7rem;
+    line-height: 1; /* Eliminates invisible stretching */
     color: rgba(255, 255, 255, 0.5);
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 2px;
+    margin-bottom: 0px;
 }
 
 .epic-event-time::before {
@@ -1834,7 +1835,8 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-title {
-    font-size: 0.9rem; /* Elegant text size */
+    font-size: 0.85rem;
+    line-height: 1; /* Eliminates invisible stretching */
     font-weight: 500;
     color: #f8fafc;
 }
