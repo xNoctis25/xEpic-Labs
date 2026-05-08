@@ -1630,3 +1630,100 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .custom-select-trigger:hover { border-color: rgba(102, 252, 241, 0.5) !important; background: rgba(102, 252, 241, 0.03) !important; }
 .custom-select-trigger.open { border-color: rgba(102, 252, 241, 0.5) !important; box-shadow: 0 0 0 3px rgba(102, 252, 241, 0.08) !important; }
 .custom-select-trigger.open svg { transform: rotate(180deg) !important; }
+
+/* =========================================
+   MOBILE RESPONSIVE (MAX 768PX)
+   ========================================= */
+@media (max-width: 768px) {
+    /* -- Hide ambient orbs on mobile to reduce lag -- */
+    body::before, body::after { display: none; }
+
+    /* -- Adjust Dashboard Layout Container -- */
+    body.dashboard-body .app-layout {
+        flex-direction: column !important;
+        padding: 10px 15px 80px 15px !important; /* Space at bottom for fixed nav */
+        gap: 15px !important;
+    }
+
+    /* -- Header Adjustments -- */
+    body.dashboard-body .global-top-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 15px !important;
+        padding: 15px 20px !important;
+    }
+    
+    .system-status-pills {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 10px;
+    }
+    .notif-bell-wrap {
+        margin-left: auto; /* Push bell to the right side if wrapped */
+    }
+    
+    /* Hide some static text to save space */
+    .brand-text h1 { font-size: 1.1rem; }
+    .brand-text .slogan { display: none; }
+
+    /* -- Sidebar to Bottom Tab Bar -- */
+    .app-sidebar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 70px;
+        min-height: 70px;
+        flex-direction: row;
+        border-radius: 0;
+        border: none;
+        border-top: 1px solid var(--glass-border);
+        padding: 0 20px;
+        z-index: 9999;
+        background: rgba(10, 10, 15, 0.95);
+    }
+    .sidebar-nav.top {
+        flex-direction: row;
+        width: auto;
+        gap: 15px;
+        margin: 0;
+    }
+    .sidebar-nav.bottom {
+        flex-direction: row;
+        gap: 15px;
+    }
+
+    /* -- Prop Firm Trading View -- */
+    #tradingView {
+        padding: 15px !important;
+    }
+    #tradingView > div {
+        flex-direction: column !important;
+    }
+    #tradingView > div > div {
+        min-width: 100% !important;
+        width: 100% !important;
+    }
+    /* Wrap tables so they can swipe */
+    #tradingView table {
+        min-width: 800px; /* Keep tabular layout intact, enforce swipe */
+    }
+    #tradingView .table-wrapper-swipe {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 20px;
+        padding-bottom: 5px;
+    }
+
+    /* -- Nova AI View -- */
+    .novaView {
+        height: calc(100vh - 180px); /* Adjust for header and bottom bar */
+    }
+    .nova-sidebar {
+        display: none; /* Hide chat history on mobile */
+    }
+    .nova-main {
+        border-radius: 12px;
+    }
+}
