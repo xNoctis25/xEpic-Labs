@@ -1658,39 +1658,76 @@ if (document.getElementById('homeView')) {
     renderCalendar(currentCalDate);
 }
 
-// Event Listeners for Nav
+// Custom Overlay Nav Logic
 const calMonthYearBtn = document.getElementById('calMonthYearBtn');
-const hiddenMonthPicker = document.getElementById('hiddenMonthPicker');
+const calMonthPickerOverlay = document.getElementById('calMonthPickerOverlay');
+const calMainBody = document.getElementById('calMainBody');
+const calMonthGrid = document.getElementById('calMonthGrid');
+const calPickerYearText = document.getElementById('calPickerYearText');
+const calPickerPrevYear = document.getElementById('calPickerPrevYear');
+const calPickerNextYear = document.getElementById('calPickerNextYear');
 
-if (calMonthYearBtn && hiddenMonthPicker) {
-    // Keep input synced with current viewed month to prevent weird default selections
-    hiddenMonthPicker.value = `${currentCalDate.getFullYear()}-${String(currentCalDate.getMonth() + 1).padStart(2, '0')}`;
-    
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+let overlayYear = currentCalDate.getFullYear();
+
+if (calMonthYearBtn && calMonthPickerOverlay) {
+    // Open Overlay
     calMonthYearBtn.addEventListener('click', () => {
-        try {
-            hiddenMonthPicker.showPicker();
-        } catch (e) {
-            // Fallback for browsers that don't support showPicker on hidden inputs
-            hiddenMonthPicker.style.opacity = '1';
-            hiddenMonthPicker.style.position = 'absolute';
-            hiddenMonthPicker.style.top = '0';
-            hiddenMonthPicker.style.left = '0';
-            hiddenMonthPicker.style.width = '100%';
-            hiddenMonthPicker.style.height = '100%';
-            hiddenMonthPicker.style.opacity = '0'; // keep visually hidden
-            hiddenMonthPicker.style.pointerEvents = 'auto';
-            hiddenMonthPicker.focus();
-            hiddenMonthPicker.click();
+        if (calMonthPickerOverlay.classList.contains('active')) {
+            closeOverlay();
+            return;
         }
+        overlayYear = currentCalDate.getFullYear();
+        renderOverlay();
+        calMonthPickerOverlay.classList.add('active');
+        calMainBody.classList.add('dimmed');
     });
 
-    hiddenMonthPicker.addEventListener('change', (e) => {
-        const val = e.target.value; // Format: "YYYY-MM"
-        if (val) {
-            const [year, month] = val.split('-');
-            currentCalDate.setFullYear(parseInt(year, 10), parseInt(month, 10) - 1, 1);
-            renderCalendar(currentCalDate);
-        }
-        hiddenMonthPicker.style.pointerEvents = 'none'; // reset fallback
-    });
+    // Year Steppers
+    if (calPickerPrevYear) {
+        calPickerPrevYear.addEventListener('click', (e) => {
+            e.stopPropagation();
+            overlayYear--;
+            renderOverlay();
+        });
+    }
+    if (calPickerNextYear) {
+        calPickerNextYear.addEventListener('click', (e) => {
+            e.stopPropagation();
+            overlayYear++;
+            renderOverlay();
+        });
+    }
+
+    function renderOverlay() {
+        if (!calPickerYearText || !calMonthGrid) return;
+        calPickerYearText.textContent = overlayYear;
+        calMonthGrid.innerHTML = '';
+
+        monthNames.forEach((month, index) => {
+            const btn = document.createElement('button');
+            btn.classList.add('epic-cal-month-btn');
+            
+            // Highlight current month if it matches the currentCalDate
+            if (overlayYear === currentCalDate.getFullYear() && index === currentCalDate.getMonth()) {
+                btn.classList.add('selected');
+            }
+            
+            btn.textContent = month;
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Apply selection
+                currentCalDate.setFullYear(overlayYear, index, 1);
+                renderCalendar(currentCalDate);
+                closeOverlay();
+            });
+            calMonthGrid.appendChild(btn);
+        });
+    }
+
+    function closeOverlay() {
+        calMonthPickerOverlay.classList.remove('active');
+        calMainBody.classList.remove('dimmed');
+    }
 }
+

@@ -1810,4 +1810,108 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     line-height: 1.5;
 }
 
+/* Custom Month Picker Overlay */
+.epic-calendar-widget {
+    position: relative; /* Ensure overlay bounds to widget */
+    overflow: hidden; /* Hide overflow when sliding in/out */
+}
+
+.epic-cal-overlay {
+    position: absolute;
+    top: 75px; /* Just below header */
+    left: 0;
+    width: 100%;
+    height: calc(100% - 75px);
+    background: rgba(20, 22, 28, 0.95);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-radius: 0 0 20px 20px;
+    padding: 16px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    transform: translateY(10px);
+}
+
+.epic-cal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.epic-cal-year-selector {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 0 10px;
+}
+
+.epic-cal-picker-year {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #f8fafc;
+}
+
+.epic-cal-year-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    color: #f8fafc;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.epic-cal-year-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.epic-cal-month-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.epic-cal-month-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    color: #e2e8f0;
+    padding: 12px 0;
+    text-align: center;
+    font-weight: 500;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.epic-cal-month-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(0.97);
+}
+
+.epic-cal-month-btn.selected {
+    background: rgba(52, 211, 153, 0.2);
+    border: 1px solid #34d399;
+    color: #34d399;
+    box-shadow: 0 4px 15px rgba(52, 211, 153, 0.2);
+}
+
+/* Add a transition to the main calendar body so it fades beautifully */
+.epic-cal-body {
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.epic-cal-body.dimmed {
+    opacity: 0.1;
+    transform: scale(0.98);
+}
+
 

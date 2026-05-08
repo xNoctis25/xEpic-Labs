@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xEpic Labs &mdash; Command Center</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/styles.css?v=79.9">
+    <link rel="stylesheet" href="/css/styles.css?v=80.0">
 </head>
 <body class="dashboard-body">
 
@@ -101,13 +101,12 @@
                 <div class="home-body">
                     <div class="epic-calendar-widget">
                         <!-- Header Box -->
-                        <div class="epic-cal-header-box clickable" id="calMonthYearBtn" title="Change Month/Year" style="position: relative;">
+                        <div class="epic-cal-header-box clickable" id="calMonthYearBtn" title="Change Month/Year">
                             <span class="epic-cal-month-year" id="calMonthYear">May 2026</span>
-                            <input type="month" id="hiddenMonthPicker" style="position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;">
                         </div>
                         
                         <!-- Main Calendar -->
-                        <div class="epic-cal-body">
+                        <div class="epic-cal-body" id="calMainBody">
                             <div class="epic-cal-grid-header">
                                 <span class="weekend">Su</span>
                                 <span class="weekday">Mo</span>
@@ -120,6 +119,17 @@
                             
                             <div id="calendarGrid" class="epic-cal-grid">
                                 <!-- Days injected via JS -->
+                            </div>
+                        </div>
+                        <!-- Custom Month/Year Picker Overlay -->
+                        <div class="epic-cal-overlay" id="calMonthPickerOverlay">
+                            <div class="epic-cal-year-selector">
+                                <button class="epic-cal-year-btn" id="calPickerPrevYear"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+                                <span class="epic-cal-picker-year" id="calPickerYearText">2026</span>
+                                <button class="epic-cal-year-btn" id="calPickerNextYear"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
+                            </div>
+                            <div class="epic-cal-month-grid" id="calMonthGrid">
+                                <!-- Months injected via JS -->
                             </div>
                         </div>
                     </div>
@@ -387,6 +397,6 @@
     </div>
 
     <script src="/js/api.js?v=35.0"></script>
-    <script src="/js/dashboard.js?v=88.17"></script>
+    <script src="/js/dashboard.js?v=88.18"></script>
 </body>
 </html>
