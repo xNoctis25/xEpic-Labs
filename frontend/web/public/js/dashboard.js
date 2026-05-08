@@ -566,7 +566,7 @@ function updateMarketClock() {
 
     // 3. CME Daily Maintenance (Mon-Thu 17:00–18:00 ET)
     if (totalMinutes >= 1020 && totalMinutes < 1080) {
-        uiSessionLabel.textContent  = 'Closed: CME Maint';
+        uiSessionLabel.textContent  = 'Closed: CME';
         uiSessionDot.className      = 'dot red';
         return;
     }
