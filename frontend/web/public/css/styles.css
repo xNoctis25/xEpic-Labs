@@ -1639,48 +1639,52 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
    HOME SCREEN CALENDAR WIDGET (PREMIUM GLASS)
    ========================================= */
 .epic-calendar-widget {
-    background: rgba(20, 22, 28, 0.5);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    padding: 10px;
-    width: 320px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-left: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    padding: 12px;
+    width: 330px;
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.03);
     margin: 40px auto 15px auto;
+    position: relative; /* Ensure overlay bounds to widget */
+    overflow: hidden; /* Hide overflow when sliding in/out */
 }
 
-/* Header Box */
+/* Header */
 .epic-cal-header-box {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 14px;
-    padding: 14px 20px;
+    background: transparent;
+    border: none;
+    padding: 10px 0 24px 0;
     display: flex;
     justify-content: center;
     align-items: center;
-    margin-bottom: 20px;
-    color: #e2e8f0;
+    color: #fff;
+    box-shadow: none;
 }
 
 .epic-cal-header-box.clickable {
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .epic-cal-header-box.clickable:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    opacity: 0.7; /* Apple style native fade */
+    transform: scale(0.98);
 }
 
 .epic-cal-month-year {
-    font-size: 1rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
 }
 
 /* Main Calendar Body */
