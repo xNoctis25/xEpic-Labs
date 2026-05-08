@@ -1689,10 +1689,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-year-nav {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    color: #f8fafc;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
     width: 32px;
     height: 32px;
     display: flex;
@@ -1703,7 +1702,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-year-nav:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: transparent;
+    color: #fff;
+    transform: scale(1.1);
 }
 
 .hidden {
@@ -1713,11 +1714,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 /* Main Calendar Body */
 .epic-cal-body {
     padding: 0 10px 10px 10px; /* Tighter padding */
-    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
 .epic-cal-body.dimmed {
-    opacity: 0.1;
-    transform: scale(0.98);
+    opacity: 0 !important;
+    pointer-events: none;
+    transform: scale(0.96);
 }
 
 .epic-cal-grid-header {
@@ -1850,15 +1852,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 
 .epic-cal-overlay {
     position: absolute;
-    top: 75px; /* Just below header */
+    top: 48px; /* Start right below the header */
     left: 0;
     width: 100%;
-    height: calc(100% - 75px);
-    background: rgba(20, 22, 28, 0.95);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-radius: 0 0 20px 20px;
-    padding: 16px;
+    height: calc(100% - 48px);
+    background: transparent; /* Rely on widget's background */
+    padding: 10px;
     z-index: 10;
     display: flex;
     flex-direction: column;
