@@ -1821,3 +1821,99 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
     }
 }
 
+// =========================================
+// EVENTS PANEL ENGINE
+// =========================================
+function renderEvents() {
+    const eventsTodayList = document.getElementById('eventsTodayList');
+    const eventsThisWeekList = document.getElementById('eventsThisWeekList');
+    const eventsNextWeekList = document.getElementById('eventsNextWeekList');
+    
+    if (!eventsTodayList || !eventsThisWeekList || !eventsNextWeekList) return;
+    
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const endOfToday = new Date(startOfToday);
+    endOfToday.setDate(endOfToday.getDate() + 1);
+    
+    // This week ends on Saturday at 23:59:59.
+    // If today is Sunday (0), end of week is Saturday (6) -> 6 days ahead.
+    const daysUntilSaturday = 6 - now.getDay();
+    const endOfThisWeek = new Date(startOfToday);
+    endOfThisWeek.setDate(endOfThisWeek.getDate() + daysUntilSaturday + 1); // +1 because we use < for comparison
+    
+    const endOfNextWeek = new Date(endOfThisWeek);
+    endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
+    
+    // Mock events based on current time to ensure they always populate the UI
+    const mockEvents = [
+        { title: "NFP Data Release", date: new Date(now.getTime() + 2 * 60 * 60 * 1000) }, // Today (+2 hours)
+        { title: "Team Sync", date: new Date(now.getTime() + 4 * 60 * 60 * 1000) }, // Today (+4 hours)
+        { title: "CPI Data Release", date: new Date(startOfToday.getTime() + (daysUntilSaturday > 0 ? 1 : 7) * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000) }, // Tomorrow or next week if today is sat
+        { title: "FOMC Meeting", date: new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000) }, // Next Week (+8 days)
+        { title: "Market Holiday", date: new Date(startOfToday.getTime() + 10 * 24 * 60 * 60 * 1000) } // Next week (+10 days)
+    ];
+    
+    // Sort events chronologically
+    mockEvents.sort((a, b) => a.date - b.date);
+    
+    // Categorize
+    const todayEvents = [];
+    const thisWeekEvents = [];
+    const nextWeekEvents = [];
+    
+    mockEvents.forEach(evt => {
+        if (evt.date >= startOfToday && evt.date < endOfToday) {
+            todayEvents.push(evt);
+        } else if (evt.date >= endOfToday && evt.date < endOfThisWeek) {
+            thisWeekEvents.push(evt);
+        } else if (evt.date >= endOfThisWeek && evt.date < endOfNextWeek) {
+            nextWeekEvents.push(evt);
+        }
+    });
+    
+    function formatEventTime(date) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    function formatEventDate(date) {
+        return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+    
+    function populateList(listEl, events, stylingClass) {
+        listEl.innerHTML = '';
+        if (events.length === 0) {
+            listEl.innerHTML = '<div class="epic-event-empty">No events scheduled.</div>';
+            return;
+        }
+        events.forEach(evt => {
+            const li = document.createElement('li');
+            if (stylingClass) li.classList.add(stylingClass);
+            
+            const timeSpan = document.createElement('span');
+            timeSpan.classList.add('epic-event-time');
+            
+            // For today and this week, just show time.
+            // For next week, maybe show date AND time, but keeping it clean: just date is good for next week.
+            timeSpan.textContent = stylingClass === 'next-week' ? formatEventDate(evt.date) : formatEventTime(evt.date);
+            
+            const titleSpan = document.createElement('span');
+            titleSpan.classList.add('epic-event-title');
+            titleSpan.textContent = evt.title;
+            
+            li.appendChild(timeSpan);
+            li.appendChild(titleSpan);
+            listEl.appendChild(li);
+        });
+    }
+    
+    populateList(eventsTodayList, todayEvents, ''); // Default red dot
+    populateList(eventsThisWeekList, thisWeekEvents, 'upcoming'); // Cyan dot
+    populateList(eventsNextWeekList, nextWeekEvents, 'next-week'); // Yellow dot
+}
+
+// Call renderEvents initially
+if (document.getElementById('eventsTodayList')) {
+    renderEvents();
+}
+
