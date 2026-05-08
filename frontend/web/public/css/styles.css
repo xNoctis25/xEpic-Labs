@@ -1688,25 +1688,6 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     transform: scale(0.98);
 }
 
-.epic-cal-year-nav {
-    background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.epic-cal-year-nav:hover {
-    background: transparent;
-    color: #fff;
-    transform: scale(1.1);
-}
-
 .hidden {
     display: none !important;
 }
@@ -1873,38 +1854,6 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     transform: translateY(0);
 }
 
-.epic-cal-year-selector {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding: 0 10px;
-}
-
-.epic-cal-picker-year {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #f8fafc;
-}
-
-.epic-cal-year-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    color: #f8fafc;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.epic-cal-year-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
 .epic-cal-month-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1936,13 +1885,22 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     box-shadow: 0 4px 15px rgba(52, 211, 153, 0.2);
 }
 
-/* Add a transition to the main calendar body so it fades beautifully */
-.epic-cal-body {
-    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+.epic-cal-today-action {
+    margin-top: auto;
+    text-align: center;
+    padding: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #34d399;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+    opacity: 0.8;
 }
-.epic-cal-body.dimmed {
-    opacity: 0.1;
-    transform: scale(0.98);
+
+.epic-cal-today-action:hover {
+    opacity: 1;
+    transform: translateY(-1px);
+    text-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
 }
 
 
