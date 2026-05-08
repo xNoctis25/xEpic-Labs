@@ -1889,7 +1889,7 @@ function renderEvents() {
         return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
     }
     
-    const EVENTS_PER_PAGE = 3;
+    const EVENTS_PER_PAGE = 4;
     
     // State to track current page for each tab
     const paginationState = {

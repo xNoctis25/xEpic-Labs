@@ -1661,7 +1661,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 8px; /* Sweet spot gap */
+    gap: 6px; /* Squeezed to fit 4 */
     border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -1686,9 +1686,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 6px;
+    padding-bottom: 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 8px; /* Reduced space before 1st event */
+    margin-bottom: 4px;
 }
 
 .epic-events-tabs {
@@ -1755,7 +1755,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     align-items: center;
     gap: 8px;
     margin-top: auto; /* push to bottom */
-    padding-top: 10px;
+    padding-top: 8px;
 }
 
 .epic-page-dot {
@@ -1790,11 +1790,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    padding: 10px 12px; /* Sweet spot padding */
+    border-radius: 8px;
+    padding: 6px 10px; /* Very tight padding */
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0px;
     transition: all 0.2s ease;
 }
 
@@ -1804,12 +1804,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-time {
-    font-size: 0.75rem;
+    font-size: 0.65rem; /* Shrunk for 4-event fit */
     color: rgba(255, 255, 255, 0.5);
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 2px;
+    margin-bottom: 0px;
 }
 
 .epic-event-time::before {
@@ -1833,7 +1833,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-title {
-    font-size: 0.9rem; /* Restored size */
+    font-size: 0.8rem; /* Shrunk for 4-event fit */
     font-weight: 500;
     color: #f8fafc;
 }
