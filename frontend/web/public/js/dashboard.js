@@ -966,6 +966,15 @@ async function loadPropAccounts() {
                     <td style="padding: 10px 15px;">
                         <span style="color: ${statusStyle.color}; background: ${statusStyle.bg}; font-weight: 700; font-size: 0.78rem; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.5px;">${displayStatus}</span>
                     </td>
+                    <td style="padding: 10px 15px; color: var(--text-muted); font-size: 0.8rem; white-space: nowrap;">
+                        ${acc.created_at ? (() => {
+                            const d = new Date(acc.created_at);
+                            const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
+                            const daysAgo = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+                            const rel = daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1 day ago' : `${daysAgo} days ago`;
+                            return `${dateStr}<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">${rel}</div>`;
+                        })() : '—'}
+                    </td>
                     <td style="padding: 10px 15px; text-align: right; white-space: nowrap;">
                         <button onclick="openEditAccountModal(${acc.id})" title="Edit" style="background: none; border: 1px solid rgba(102,252,241,0.3); color: var(--primary); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; margin-right: 6px; transition: all 0.2s;">✏️</button>
                         <button onclick="deletePropAccount(${acc.id})" title="Delete" style="background: none; border: 1px solid rgba(255,60,60,0.3); color: var(--error); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s;">🗑️</button>

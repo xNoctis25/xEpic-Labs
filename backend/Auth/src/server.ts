@@ -114,6 +114,7 @@ pool.query(`
         CHECK (status IN ('ACTIVE','PAUSED','PASSED','PAYOUT_READY','BLOWN'));
 
     ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS account_balance NUMERIC(12,2) DEFAULT NULL;
+    ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
     CREATE TABLE IF NOT EXISTS engine_config (
         id              SERIAL PRIMARY KEY,
