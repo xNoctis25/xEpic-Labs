@@ -1685,19 +1685,104 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.epic-events-section {
+.epic-events-header-row {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
 }
 
-.epic-events-header {
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    color: #66fcf1;
-    margin: 0;
+.epic-events-tabs {
+    display: flex;
+    gap: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 5px;
+}
+
+.epic-event-tab {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.75rem;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    padding: 5px 0;
+    position: relative;
+    transition: color 0.2s;
+}
+
+.epic-event-tab:hover {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.epic-event-tab.active {
+    color: #66fcf1;
+}
+
+.epic-event-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: #66fcf1;
+    border-radius: 2px;
+    box-shadow: 0 0 8px rgba(102, 252, 241, 0.5);
+}
+
+.epic-events-tab-content {
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+    flex-grow: 1; /* allow it to take remaining space */
+}
+
+.epic-events-tab-content.active {
+    display: flex;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.epic-events-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: auto; /* push to bottom */
+    padding-top: 15px;
+}
+
+.epic-page-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.epic-page-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(102, 252, 241, 0.5);
+    color: #66fcf1;
+}
+
+.epic-page-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.epic-page-info {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
 }
 
 .epic-events-list {

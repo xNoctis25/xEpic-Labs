@@ -1847,13 +1847,22 @@ function renderEvents() {
     endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
     
     // Mock events based on current time to ensure they always populate the UI
-    const mockEvents = [
-        { title: "NFP Data Release", date: new Date(now.getTime() + 2 * 60 * 60 * 1000) }, // Today (+2 hours)
-        { title: "Team Sync", date: new Date(now.getTime() + 4 * 60 * 60 * 1000) }, // Today (+4 hours)
-        { title: "CPI Data Release", date: new Date(startOfToday.getTime() + (daysUntilSaturday > 0 ? 1 : 7) * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000) }, // Tomorrow or next week if today is sat
-        { title: "FOMC Meeting", date: new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000) }, // Next Week (+8 days)
-        { title: "Market Holiday", date: new Date(startOfToday.getTime() + 10 * 24 * 60 * 60 * 1000) } // Next week (+10 days)
-    ];
+    const mockEvents = [];
+    
+    // Generate enough data to trigger pagination (more than 4)
+    for (let i = 0; i < 7; i++) {
+        mockEvents.push({ title: `Today Event ${i + 1}`, date: new Date(now.getTime() + (i + 1) * 60 * 60 * 1000) });
+    }
+    
+    if (daysUntilSaturday > 0) {
+        for (let i = 0; i < 6; i++) {
+            mockEvents.push({ title: `Upcoming Event ${i + 1}`, date: new Date(startOfToday.getTime() + 1 * 24 * 60 * 60 * 1000 + i * 4 * 60 * 60 * 1000) });
+        }
+    }
+    
+    for (let i = 0; i < 8; i++) {
+        mockEvents.push({ title: `Next Week Event ${i + 1}`, date: new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000 + i * 12 * 60 * 60 * 1000) });
+    }
     
     // Sort events chronologically
     mockEvents.sort((a, b) => a.date - b.date);
@@ -1880,21 +1889,37 @@ function renderEvents() {
         return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
     }
     
-    function populateList(listEl, events, stylingClass) {
+    const EVENTS_PER_PAGE = 4;
+    
+    // State to track current page for each tab
+    const paginationState = {
+        'today': { page: 1, events: todayEvents, listEl: eventsTodayList, paginatorEl: document.getElementById('pagination-today'), stylingClass: '' },
+        'thisWeek': { page: 1, events: thisWeekEvents, listEl: eventsThisWeekList, paginatorEl: document.getElementById('pagination-thisWeek'), stylingClass: 'upcoming' },
+        'nextWeek': { page: 1, events: nextWeekEvents, listEl: eventsNextWeekList, paginatorEl: document.getElementById('pagination-nextWeek'), stylingClass: 'next-week' }
+    };
+    
+    function renderPage(tabId) {
+        const state = paginationState[tabId];
+        const { page, events, listEl, paginatorEl, stylingClass } = state;
+        
         listEl.innerHTML = '';
         if (events.length === 0) {
             listEl.innerHTML = '<div class="epic-event-empty">No events scheduled.</div>';
+            if (paginatorEl) paginatorEl.innerHTML = '';
             return;
         }
-        events.forEach(evt => {
+        
+        const totalPages = Math.ceil(events.length / EVENTS_PER_PAGE);
+        const startIndex = (page - 1) * EVENTS_PER_PAGE;
+        const endIndex = startIndex + EVENTS_PER_PAGE;
+        const pageEvents = events.slice(startIndex, endIndex);
+        
+        pageEvents.forEach(evt => {
             const li = document.createElement('li');
             if (stylingClass) li.classList.add(stylingClass);
             
             const timeSpan = document.createElement('span');
             timeSpan.classList.add('epic-event-time');
-            
-            // For today and this week, just show time.
-            // For next week, maybe show date AND time, but keeping it clean: just date is good for next week.
             timeSpan.textContent = stylingClass === 'next-week' ? formatEventDate(evt.date) : formatEventTime(evt.date);
             
             const titleSpan = document.createElement('span');
@@ -1905,11 +1930,64 @@ function renderEvents() {
             li.appendChild(titleSpan);
             listEl.appendChild(li);
         });
+        
+        // Render pagination controls
+        if (paginatorEl) {
+            if (totalPages > 1) {
+                paginatorEl.innerHTML = `
+                    <button class="epic-page-btn" id="btn-prev-${tabId}" ${page === 1 ? 'disabled' : ''}>&lt;</button>
+                    <span class="epic-page-info">${page} / ${totalPages}</span>
+                    <button class="epic-page-btn" id="btn-next-${tabId}" ${page === totalPages ? 'disabled' : ''}>&gt;</button>
+                `;
+                
+                const btnPrev = document.getElementById(`btn-prev-${tabId}`);
+                if (btnPrev) {
+                    btnPrev.addEventListener('click', () => {
+                        if (state.page > 1) {
+                            state.page--;
+                            renderPage(tabId);
+                        }
+                    });
+                }
+                
+                const btnNext = document.getElementById(`btn-next-${tabId}`);
+                if (btnNext) {
+                    btnNext.addEventListener('click', () => {
+                        if (state.page < totalPages) {
+                            state.page++;
+                            renderPage(tabId);
+                        }
+                    });
+                }
+            } else {
+                paginatorEl.innerHTML = '';
+            }
+        }
     }
     
-    populateList(eventsTodayList, todayEvents, ''); // Default red dot
-    populateList(eventsThisWeekList, thisWeekEvents, 'upcoming'); // Cyan dot
-    populateList(eventsNextWeekList, nextWeekEvents, 'next-week'); // Yellow dot
+    // Initial Render
+    renderPage('today');
+    renderPage('thisWeek');
+    renderPage('nextWeek');
+    
+    // Tab Switching Logic
+    const tabs = document.querySelectorAll('.epic-event-tab');
+    const tabContents = document.querySelectorAll('.epic-events-tab-content');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            
+            tab.classList.add('active');
+            
+            const targetId = 'tab-' + tab.getAttribute('data-tab');
+            const targetContent = document.getElementById(targetId);
+            if (targetContent) {
+                targetContent.classList.add('active');
+            }
+        });
+    });
 }
 
 // Call renderEvents initially
