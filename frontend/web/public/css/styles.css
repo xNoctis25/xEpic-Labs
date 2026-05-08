@@ -1686,9 +1686,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 4px;
+    padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 4px;
+    margin-bottom: 15px; /* Added padding between Upcoming and events */
 }
 
 .epic-events-tabs {
@@ -1755,7 +1755,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     align-items: center;
     gap: 8px;
     margin-top: auto; /* push to bottom */
-    padding-top: 8px;
+    padding-top: 15px; /* Added padding between events and dots */
 }
 
 .epic-page-dot {
@@ -1784,17 +1784,19 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    justify-content: space-between; /* Spreads events evenly to fill the space */
+    flex-grow: 1; /* Takes up all available space between header and dots */
+    gap: 4px; /* Minimum gap fallback */
 }
 
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    padding: 6px 10px; /* Very tight padding */
+    border-radius: 10px; /* Restored elegant radius */
+    padding: 8px 12px; /* Slightly restored padding */
     display: flex;
     flex-direction: column;
-    gap: 0px;
+    gap: 2px;
     transition: all 0.2s ease;
 }
 
@@ -1804,12 +1806,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-time {
-    font-size: 0.65rem; /* Shrunk for 4-event fit */
+    font-size: 0.7rem; /* Restored size slightly */
     color: rgba(255, 255, 255, 0.5);
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 0px;
+    margin-bottom: 2px;
 }
 
 .epic-event-time::before {
@@ -1833,7 +1835,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-title {
-    font-size: 0.8rem; /* Shrunk for 4-event fit */
+    font-size: 0.85rem; /* Restored size slightly */
     font-weight: 500;
     color: #f8fafc;
 }
