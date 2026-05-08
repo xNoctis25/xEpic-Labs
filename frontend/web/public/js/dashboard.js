@@ -1664,11 +1664,12 @@ const calMonthPickerOverlay = document.getElementById('calMonthPickerOverlay');
 const calMainBody = document.getElementById('calMainBody');
 const calMonthGrid = document.getElementById('calMonthGrid');
 const calYearGrid = document.getElementById('calYearGrid');
+const calDecadeGrid = document.getElementById('calDecadeGrid');
 const calTodayBtn = document.getElementById('calTodayBtn');
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 let overlayYear = currentCalDate.getFullYear();
-let overlayMode = 'closed'; // 'closed', 'months', 'years'
+let overlayMode = 'closed'; // 'closed', 'months', 'years', 'decades'
 
 if (overlayMonthYearText && calMonthPickerOverlay) {
     // Open Overlay or Toggle Modes
@@ -1687,10 +1688,11 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             overlayMode = 'years';
             renderOverlay();
         } else if (overlayMode === 'years') {
-            // Switch back to months mode
-            overlayMode = 'months';
+            // Switch to decades mode
+            overlayMode = 'decades';
             renderOverlay();
         }
+        // If already in decades, we stay there (or go higher, but we stop at decades)
     });
 
     if (calTodayBtn) {
@@ -1707,6 +1709,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
         
         if (overlayMode === 'months') {
             if (calYearGrid) calYearGrid.classList.add('hidden');
+            if (calDecadeGrid) calDecadeGrid.classList.add('hidden');
             if (calMonthGrid) calMonthGrid.classList.remove('hidden');
             
             overlayMonthYearText.textContent = overlayYear;
@@ -1731,14 +1734,17 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             });
         } else if (overlayMode === 'years') {
             if (calMonthGrid) calMonthGrid.classList.add('hidden');
+            if (calDecadeGrid) calDecadeGrid.classList.add('hidden');
             if (calYearGrid) calYearGrid.classList.remove('hidden');
             
-            const yearGridStart = overlayYear - 5;
-            overlayMonthYearText.textContent = `${yearGridStart} - ${yearGridStart + 11}`;
+            // Generate a 12-year window based on the decade
+            const decadeStart = Math.floor(overlayYear / 10) * 10;
+            // E.g., if year is 2026 -> decadeStart = 2020. We will show 2020-2031.
+            overlayMonthYearText.textContent = `${decadeStart} - ${decadeStart + 11}`;
             
             calYearGrid.innerHTML = '';
             for (let i = 0; i < 12; i++) {
-                const y = yearGridStart + i;
+                const y = decadeStart + i;
                 const btn = document.createElement('button');
                 btn.classList.add('epic-cal-month-btn');
                 
@@ -1754,6 +1760,42 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
                     renderOverlay();
                 });
                 calYearGrid.appendChild(btn);
+            }
+        } else if (overlayMode === 'decades') {
+            if (calMonthGrid) calMonthGrid.classList.add('hidden');
+            if (calYearGrid) calYearGrid.classList.add('hidden');
+            if (calDecadeGrid) calDecadeGrid.classList.remove('hidden');
+            
+            // Generate a 12-decade window (120 years).
+            // Calculate a century-aligned anchor to center around
+            // E.g., if year is 2026, let's show 1950 - 2069 (12 decades).
+            // A simple anchor: subtract 5 decades to keep the current year somewhat centered.
+            const decadeStart = Math.floor(overlayYear / 10) * 10;
+            const gridDecadeStart = decadeStart - 50; 
+            
+            overlayMonthYearText.textContent = `${gridDecadeStart} - ${gridDecadeStart + 119}`;
+            
+            calDecadeGrid.innerHTML = '';
+            for (let i = 0; i < 12; i++) {
+                const d = gridDecadeStart + (i * 10);
+                const btn = document.createElement('button');
+                btn.classList.add('epic-cal-month-btn');
+                
+                if (d === decadeStart) {
+                    btn.classList.add('selected');
+                }
+                
+                // Show as "1990s" or "1990-1999"
+                btn.textContent = `${d}s`;
+                // Alternatively could just be d, but 's' makes it clear it's a decade
+                
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    overlayYear = d; // Sets the focus to the start of that decade
+                    overlayMode = 'years';
+                    renderOverlay();
+                });
+                calDecadeGrid.appendChild(btn);
             }
         }
     }

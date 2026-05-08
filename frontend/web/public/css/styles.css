@@ -1886,7 +1886,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-today-action {
-    margin-top: auto;
+    margin-bottom: 12px;
     text-align: center;
     padding: 10px;
     font-size: 0.9rem;
