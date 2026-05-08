@@ -1785,17 +1785,17 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 6px; /* Small gap between events */
+    gap: 8px; /* Perfect 8px list gap */
 }
 
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
-    padding: 8px 10px; /* Compact padding */
+    border-radius: 12px;
+    padding: 12px 14px; /* Perfectly calculated 12px padding */
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px; /* 3px gap between time and title */
     transition: all 0.2s ease;
 }
 
@@ -1805,7 +1805,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-time {
-    font-size: 0.7rem;
+    font-size: 0.75rem; /* Elegant 0.75rem */
     line-height: 1; /* Eliminates invisible stretching */
     color: rgba(255, 255, 255, 0.5);
     display: flex;
@@ -1835,7 +1835,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-title {
-    font-size: 0.85rem;
+    font-size: 0.9rem; /* Elegant 0.9rem */
     line-height: 1; /* Eliminates invisible stretching */
     font-weight: 500;
     color: #f8fafc;
