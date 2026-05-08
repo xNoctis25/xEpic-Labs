@@ -1748,7 +1748,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
                 const btn = document.createElement('button');
                 btn.classList.add('epic-cal-month-btn');
                 
-                if (y === overlayYear) {
+                if (y === currentCalDate.getFullYear()) {
                     btn.classList.add('selected');
                 }
                 
@@ -1775,13 +1775,15 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             
             overlayMonthYearText.textContent = `${gridDecadeStart} - ${gridDecadeStart + 119}`;
             
+            const currentDecade = Math.floor(currentCalDate.getFullYear() / 10) * 10;
+            
             calDecadeGrid.innerHTML = '';
             for (let i = 0; i < 12; i++) {
                 const d = gridDecadeStart + (i * 10);
                 const btn = document.createElement('button');
                 btn.classList.add('epic-cal-month-btn');
                 
-                if (d === decadeStart) {
+                if (d === currentDecade) {
                     btn.classList.add('selected');
                 }
                 
