@@ -1688,7 +1688,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     justify-content: space-between;
     padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 12px; /* Clean padding below Upcoming */
+    margin-bottom: 10px; /* Reduced to save 2px */
 }
 
 .epic-events-tabs {
@@ -1755,7 +1755,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     align-items: center;
     gap: 8px;
     margin-top: auto; /* push to bottom */
-    padding-top: 12px; /* Clean padding above dots */
+    padding-top: 10px; /* Reduced to save 2px */
 }
 
 .epic-page-dot {
@@ -1784,18 +1784,18 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     margin: 0;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start; /* Stack normally from top */
-    gap: 10px; /* Clean, fixed gap */
+    justify-content: flex-start;
+    gap: 8px; /* Reduced to save 6px total */
 }
 
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px; /* Elegant radius */
-    padding: 12px 14px; /* Thicker, elegant padding to naturally fill space */
+    border-radius: 12px;
+    padding: 10px 12px; /* Reduced to save 16px total */
     display: flex;
     flex-direction: column;
-    gap: 4px; /* Natural gap */
+    gap: 4px;
     transition: all 0.2s ease;
 }
 
