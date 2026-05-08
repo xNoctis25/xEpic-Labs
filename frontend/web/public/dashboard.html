@@ -99,17 +99,40 @@
 
             <div id="homeView" class="view-section">
                 <div class="home-body">
-                    <div class="calendar-wrapper" style="max-width: 900px; margin: 0 auto; width: 100%;">
-                        <div class="calendar-header">
-                            <button id="calPrevMonth" class="cal-nav-btn"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M15 18l-6-6 6-6"/></svg></button>
-                            <h2 id="calMonthYear" class="cal-month-title">Month Year</h2>
-                            <button id="calNextMonth" class="cal-nav-btn"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18l6-6-6-6"/></svg></button>
+                    <div class="win-calendar-widget">
+                        <!-- Top Bar -->
+                        <div class="win-cal-top-bar">
+                            <span id="winCalTodayText">Friday, May 8</span>
+                            <button class="win-cal-icon-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
                         </div>
-                        <div class="calendar-days-header">
-                            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                        
+                        <!-- Main Calendar -->
+                        <div class="win-cal-main">
+                            <div class="win-cal-header">
+                                <span class="win-cal-month-year" id="calMonthYear">May 2026</span>
+                                <div class="win-cal-nav">
+                                    <button id="calPrevMonth" class="win-cal-nav-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 15l-6-6-6 6"/></svg></button>
+                                    <button id="calNextMonth" class="win-cal-nav-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg></button>
+                                </div>
+                            </div>
+                            
+                            <div class="win-cal-grid-header">
+                                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                            </div>
+                            
+                            <div id="calendarGrid" class="win-cal-grid">
+                                <!-- Days injected via JS -->
+                            </div>
                         </div>
-                        <div id="calendarGrid" class="calendar-grid">
-                            <!-- Days injected via JS -->
+
+                        <!-- Footer Focus Timer -->
+                        <div class="win-cal-footer">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button class="win-cal-icon-btn square"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+                                <span class="win-cal-focus-text"><b>30</b> mins</span>
+                                <button class="win-cal-icon-btn square"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+                            </div>
+                            <button class="win-cal-focus-action"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Focus</button>
                         </div>
                     </div>
                 </div>
@@ -368,6 +391,6 @@
     </div>
 
     <script src="/js/api.js?v=35.0"></script>
-    <script src="/js/dashboard.js?v=88.12"></script>
+    <script src="/js/dashboard.js?v=88.13"></script>
 </body>
 </html>

@@ -1577,32 +1577,53 @@ function renderCalendar(dateToRender) {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     calMonthYear.textContent = `${monthNames[month]} ${year}`;
     
+    // Set Top Bar Today Text
+    const today = new Date();
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const winCalTodayText = document.getElementById('winCalTodayText');
+    if (winCalTodayText) {
+        winCalTodayText.textContent = `${dayNames[today.getDay()]}, ${monthNames[today.getMonth()]} ${today.getDate()}`;
+    }
+    
     // Calculate first day of the month and total days
     const firstDayIndex = new Date(year, month, 1).getDay(); // 0 (Sun) to 6 (Sat)
     const totalDays = new Date(year, month + 1, 0).getDate();
     
-    // Get today's exact date to highlight it
-    const today = new Date();
+    // Calculate previous month total days
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    
     const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
     const currentDay = today.getDate();
     
-    // Inject empty slots for days before the 1st
-    for (let i = 0; i < firstDayIndex; i++) {
-        const emptyCell = document.createElement('div');
-        emptyCell.classList.add('cal-day', 'empty');
-        calendarGrid.appendChild(emptyCell);
+    // 1. Inject faded days for previous month
+    for (let x = firstDayIndex; x > 0; x--) {
+        const dayCell = document.createElement('div');
+        dayCell.classList.add('win-cal-day', 'faded');
+        dayCell.textContent = prevMonthDays - x + 1;
+        calendarGrid.appendChild(dayCell);
     }
     
-    // Inject actual days
+    // 2. Inject actual days
     for (let day = 1; day <= totalDays; day++) {
         const dayCell = document.createElement('div');
-        dayCell.classList.add('cal-day');
+        dayCell.classList.add('win-cal-day');
         dayCell.textContent = day;
         
         if (isCurrentMonth && day === currentDay) {
             dayCell.classList.add('today');
         }
         
+        calendarGrid.appendChild(dayCell);
+    }
+    
+    // 3. Inject faded days for next month to fill grid (42 cells total for 6 rows)
+    const totalCells = firstDayIndex + totalDays;
+    const nextMonthDaysCount = 42 - totalCells;
+    
+    for (let j = 1; j <= nextMonthDaysCount; j++) {
+        const dayCell = document.createElement('div');
+        dayCell.classList.add('win-cal-day', 'faded');
+        dayCell.textContent = j;
         calendarGrid.appendChild(dayCell);
     }
 }
