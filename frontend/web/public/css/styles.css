@@ -1645,13 +1645,13 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-top: 1px solid rgba(255, 255, 255, 0.2);
     border-left: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 24px;
-    padding: 12px;
-    width: 330px;
+    border-radius: 20px; /* slightly smaller radius */
+    padding: 10px; /* Tighter padding */
+    width: 290px; /* Reduced width */
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.03);
-    margin: 40px auto 15px auto;
+    margin: 30px auto 10px auto;
     position: relative; /* Ensure overlay bounds to widget */
     overflow: hidden; /* Hide overflow when sliding in/out */
 }
@@ -1660,7 +1660,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-cal-header-box {
     background: transparent;
     border: none;
-    padding: 10px 0 24px 0;
+    padding: 8px 0 16px 0; /* Reduced padding */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -1682,14 +1682,19 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-month-year {
-    font-size: 1.25rem;
+    font-size: 1.1rem; /* Smaller text */
     font-weight: 700;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
 }
 
 /* Main Calendar Body */
 .epic-cal-body {
-    padding: 0 14px 14px 14px;
+    padding: 0 10px 10px 10px; /* Tighter padding */
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+.epic-cal-body.dimmed {
+    opacity: 0.1;
+    transform: scale(0.98);
 }
 
 .epic-cal-grid-header {
@@ -1697,10 +1702,10 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     grid-template-columns: repeat(7, 1fr);
     text-align: center;
     font-weight: 500;
-    font-size: 0.75rem;
-    letter-spacing: 1px;
+    font-size: 0.7rem; /* Smaller font */
+    letter-spacing: 0.5px;
     text-transform: uppercase;
-    margin-bottom: 16px;
+    margin-bottom: 12px; /* Tighter margin */
 }
 
 .epic-cal-grid-header .weekday {
@@ -1714,7 +1719,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-cal-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    row-gap: 8px;
+    row-gap: 4px; /* Tighter gaps */
     column-gap: 4px;
 }
 
@@ -1724,7 +1729,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 0.9rem;
+    font-size: 0.85rem; /* Smaller text */
     font-weight: 400;
     color: #f8fafc;
     border-radius: 50%; /* Perfect circle */
@@ -1770,7 +1775,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     background: #34d399;
     border-radius: 50%;
     position: absolute;
-    bottom: 4px;
+    bottom: 2px; /* moved up slightly */
     display: none;
 }
 .epic-cal-day.has-event .dot {
@@ -1787,8 +1792,8 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 16px;
-    padding: 16px 20px;
-    width: 320px;
+    padding: 12px 16px; /* Tighter padding */
+    width: 290px; /* Reduced width */
     margin: 0 auto;
     font-family: 'Inter', -apple-system, sans-serif;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
@@ -1798,20 +1803,20 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .epic-cal-note-card .note-header span {
     color: #34d399;
     font-weight: 500;
-    font-size: 0.85rem;
+    font-size: 0.8rem; /* Smaller text */
 }
 
 .epic-cal-note-card p {
     margin: 0;
     color: rgba(255, 255, 255, 0.6);
-    font-size: 0.85rem;
-    line-height: 1.5;
+    font-size: 0.8rem; /* Smaller text */
+    line-height: 1.4;
 }
 
 /* Custom Month Picker Overlay */
