@@ -1640,12 +1640,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
    ========================================= */
 @media (max-width: 768px) {
     /* -- Hide ambient orbs on mobile to reduce lag -- */
-    body::before, body::after { display: none; }
+    body::before, body::after { display: none !important; }
 
     /* -- Login Form Adjustments -- */
     body:not(.dashboard-body) {
-        padding-top: 15vh;
-        padding-inline: 20px;
+        padding-top: 15vh !important;
+        padding-inline: 20px !important;
     }
     
     body:not(.dashboard-body) .glass-panel,
@@ -1655,59 +1655,68 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     }
 
     /* -- Adjust Dashboard Layout Container -- */
+    body.dashboard-body {
+        height: auto !important;
+        min-height: 100vh !important;
+        overflow-y: auto !important;
+    }
+
     body.dashboard-body .app-layout {
         flex-direction: column !important;
-        padding: 10px 15px 80px 15px !important; /* Space at bottom for fixed nav */
-        gap: 15px !important;
+        padding: 10px 15px 100px 15px !important; /* Space at bottom for fixed nav */
+        gap: 20px !important;
+        height: auto !important;
+        overflow: visible !important;
     }
 
     /* -- Header Adjustments -- */
     body.dashboard-body .global-top-header {
         flex-direction: column !important;
-        align-items: flex-start !important;
+        justify-content: center !important;
+        align-items: center !important;
         gap: 15px !important;
-        padding: 15px 20px !important;
+        padding: 20px !important;
+        height: auto !important;
     }
     
     .system-status-pills {
-        width: 100%;
-        flex-wrap: wrap;
-        justify-content: flex-start;
-        gap: 10px;
+        width: 100% !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 10px !important;
     }
     .notif-bell-wrap {
-        margin-left: auto; /* Push bell to the right side if wrapped */
+        margin-left: 0 !important;
     }
     
     /* Hide some static text to save space */
-    .brand-text h1 { font-size: 1.1rem; }
-    .brand-text .slogan { display: none; }
+    .brand-text h1 { font-size: 1.2rem !important; }
+    .brand-text .slogan { display: none !important; }
 
     /* -- Sidebar to Bottom Tab Bar -- */
-    .app-sidebar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 70px;
-        min-height: 70px;
-        flex-direction: row;
-        border-radius: 0;
-        border: none;
-        border-top: 1px solid var(--glass-border);
-        padding: 0 20px;
-        z-index: 9999;
-        background: rgba(10, 10, 15, 0.95);
+    body.dashboard-body .app-sidebar {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 70px !important;
+        min-height: 70px !important;
+        flex-direction: row !important;
+        justify-content: space-around !important;
+        align-items: center !important;
+        border-radius: 0 !important;
+        border: none !important;
+        border-top: 1px solid var(--glass-border) !important;
+        padding: 0 10px !important;
+        z-index: 9999 !important;
+        background: rgba(10, 10, 15, 0.98) !important;
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.5) !important;
     }
-    .sidebar-nav.top {
-        flex-direction: row;
-        width: auto;
-        gap: 15px;
-        margin: 0;
-    }
-    .sidebar-nav.bottom {
-        flex-direction: row;
-        gap: 15px;
+    .sidebar-nav {
+        flex-direction: row !important;
+        width: auto !important;
+        gap: 10px !important;
+        margin: 0 !important;
     }
 
     /* -- Prop Firm Trading View -- */
@@ -1723,23 +1732,28 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     }
     /* Wrap tables so they can swipe */
     #tradingView table {
-        min-width: 800px; /* Keep tabular layout intact, enforce swipe */
+        min-width: 800px !important; /* Keep tabular layout intact, enforce swipe */
     }
     #tradingView .table-wrapper-swipe {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin-bottom: 20px;
-        padding-bottom: 5px;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        margin-bottom: 20px !important;
+        padding-bottom: 5px !important;
+        width: 100% !important;
     }
 
     /* -- Nova AI View -- */
+    body.dashboard-body .glass-panel.main-content {
+        overflow: visible !important;
+        min-height: 500px !important;
+    }
     .novaView {
-        height: calc(100vh - 180px); /* Adjust for header and bottom bar */
+        height: 600px !important; /* Fixed height for scrolling instead of full screen */
     }
     .nova-sidebar {
-        display: none; /* Hide chat history on mobile */
+        display: none !important; /* Hide chat history on mobile */
     }
     .nova-main {
-        border-radius: 12px;
+        border-radius: 12px !important;
     }
 }
