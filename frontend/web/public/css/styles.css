@@ -1661,7 +1661,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px; /* Squeezed to fit 4 */
+    gap: 6px; /* 6px panel gap */
     border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -1785,17 +1785,17 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-    gap: 8px; /* Perfect 8px list gap */
+    gap: 6px; /* 6px list gap */
 }
 
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 12px 14px; /* Perfectly calculated 12px padding */
     display: flex;
     flex-direction: column;
-    gap: 3px; /* 3px gap between time and title */
+    gap: 2px; /* 2px gap between time and title */
     transition: all 0.2s ease;
 }
 
@@ -1835,7 +1835,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-title {
-    font-size: 0.9rem; /* Elegant 0.9rem */
+    font-size: 0.85rem; /* 0.85rem */
     line-height: 1; /* Eliminates invisible stretching */
     font-weight: 500;
     color: #f8fafc;
