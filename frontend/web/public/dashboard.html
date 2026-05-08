@@ -99,9 +99,18 @@
 
             <div id="homeView" class="view-section">
                 <div class="home-body">
-                    <div class="welcome-box">
-                        <h2>Systems Nominal.</h2>
-                        <p style="color: var(--text-muted);">Select Nova from the sidebar to initialize the AI command terminal.</p>
+                    <div class="calendar-wrapper" style="max-width: 900px; margin: 0 auto; width: 100%;">
+                        <div class="calendar-header">
+                            <button id="calPrevMonth" class="cal-nav-btn"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M15 18l-6-6 6-6"/></svg></button>
+                            <h2 id="calMonthYear" class="cal-month-title">Month Year</h2>
+                            <button id="calNextMonth" class="cal-nav-btn"><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18l6-6-6-6"/></svg></button>
+                        </div>
+                        <div class="calendar-days-header">
+                            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                        </div>
+                        <div id="calendarGrid" class="calendar-grid">
+                            <!-- Days injected via JS -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -359,6 +368,6 @@
     </div>
 
     <script src="/js/api.js?v=35.0"></script>
-    <script src="/js/dashboard.js?v=88.11"></script>
+    <script src="/js/dashboard.js?v=88.12"></script>
 </body>
 </html>

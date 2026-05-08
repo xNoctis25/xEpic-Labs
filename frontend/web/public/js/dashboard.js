@@ -1555,3 +1555,73 @@ if (propForm) {
     });
 }
 
+/* =========================================
+   HOME SCREEN CALENDAR ENGINE
+   ========================================= */
+const calMonthYear = document.getElementById('calMonthYear');
+const calendarGrid = document.getElementById('calendarGrid');
+const btnPrevMonth = document.getElementById('calPrevMonth');
+const btnNextMonth = document.getElementById('calNextMonth');
+
+let currentCalDate = new Date(); // Tracks the currently viewed month
+
+function renderCalendar(dateToRender) {
+    if (!calendarGrid || !calMonthYear) return;
+    
+    calendarGrid.innerHTML = ''; // Clear existing days
+    
+    const year = dateToRender.getFullYear();
+    const month = dateToRender.getMonth();
+    
+    // Set Header Title (e.g. "May 2026")
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    calMonthYear.textContent = `${monthNames[month]} ${year}`;
+    
+    // Calculate first day of the month and total days
+    const firstDayIndex = new Date(year, month, 1).getDay(); // 0 (Sun) to 6 (Sat)
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    
+    // Get today's exact date to highlight it
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
+    const currentDay = today.getDate();
+    
+    // Inject empty slots for days before the 1st
+    for (let i = 0; i < firstDayIndex; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.classList.add('cal-day', 'empty');
+        calendarGrid.appendChild(emptyCell);
+    }
+    
+    // Inject actual days
+    for (let day = 1; day <= totalDays; day++) {
+        const dayCell = document.createElement('div');
+        dayCell.classList.add('cal-day');
+        dayCell.textContent = day;
+        
+        if (isCurrentMonth && day === currentDay) {
+            dayCell.classList.add('today');
+        }
+        
+        calendarGrid.appendChild(dayCell);
+    }
+}
+
+// Initial render
+if (document.getElementById('homeView')) {
+    renderCalendar(currentCalDate);
+}
+
+// Event Listeners for Nav
+if (btnPrevMonth) {
+    btnPrevMonth.addEventListener('click', () => {
+        currentCalDate.setMonth(currentCalDate.getMonth() - 1);
+        renderCalendar(currentCalDate);
+    });
+}
+if (btnNextMonth) {
+    btnNextMonth.addEventListener('click', () => {
+        currentCalDate.setMonth(currentCalDate.getMonth() + 1);
+        renderCalendar(currentCalDate);
+    });
+}
