@@ -661,12 +661,12 @@ function updateRealtimeClock() {
     // e.g. "Fri, May 08, 01:44:03 PM"
     const formatted = formatter.format(new Date());
     
-    // Convert "Fri, May 08, 01:44:03 PM" to "Fri, May 08 • 01:44:03 PM ET"
+    // Convert "Fri, May 08, 01:44:03 PM" to "Fri, May 08 • <br> 01:44:03 PM ET"
     const parts = formatted.split(', ');
     if (parts.length === 3) {
-        uiRealtimeClock.textContent = `${parts[0]}, ${parts[1]} • ${parts[2]} ET`;
+        uiRealtimeClock.innerHTML = `${parts[0]}, ${parts[1]} &bull;<br>${parts[2]} ET`;
     } else {
-        uiRealtimeClock.textContent = formatted + " ET";
+        uiRealtimeClock.innerHTML = formatted + " ET";
     }
 }
 
