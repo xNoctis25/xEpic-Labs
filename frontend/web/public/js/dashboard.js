@@ -1888,6 +1888,11 @@ function renderEvents() {
     function formatEventDate(date) {
         return date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
     }
+    function formatEventDateTime(date) {
+        const dateStr = date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `${dateStr} \u2022 ${timeStr}`;
+    }
     
     const EVENTS_PER_PAGE = 4;
     
@@ -1920,7 +1925,12 @@ function renderEvents() {
             
             const timeSpan = document.createElement('span');
             timeSpan.classList.add('epic-event-time');
-            timeSpan.textContent = stylingClass === 'next-week' ? formatEventDate(evt.date) : formatEventTime(evt.date);
+            
+            if (stylingClass === 'next-week' || stylingClass === 'upcoming') {
+                timeSpan.textContent = formatEventDateTime(evt.date);
+            } else {
+                timeSpan.textContent = formatEventTime(evt.date);
+            }
             
             const titleSpan = document.createElement('span');
             titleSpan.classList.add('epic-event-title');
