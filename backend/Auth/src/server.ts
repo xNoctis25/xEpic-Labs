@@ -81,7 +81,7 @@ async function startSsePoller(): Promise<void> {
     }, 5_000);
 }
 
-// --- DYNAMIC SECURITY MIGRATION ---
+// --- DYNAMIC SECURITY MIGRATION (UUID) ---
 pool.query(`
     CREATE TABLE IF NOT EXISTS ip_blacklist (
         ip_address VARCHAR(45) PRIMARY KEY,
@@ -95,7 +95,7 @@ pool.query(`
     ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
 
     CREATE TABLE IF NOT EXISTS prop_firm_metrics (
-        id SERIAL PRIMARY KEY,
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         firm_name VARCHAR(50) NOT NULL,
         account_size NUMERIC(10,2) NOT NULL,
         profit_target NUMERIC(10,2) NOT NULL,
@@ -117,36 +117,34 @@ pool.query(`
     ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
     CREATE TABLE IF NOT EXISTS engine_config (
-        id              SERIAL PRIMARY KEY,
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         active_playbook VARCHAR(20) NOT NULL DEFAULT 'PROP_FIRM'
                         CHECK (active_playbook IN ('PROP_FIRM', 'CASH_ACCOUNT')),
+        engine_state    VARCHAR(20) DEFAULT 'OFFLINE',
         updated_at      TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS engine_notifications (
-        id          SERIAL PRIMARY KEY,
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         event_type  VARCHAR(30) NOT NULL,
         message     TEXT        NOT NULL,
         read        BOOLEAN     DEFAULT FALSE,
         created_at  TIMESTAMPTZ DEFAULT NOW()
     );
-    -- Fix existing deployments with wrong default (AT TIME ZONE naive-UTC bug)
-    ALTER TABLE engine_notifications ALTER COLUMN created_at SET DEFAULT NOW();
+
+    CREATE TABLE IF NOT EXISTS engine_halts (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        halt_type   VARCHAR(30) NOT NULL,
+        is_active   BOOLEAN DEFAULT TRUE,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
 `).then(async () => {
     try {
-        // Seed engine_config row 1 (idempotent)
-        await pool.query(`INSERT INTO engine_config (id) VALUES (1) ON CONFLICT DO NOTHING`);
-
-        // One-time repair: fix notifications stored with wrong timestamps due to
-        // AT TIME ZONE naive-UTC bug (stored ET local time as if UTC → 4h too early).
-        // Only fix rows that are clearly off (created_at < NOW() - 2h, meaning they
-        // appear older than they should relative to real UTC now).
-        await pool.query(`
-            UPDATE engine_notifications
-            SET created_at = created_at + INTERVAL '4 hours'
-            WHERE created_at < NOW() - INTERVAL '2 hours'
-              AND created_at + INTERVAL '4 hours' <= NOW() + INTERVAL '1 minute'
-        `);
+        // Seed engine_config singleton (idempotent)
+        const existing = await pool.query('SELECT id FROM engine_config LIMIT 1');
+        if (existing.rows.length === 0) {
+            await pool.query('INSERT INTO engine_config DEFAULT VALUES');
+        }
 
         console.log('[DB] Seeding Topstep configurations...');
         const metrics = [
@@ -166,9 +164,9 @@ pool.query(`
         }
         console.log('[DB] Migration complete. ✅');
     } catch (e) {
-        console.error('[DB] Failed to seed Topstep configurations', e);
+        console.error('[DB] Failed to seed configurations', e);
     }
-}).catch(err => console.error('[DB] Note: Security column migration skipped or already exists.'));
+}).catch(err => console.error('[DB] Note: Migration skipped or already exists.'));
 
 // ── SIGN UP ──────────────────────────────────────────────────────────────────
 app.post('/api/auth/signup', async (req, res) => {
@@ -364,7 +362,7 @@ app.get('/api/auth/me', async (req, res) => {
         }
 
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string; role: string };
 
         const userQuery = await pool.query(
             'SELECT id, username, email, isverified, role, createdat AS created_at FROM users WHERE id = $1',
@@ -586,7 +584,7 @@ app.post('/api/auth/change-password', async (req, res) => {
             return res.status(401).json({ message: 'No token provided.' });
         }
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, JWT_SECRET) as { id: number };
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
 
         const { currentPassword, newPassword } = req.body;
         if (!currentPassword || !newPassword) {
@@ -620,7 +618,7 @@ app.post('/api/auth/chat', async (req, res) => {
             return res.status(401).json({ message: 'No token provided.' });
         }
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, JWT_SECRET) as { id: number; username: string; role: string };
+        const decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string; role: string };
 
         const { message, model, history } = req.body;
         if (!message) return res.status(400).json({ message: 'Message is required.' });
@@ -654,7 +652,7 @@ app.post('/api/auth/chat', async (req, res) => {
         // ── Inject live engine state into context ─────────────────────────────
         const [haltRes, configRes] = await Promise.all([
             pool.query(`SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1`),
-            pool.query(`SELECT active_playbook, engine_state FROM engine_config WHERE id = 1`),
+            pool.query(`SELECT active_playbook, engine_state FROM engine_config LIMIT 1`),
         ]);
         const activeHalt    = haltRes.rows[0]?.halt_type ?? null;
         const engineState   = configRes.rows[0]?.engine_state ?? 'OFFLINE';
@@ -826,7 +824,7 @@ app.get('/api/auth/trading/prop-accounts', async (req, res) => {
         return res.status(401).json({ message: 'Token expired or invalid. Please log in again.' });
     }
     try {
-        const result = await pool.query('SELECT * FROM prop_accounts ORDER BY id ASC');
+        const result = await pool.query('SELECT * FROM prop_accounts ORDER BY created_at ASC');
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('[API ERROR] /prop-accounts GET:', error);
@@ -974,28 +972,10 @@ app.get('/api/auth/trading/engine/status', async (req, res) => {
             "SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1"
         );
 
-        // Detect active trade: look for an open trade_id (has ENTRY log but no EXIT in last 24h)
-        // Wrapped in its own try/catch — never crashes the status endpoint
-        let inTrade = false;
-        try {
-            const tradeResult = await pool.query(`
-                SELECT trade_id, message FROM mom_telemetry_logs
-                WHERE trade_id IS NOT NULL
-                  AND timestamp > NOW() - INTERVAL '24 hours'
-                ORDER BY timestamp DESC LIMIT 1
-            `);
-            const lastRow = tradeResult.rows[0];
-            if (lastRow) {
-                // A trade is live if the most recent trade log doesn't mention exit/close/flat
-                const msg = (lastRow.message || '').toLowerCase();
-                inTrade = !msg.includes('exit') && !msg.includes('closed') && !msg.includes('flat') && !msg.includes('sweep');
-            }
-        } catch { /* silently ignore — don't let trade detection crash status */ }
-
         if (haltResult.rows.length > 0) {
-            res.status(200).json({ status: 'HALTED', reason: haltResult.rows[0].halt_type, in_trade: inTrade });
+            res.status(200).json({ status: 'HALTED', reason: haltResult.rows[0].halt_type, in_trade: false });
         } else {
-            res.status(200).json({ status: 'ACTIVE', in_trade: inTrade });
+            res.status(200).json({ status: 'ACTIVE', in_trade: false });
         }
     } catch (error) {
         console.error('[API ERROR] /engine/status GET:', error);
@@ -1017,7 +997,7 @@ app.patch('/api/auth/trading/engine/playbook', async (req, res) => {
             return res.status(400).json({ message: 'Invalid playbook. Use PROP_FIRM or CASH_ACCOUNT.' });
         }
         await pool.query(
-            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW() WHERE id = 1`,
+            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW()`,    
             [playbook]
         );
         // Push a notification so dashboard immediately reflects the switch

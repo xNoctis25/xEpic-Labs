@@ -976,8 +976,8 @@ async function loadPropAccounts() {
                         })() : '—'}
                     </td>
                     <td style="padding: 10px 15px; text-align: right; white-space: nowrap;">
-                        <button onclick="openEditAccountModal(${acc.id})" title="Edit" style="background: none; border: 1px solid rgba(102,252,241,0.3); color: var(--primary); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; margin-right: 6px; transition: all 0.2s;">✏️</button>
-                        <button onclick="deletePropAccount(${acc.id})" title="Delete" style="background: none; border: 1px solid rgba(255,60,60,0.3); color: var(--error); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s;">🗑️</button>
+                        <button onclick="openEditAccountModal('${acc.id}')" title="Edit" style="background: none; border: 1px solid rgba(102,252,241,0.3); color: var(--primary); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; margin-right: 6px; transition: all 0.2s;">✏️</button>
+                        <button onclick="deletePropAccount('${acc.id}')" title="Delete" style="background: none; border: 1px solid rgba(255,60,60,0.3); color: var(--error); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-size: 0.8rem; transition: all 0.2s;">🗑️</button>
                     </td>
                 </tr>
             `;
