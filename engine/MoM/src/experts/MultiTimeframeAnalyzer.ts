@@ -291,10 +291,7 @@ export class MultiTimeframeAnalyzer {
         if (hasHH && hasHL) return 'Bullish';
         if (hasLH && hasLL) return 'Bearish';
 
-        // Partial structure — single swing direction gives weak bias
-        if (hasHH || hasHL) return 'Bullish';
-        if (hasLH || hasLL) return 'Bearish';
-
+        // Mixed/choppy structure — no directional bias, sit out
         return 'Neutral';
     }
 

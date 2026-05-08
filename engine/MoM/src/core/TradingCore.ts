@@ -60,10 +60,11 @@ export interface ActiveTradeContext {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 const SL_BUFFER_TICKS        = 2;          // buffer beyond FVG edge (2 ticks = 0.50 pts MES)
-const SL_MAX_ATR_MULT        = 2.5;        // reject setup if structural stop exceeds 2.5× ATR
+const SL_MAX_ATR_MULT        = 2.0;        // reject setup if structural stop exceeds 2.0× ATR
+const SL_MAX_POINTS          = 8.0;        // hard cap — never more than 8pts regardless of ATR
 const SL_MIN_DISTANCE        = 3.0;        // minimum stop distance in points (12 ticks MES)
 const SL_WILDERNESS_PCT      = 0.50;       // cut SL by 50% in Wilderness
-const MIN_SMC_PROBABILITY    = 80;         // minimum probability score (0-100%) to take a trade
+const MIN_SMC_PROBABILITY    = 65;         // minimum probability score (0-100%) to take a trade
 
 // ── ATM Constants ───────────────────────────────────────────────────────────
 const FLAT_TOLERANCE_POINTS  = 0.50;       // ≈ 2 ticks on MES
@@ -257,13 +258,24 @@ export class TradingCore {
             return;
         }
 
-        // Sanity cap: reject if structural stop is too wide
+        // Sanity cap: reject if structural stop is too wide (ATR-relative)
         if (atr > 0 && slDistance > atr * SL_MAX_ATR_MULT) {
             this.pendingActions.push({
                 type: 'REJECTED', gate: 'STRUCTURE_CAP', regime,
                 direction, price: candle.close,
                 confidence: signal.confidence,
                 reason: `REJECTED by STRUCTURE_CAP | ${direction} ${this.symbol} @ ${candle.close} | SL: ${slDistance.toFixed(1)}pts exceeds ${SL_MAX_ATR_MULT}× ATR (${atr.toFixed(1)}) | ${signal.reason}`,
+            });
+            return;
+        }
+
+        // Hard cap: never allow a stop wider than SL_MAX_POINTS regardless of ATR
+        if (slDistance > SL_MAX_POINTS) {
+            this.pendingActions.push({
+                type: 'REJECTED', gate: 'STRUCTURE_CAP', regime,
+                direction, price: candle.close,
+                confidence: signal.confidence,
+                reason: `REJECTED by STRUCTURE_CAP | ${direction} ${this.symbol} @ ${candle.close} | SL: ${slDistance.toFixed(1)}pts exceeds hard cap (${SL_MAX_POINTS}pts) | ${signal.reason}`,
             });
             return;
         }

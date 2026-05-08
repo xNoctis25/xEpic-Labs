@@ -64,12 +64,12 @@ export class BacktestEngine {
         stopPrice: number,
     ): BracketLeg[] {
         const tp1Price = isLong
-            ? entryPrice + (riskR * 1.5)   // 1:1.5 RR
-            : entryPrice - (riskR * 1.5);
+            ? entryPrice + (riskR * 1.0)   // 1:1 R — books partial quickly
+            : entryPrice - (riskR * 1.0);
 
         const tp2Price = isLong
-            ? entryPrice + (riskR * 3.0)  // 1:3 RR
-            : entryPrice - (riskR * 3.0);
+            ? entryPrice + (riskR * 2.0)  // 1:2 R — institutional runner target
+            : entryPrice - (riskR * 2.0);
 
         // qty === 1: Pure Runner
         if (qty === 1) {
@@ -222,8 +222,8 @@ export class BacktestEngine {
                 // but then price continues in the winning direction).
                 if (!position.beTriggered) {
                     const reachedBE = isLong
-                        ? candle.high >= entryPrice + (position.riskR * 1.5)
-                        : candle.low  <= entryPrice - (position.riskR * 1.5);
+                        ? candle.high >= entryPrice + (position.riskR * 1.0)
+                        : candle.low  <= entryPrice - (position.riskR * 1.0);
 
                     if (reachedBE) {
                         position.beTriggered = true;
