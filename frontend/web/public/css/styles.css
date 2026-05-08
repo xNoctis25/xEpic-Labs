@@ -1639,14 +1639,13 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
    HOME SCREEN CALENDAR WIDGET (EPIC)
    ========================================= */
 .epic-calendar-widget {
-    background: rgba(15, 15, 20, 0.6);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(102, 252, 241, 0.1);
-    border-radius: 16px;
-    width: 380px;
+    background: #0d0e12;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    width: 320px;
     font-family: 'Inter', -apple-system, sans-serif;
-    color: #e3e3e3;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    color: #f8fafc;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
     margin: 40px auto;
 }
 
@@ -1655,24 +1654,24 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 24px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 #epicCalTodayText {
     font-size: 1.05rem;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    color: var(--text-main);
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: #f8fafc;
 }
 
 .epic-cal-icon-btn {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: var(--text-muted);
-    border-radius: 8px;
-    width: 34px;
-    height: 34px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: #94a3b8;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1681,40 +1680,39 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-icon-btn:hover {
-    background: rgba(102, 252, 241, 0.1);
-    border-color: rgba(102, 252, 241, 0.3);
-    color: #66fcf1;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
 }
 
 /* Main Calendar */
 .epic-cal-main {
-    padding: 24px;
+    padding: 20px;
 }
 
 .epic-cal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 24px;
+    margin-bottom: 20px;
 }
 
 .epic-cal-month-year {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #fff;
-    letter-spacing: 1px;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: 0.5px;
 }
 
 .epic-cal-nav {
     display: flex;
-    gap: 12px;
+    gap: 8px;
 }
 
 .epic-cal-nav-btn {
     background: rgba(255, 255, 255, 0.02);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 6px;
-    color: var(--text-muted);
+    color: #94a3b8;
     cursor: pointer;
     width: 28px;
     height: 28px;
@@ -1725,9 +1723,8 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-nav-btn:hover {
-    background: rgba(102, 252, 241, 0.05);
-    border-color: rgba(102, 252, 241, 0.2);
-    color: #66fcf1;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
 }
 
 .epic-cal-grid-header {
@@ -1735,18 +1732,18 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     grid-template-columns: repeat(7, 1fr);
     text-align: center;
     font-weight: 600;
-    color: var(--text-muted);
-    font-size: 0.8rem;
+    color: #64748b; /* Muted blue-gray */
+    font-size: 0.75rem;
     letter-spacing: 1px;
     text-transform: uppercase;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 
 .epic-cal-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    row-gap: 8px;
-    column-gap: 4px;
+    row-gap: 6px;
+    column-gap: 6px;
 }
 
 .epic-cal-day {
@@ -1754,9 +1751,10 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.95rem;
-    color: #e3e3e3;
-    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #f8fafc;
+    border-radius: 8px; /* Rounded rectangle */
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
     width: 100%;
@@ -1764,31 +1762,27 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 
 .epic-cal-day:hover {
     background: rgba(255, 255, 255, 0.05);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .epic-cal-day.faded {
-    color: #4a4d53;
+    color: #334155; /* Dim gray for off-month */
 }
 .epic-cal-day.faded:hover {
     background: none;
-    transform: none;
-    box-shadow: none;
     cursor: default;
 }
 
 .epic-cal-day.today {
-    background: rgba(102, 252, 241, 0.1);
-    border: 1px solid rgba(102, 252, 241, 0.5);
+    background: rgba(102, 252, 241, 0.06); /* Very subtle tint */
+    border: 1px solid rgba(102, 252, 241, 0.8); /* Crisp solid cyan border */
     color: #66fcf1;
     font-weight: 700;
-    box-shadow: 0 0 15px rgba(102, 252, 241, 0.2);
+    box-shadow: 0 0 10px rgba(102, 252, 241, 0.15); /* Soft outer glow */
 }
 
 .epic-cal-day.today:hover {
-    background: rgba(102, 252, 241, 0.2);
-    box-shadow: 0 0 20px rgba(102, 252, 241, 0.4);
+    background: rgba(102, 252, 241, 0.12);
+    box-shadow: 0 0 15px rgba(102, 252, 241, 0.3);
 }
 
 
