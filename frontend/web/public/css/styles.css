@@ -77,7 +77,7 @@ body::after {
   to   { transform: translate(-40px, -30px) scale(1.08); }
 }
 
-/* â”€â”€ Card â”€â”€ */
+/* ── Card ── */
 .glass-panel {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
@@ -86,19 +86,23 @@ body::after {
   border-radius: 16px;
   padding: 40px;
   width: 100%;
-  max-width: 400px;        /* Strict pixel base â€” browser can interpolate from here */
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
   z-index: 1;
   overflow: hidden;
 
-  /* Animate ONLY max-width â€” avoids jank from transitioning backdrop-filter etc. */
-  transition: max-width 0.5s cubic-bezier(0.25, 1, 0.5, 1),
-              padding    0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  /* Animate ONLY width/max-width — avoids jank from transitioning backdrop-filter etc. */
+  transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1),
+              padding 0.4s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-/* When signup form is visible: glide from 400px â†’ 750px (same unit, smooth) */
-.glass-panel:has(#signupForm:not(.hidden)) {
-  max-width: 750px;       /* Strict pixel target â€” same unit as base */
+/* Base state: Login form */
+body:not(.dashboard-body) .glass-panel {
+  max-width: 400px;
+}
+
+/* When signup form is visible: glide from 400px → 750px */
+body:not(.dashboard-body) .glass-panel:has(#signupForm:not(.hidden)) {
+  max-width: 750px;
   padding-inline: 48px;
 }
 
@@ -1637,6 +1641,18 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 @media (max-width: 768px) {
     /* -- Hide ambient orbs on mobile to reduce lag -- */
     body::before, body::after { display: none; }
+
+    /* -- Login Form Adjustments -- */
+    body:not(.dashboard-body) {
+        padding-top: 15vh;
+        padding-inline: 20px;
+    }
+    
+    body:not(.dashboard-body) .glass-panel,
+    body:not(.dashboard-body) .glass-panel:has(#signupForm:not(.hidden)) {
+        max-width: 100% !important; /* Force full width on mobile */
+        padding: 30px 20px !important;
+    }
 
     /* -- Adjust Dashboard Layout Container -- */
     body.dashboard-body .app-layout {
