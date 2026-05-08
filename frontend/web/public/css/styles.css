@@ -1654,14 +1654,14 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-events-panel {
-    padding: 15px 15px 10px 15px;
+    padding: 20px;
     width: 380px; /* Made wider to fit the tabs alongside Upcoming */
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 6px; /* Ultra tight gap */
+    gap: 12px; /* Restored elegant gap for 3 events */
     border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -1688,7 +1688,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     justify-content: space-between;
     padding-bottom: 8px; /* Restored padding */
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 12px; /* Added requested space before 1st event */
+    margin-bottom: 15px; /* Added elegant space before 1st event */
 }
 
 .epic-events-tabs {
@@ -1790,11 +1790,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 10px; /* Restored radius */
-    padding: 10px 12px; /* Relaxed padding */
+    border-radius: 12px; /* Restored elegant radius */
+    padding: 12px 15px; /* Restored elegant padding */
     display: flex;
     flex-direction: column;
-    gap: 2px; /* Restored gap */
+    gap: 4px; /* Restored gap */
     transition: all 0.2s ease;
 }
 
@@ -1804,12 +1804,12 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-time {
-    font-size: 0.75rem; /* Restored size */
+    font-size: 0.75rem;
     color: rgba(255, 255, 255, 0.5);
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 2px; /* Restored margin */
+    margin-bottom: 4px;
 }
 
 .epic-event-time::before {
