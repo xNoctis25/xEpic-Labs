@@ -33,6 +33,8 @@ jobs:
             --exclude='engine/MoM' \
             --exclude='.git' \
             --exclude='node_modules' \
+            --exclude='.env' \
+            --exclude='dist' \
             -e "ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key" \
             ./ root@${{ secrets.NYC_SERVER_IP }}:~/xEpic-Labs/
 
