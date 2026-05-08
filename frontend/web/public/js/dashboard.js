@@ -1577,6 +1577,17 @@ function renderCalendar(dateToRender) {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     calMonthYear.textContent = `${monthNames[month]} ${year}`;
     
+    // Manage Today button visibility
+    const calTodayBtn = document.getElementById('calTodayBtn');
+    if (calTodayBtn) {
+        const realToday = new Date();
+        if (year === realToday.getFullYear() && month === realToday.getMonth()) {
+            calTodayBtn.classList.add('hidden');
+        } else {
+            calTodayBtn.classList.remove('hidden');
+        }
+    }
+    
     // Set Top Bar Today Text
     const today = new Date();
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -1706,6 +1717,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
 
     function renderOverlay() {
         if (!overlayMonthYearText) return;
+        if (calTodayBtn) calTodayBtn.classList.remove('hidden');
         
         if (overlayMode === 'months') {
             if (calYearGrid) calYearGrid.classList.add('hidden');

@@ -1886,12 +1886,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-today-action {
-    margin-top: -6px;
-    margin-bottom: 6px;
-    text-align: center;
-    padding: 2px 10px;
-    font-size: 0.9rem;
-    font-weight: 500;
+    position: absolute;
+    right: 0;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
     color: #34d399;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
