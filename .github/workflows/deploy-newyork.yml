@@ -6,7 +6,6 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'shared/**'
       - 'engine/**'
       - '!engine/MoM/**'
       - '.github/workflows/deploy-newyork.yml'
