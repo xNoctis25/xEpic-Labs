@@ -1660,31 +1660,54 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-cal-header-box {
     background: transparent;
     border: none;
-    padding: 8px 0 16px 0; /* Reduced padding */
+    padding: 8px 0 16px 0;
     display: flex;
     justify-content: center;
     align-items: center;
     color: #fff;
     box-shadow: none;
+    position: relative; /* To help with layout if needed */
+    height: 48px; /* Fixed height to prevent layout shift */
+    gap: 30px; /* Space between arrows and text when arrows are visible */
 }
 
-.epic-cal-header-box.clickable {
+.epic-cal-month-year {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.1px;
+    text-align: center;
+}
+
+.epic-cal-month-year.clickable {
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.epic-cal-header-box.clickable:hover {
-    background: transparent;
-    border: none;
-    box-shadow: none;
+.epic-cal-month-year.clickable:hover {
     opacity: 0.7; /* Apple style native fade */
     transform: scale(0.98);
 }
 
-.epic-cal-month-year {
-    font-size: 1.1rem; /* Smaller text */
-    font-weight: 700;
-    letter-spacing: 0.1px;
+.epic-cal-year-nav {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    color: #f8fafc;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.epic-cal-year-nav:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.hidden {
+    display: none !important;
 }
 
 /* Main Calendar Body */

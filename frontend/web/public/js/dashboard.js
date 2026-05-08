@@ -1663,9 +1663,8 @@ const calMonthYearBtn = document.getElementById('calMonthYearBtn');
 const calMonthPickerOverlay = document.getElementById('calMonthPickerOverlay');
 const calMainBody = document.getElementById('calMainBody');
 const calMonthGrid = document.getElementById('calMonthGrid');
-const calPickerYearText = document.getElementById('calPickerYearText');
-const calPickerPrevYear = document.getElementById('calPickerPrevYear');
-const calPickerNextYear = document.getElementById('calPickerNextYear');
+const mainPrevYear = document.getElementById('mainPrevYear');
+const mainNextYear = document.getElementById('mainNextYear');
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 let overlayYear = currentCalDate.getFullYear();
@@ -1678,21 +1677,26 @@ if (calMonthYearBtn && calMonthPickerOverlay) {
             return;
         }
         overlayYear = currentCalDate.getFullYear();
+        
+        // Transform header into Year Selector
+        mainPrevYear.classList.remove('hidden');
+        mainNextYear.classList.remove('hidden');
+        
         renderOverlay();
         calMonthPickerOverlay.classList.add('active');
         calMainBody.classList.add('dimmed');
     });
 
     // Year Steppers
-    if (calPickerPrevYear) {
-        calPickerPrevYear.addEventListener('click', (e) => {
+    if (mainPrevYear) {
+        mainPrevYear.addEventListener('click', (e) => {
             e.stopPropagation();
             overlayYear--;
             renderOverlay();
         });
     }
-    if (calPickerNextYear) {
-        calPickerNextYear.addEventListener('click', (e) => {
+    if (mainNextYear) {
+        mainNextYear.addEventListener('click', (e) => {
             e.stopPropagation();
             overlayYear++;
             renderOverlay();
@@ -1700,8 +1704,11 @@ if (calMonthYearBtn && calMonthPickerOverlay) {
     }
 
     function renderOverlay() {
-        if (!calPickerYearText || !calMonthGrid) return;
-        calPickerYearText.textContent = overlayYear;
+        if (!calMonthYearBtn || !calMonthGrid) return;
+        
+        // Update main header to show just the year when overlay is open
+        calMonthYearBtn.textContent = overlayYear;
+        
         calMonthGrid.innerHTML = '';
 
         monthNames.forEach((month, index) => {
@@ -1728,6 +1735,13 @@ if (calMonthYearBtn && calMonthPickerOverlay) {
     function closeOverlay() {
         calMonthPickerOverlay.classList.remove('active');
         calMainBody.classList.remove('dimmed');
+        
+        // Hide arrows and restore Month/Year text
+        mainPrevYear.classList.add('hidden');
+        mainNextYear.classList.add('hidden');
+        
+        // The renderCalendar function handles updating the calMonthYearBtn text to "Month Year"
+        renderCalendar(currentCalDate);
     }
 }
 
