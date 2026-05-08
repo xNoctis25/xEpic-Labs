@@ -1635,37 +1635,34 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .custom-select-trigger.open { border-color: rgba(102, 252, 241, 0.5) !important; box-shadow: 0 0 0 3px rgba(102, 252, 241, 0.08) !important; }
 .custom-select-trigger.open svg { transform: rotate(180deg) !important; }
 
-/* =========================================
-   HOME SCREEN CALENDAR WIDGET (PREMIUM GLASS)
-   ========================================= */
 .epic-calendar-wrapper {
     display: flex;
     justify-content: center;
-    align-items: flex-start;
-    gap: 20px;
+    align-items: stretch;
     margin: 30px auto 10px auto;
-    max-width: 900px;
-}
-
-.epic-events-panel {
+    width: fit-content;
+    
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-top: 1px solid rgba(255, 255, 255, 0.2);
     border-left: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 20px;
+    border-radius: 24px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+}
+
+.epic-events-panel {
     padding: 20px;
     width: 320px;
-    min-height: 400px;
-    max-height: 440px;
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.03);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 20px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .epic-events-panel::-webkit-scrollbar {
@@ -1753,36 +1750,29 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 15px;
+    gap: 8px;
     margin-top: auto; /* push to bottom */
     padding-top: 15px;
 }
 
-.epic-page-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #fff;
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 0.8rem;
+.epic-page-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.3s ease;
 }
 
-.epic-page-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(102, 252, 241, 0.5);
-    color: #66fcf1;
+.epic-page-dot:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
-.epic-page-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
-.epic-page-info {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.5);
+.epic-page-dot.active {
+    background: #66fcf1;
+    box-shadow: 0 0 8px rgba(102, 252, 241, 0.5);
+    width: 12px;
+    border-radius: 3px;
 }
 
 .epic-events-list {
@@ -1851,19 +1841,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-calendar-widget {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-    border-left: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 20px; /* slightly smaller radius */
-    padding: 10px; /* Tighter padding */
-    width: 290px; /* Reduced width */
+    padding: 10px;
+    width: 290px;
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.03);
-    margin: 0; /* Moved to wrapper */
+    margin: 0;
     position: relative; /* Ensure overlay bounds to widget */
     overflow: hidden; /* Hide overflow when sliding in/out */
 }

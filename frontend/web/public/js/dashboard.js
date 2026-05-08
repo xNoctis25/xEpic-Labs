@@ -1934,31 +1934,22 @@ function renderEvents() {
         // Render pagination controls
         if (paginatorEl) {
             if (totalPages > 1) {
-                paginatorEl.innerHTML = `
-                    <button class="epic-page-btn" id="btn-prev-${tabId}" ${page === 1 ? 'disabled' : ''}>&lt;</button>
-                    <span class="epic-page-info">${page} / ${totalPages}</span>
-                    <button class="epic-page-btn" id="btn-next-${tabId}" ${page === totalPages ? 'disabled' : ''}>&gt;</button>
-                `;
+                let dotsHtml = '';
+                for (let i = 1; i <= totalPages; i++) {
+                    dotsHtml += `<div class="epic-page-dot ${i === page ? 'active' : ''}" data-page="${i}"></div>`;
+                }
+                paginatorEl.innerHTML = dotsHtml;
                 
-                const btnPrev = document.getElementById(`btn-prev-${tabId}`);
-                if (btnPrev) {
-                    btnPrev.addEventListener('click', () => {
-                        if (state.page > 1) {
-                            state.page--;
+                const dots = paginatorEl.querySelectorAll('.epic-page-dot');
+                dots.forEach(dot => {
+                    dot.addEventListener('click', (e) => {
+                        const targetPage = parseInt(e.target.getAttribute('data-page'));
+                        if (targetPage !== state.page) {
+                            state.page = targetPage;
                             renderPage(tabId);
                         }
                     });
-                }
-                
-                const btnNext = document.getElementById(`btn-next-${tabId}`);
-                if (btnNext) {
-                    btnNext.addEventListener('click', () => {
-                        if (state.page < totalPages) {
-                            state.page++;
-                            renderPage(tabId);
-                        }
-                    });
-                }
+                });
             } else {
                 paginatorEl.innerHTML = '';
             }
