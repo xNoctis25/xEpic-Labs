@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xEpic Labs &mdash; Command Center</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/styles.css?v=79.6">
+    <link rel="stylesheet" href="/css/styles.css?v=79.7">
 </head>
 <body class="dashboard-body">
 
@@ -100,30 +100,37 @@
             <div id="homeView" class="view-section">
                 <div class="home-body">
                     <div class="epic-calendar-widget">
-                        <!-- Top Bar -->
-                        <div class="epic-cal-top-bar">
-                            <span id="epicCalTodayText">Friday, May 8</span>
-                            <button class="epic-cal-icon-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+                        <!-- Header Box -->
+                        <div class="epic-cal-header-box">
+                            <button id="calPrevMonth" class="epic-cal-nav-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+                            <span class="epic-cal-month-year" id="calMonthYear">January, 2067</span>
+                            <button id="calNextMonth" class="epic-cal-nav-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>
                         </div>
                         
                         <!-- Main Calendar -->
-                        <div class="epic-cal-main">
-                            <div class="epic-cal-header">
-                                <span class="epic-cal-month-year" id="calMonthYear">May 2026</span>
-                                <div class="epic-cal-nav">
-                                    <button id="calPrevMonth" class="epic-cal-nav-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M18 15l-6-6-6 6"/></svg></button>
-                                    <button id="calNextMonth" class="epic-cal-nav-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 9l6 6 6-6"/></svg></button>
-                                </div>
-                            </div>
-                            
+                        <div class="epic-cal-body">
                             <div class="epic-cal-grid-header">
-                                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                                <span class="weekend">Su</span>
+                                <span class="weekday">Mo</span>
+                                <span class="weekday">Tu</span>
+                                <span class="weekday">We</span>
+                                <span class="weekday">Th</span>
+                                <span class="weekday">Fr</span>
+                                <span class="weekend">Sa</span>
                             </div>
                             
                             <div id="calendarGrid" class="epic-cal-grid">
                                 <!-- Days injected via JS -->
                             </div>
                         </div>
+                    </div>
+                    
+                    <div class="epic-cal-note-card">
+                        <div class="note-header">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            <span id="epicCalNoteDate">17 January, 2067</span>
+                        </div>
+                        <p>Systems optimal. Ready for the trading session.</p>
                     </div>
                 </div>
             </div>
@@ -381,6 +388,6 @@
     </div>
 
     <script src="/js/api.js?v=35.0"></script>
-    <script src="/js/dashboard.js?v=88.14"></script>
+    <script src="/js/dashboard.js?v=88.15"></script>
 </body>
 </html>

@@ -1599,6 +1599,11 @@ function renderCalendar(dateToRender) {
     for (let x = firstDayIndex; x > 0; x--) {
         const dayCell = document.createElement('div');
         dayCell.classList.add('epic-cal-day', 'faded');
+        // If the day is Sun (0) or Sat (6)
+        const cellDayIndex = (firstDayIndex - x) % 7;
+        if (cellDayIndex === 0 || cellDayIndex === 6) {
+            dayCell.classList.add('weekend');
+        }
         dayCell.textContent = prevMonthDays - x + 1;
         calendarGrid.appendChild(dayCell);
     }
@@ -1607,7 +1612,21 @@ function renderCalendar(dateToRender) {
     for (let day = 1; day <= totalDays; day++) {
         const dayCell = document.createElement('div');
         dayCell.classList.add('epic-cal-day');
+        
+        const cellDayIndex = new Date(year, month, day).getDay();
+        if (cellDayIndex === 0 || cellDayIndex === 6) {
+            dayCell.classList.add('weekend');
+        }
+        
         dayCell.textContent = day;
+        
+        // Add dot for aesthetic flair on some dummy days
+        if (day === 7 || day === 12 || day === 25 || day === 31) {
+            dayCell.classList.add('has-event');
+            const dot = document.createElement('div');
+            dot.classList.add('dot');
+            dayCell.appendChild(dot);
+        }
         
         if (isCurrentMonth && day === currentDay) {
             dayCell.classList.add('today');
@@ -1623,6 +1642,12 @@ function renderCalendar(dateToRender) {
     for (let j = 1; j <= nextMonthDaysCount; j++) {
         const dayCell = document.createElement('div');
         dayCell.classList.add('epic-cal-day', 'faded');
+        
+        const cellDayIndex = new Date(year, month + 1, j).getDay();
+        if (cellDayIndex === 0 || cellDayIndex === 6) {
+            dayCell.classList.add('weekend');
+        }
+        
         dayCell.textContent = j;
         calendarGrid.appendChild(dayCell);
     }

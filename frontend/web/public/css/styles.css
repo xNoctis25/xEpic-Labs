@@ -1636,128 +1636,105 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .custom-select-trigger.open svg { transform: rotate(180deg) !important; }
 
 /* =========================================
-   HOME SCREEN CALENDAR WIDGET (EPIC)
+   HOME SCREEN CALENDAR WIDGET (PREMIUM DARK)
    ========================================= */
 .epic-calendar-widget {
-    background: #0d0e12;
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 12px;
+    background: #15161a;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 6px;
     width: 320px;
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    margin: 40px auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    margin: 40px auto 15px auto;
 }
 
-/* Top Bar */
-.epic-cal-top-bar {
+/* Header Box */
+.epic-cal-header-box {
+    background: #1b1d22;
+    border-radius: 12px;
+    padding: 12px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-#epicCalTodayText {
-    font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    color: #f8fafc;
-}
-
-.epic-cal-icon-btn {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    color: #94a3b8;
-    border-radius: 6px;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.epic-cal-icon-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: #fff;
-}
-
-/* Main Calendar */
-.epic-cal-main {
-    padding: 20px;
-}
-
-.epic-cal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
 
 .epic-cal-month-year {
-    font-size: 1.15rem;
-    font-weight: 700;
+    font-size: 0.95rem;
+    font-weight: 500;
     color: #f8fafc;
     letter-spacing: 0.5px;
 }
 
-.epic-cal-nav {
-    display: flex;
-    gap: 8px;
-}
-
 .epic-cal-nav-btn {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
+    background: none;
+    border: none;
     color: #94a3b8;
     cursor: pointer;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease;
+    padding: 0;
 }
 
 .epic-cal-nav-btn:hover {
-    background: rgba(255, 255, 255, 0.06);
     color: #fff;
+}
+
+/* Main Calendar Body */
+.epic-cal-body {
+    padding: 0 14px 14px 14px;
 }
 
 .epic-cal-grid-header {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     text-align: center;
-    font-weight: 600;
-    color: #64748b; /* Muted blue-gray */
+    font-weight: 500;
     font-size: 0.75rem;
     letter-spacing: 1px;
     text-transform: uppercase;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
+}
+
+.epic-cal-grid-header .weekday {
+    color: #e2e8f0;
+}
+
+.epic-cal-grid-header .weekend {
+    color: #64748b;
 }
 
 .epic-cal-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    row-gap: 6px;
-    column-gap: 6px;
+    row-gap: 8px;
+    column-gap: 4px;
 }
 
 .epic-cal-day {
     aspect-ratio: 1 / 1;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     font-size: 0.9rem;
-    font-weight: 500;
+    font-weight: 400;
     color: #f8fafc;
-    border-radius: 8px; /* Rounded rectangle */
+    border-radius: 50%; /* Perfect circle */
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
     width: 100%;
+    position: relative;
+}
+
+.epic-cal-day.weekend {
+    color: #94a3b8; /* Dimmer for weekend dates */
 }
 
 .epic-cal-day:hover {
@@ -1765,7 +1742,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-day.faded {
-    color: #334155; /* Dim gray for off-month */
+    color: #334155;
 }
 .epic-cal-day.faded:hover {
     background: none;
@@ -1773,16 +1750,64 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-day.today {
-    background: rgba(102, 252, 241, 0.06); /* Very subtle tint */
-    border: 1px solid rgba(102, 252, 241, 0.8); /* Crisp solid cyan border */
-    color: #66fcf1;
-    font-weight: 700;
-    box-shadow: 0 0 10px rgba(102, 252, 241, 0.15); /* Soft outer glow */
+    background: #34d399; /* Solid green-teal */
+    color: #000 !important;
+    font-weight: 600;
+    box-shadow: 0 0 15px rgba(52, 211, 153, 0.4); /* Green glow */
 }
 
 .epic-cal-day.today:hover {
-    background: rgba(102, 252, 241, 0.12);
-    box-shadow: 0 0 15px rgba(102, 252, 241, 0.3);
+    background: #4ade80;
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.6);
+}
+
+/* Optional Dot Underneath (used if needed via JS) */
+.epic-cal-day .dot {
+    width: 3px;
+    height: 3px;
+    background: #34d399;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 4px;
+    display: none;
+}
+.epic-cal-day.has-event .dot {
+    display: block;
+}
+.epic-cal-day.today .dot {
+    display: none; /* Hide dot if it's the current day since background is solid */
+}
+
+/* Note Card */
+.epic-cal-note-card {
+    background: #1b1d22;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 16px 20px;
+    width: 320px;
+    margin: 0 auto;
+    font-family: 'Inter', -apple-system, sans-serif;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+}
+
+.epic-cal-note-card .note-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.epic-cal-note-card .note-header span {
+    color: #34d399;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.epic-cal-note-card p {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    line-height: 1.5;
 }
 
 
