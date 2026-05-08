@@ -21,17 +21,18 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Clean stale files & deploy engine
+      - name: Wipe & prepare clean slate
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Remove old monorepo cruft from previous full-repo deploys
-            cd ~/xEpic-Labs 2>/dev/null || mkdir -p ~/xEpic-Labs
-            rm -rf backend frontend shared .gitkeep .gitignore append_css.js test_live.png 2>/dev/null
-            # Ensure engine directory structure exists
+            # Stop engine if running
+            pm2 stop mom-engine 2>/dev/null || true
+            pm2 delete mom-engine 2>/dev/null || true
+            # Full wipe — clean slate
+            rm -rf ~/xEpic-Labs
             mkdir -p ~/xEpic-Labs/engine/MoM
 
       - name: Copy Engine to ChicagoBot
