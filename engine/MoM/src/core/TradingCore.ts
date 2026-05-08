@@ -64,7 +64,7 @@ const SL_MAX_ATR_MULT        = 2.0;        // reject setup if structural stop ex
 const SL_MAX_POINTS          = 8.0;        // hard cap — never more than 8pts regardless of ATR
 const SL_MIN_DISTANCE        = 3.0;        // minimum stop distance in points (12 ticks MES)
 const SL_WILDERNESS_PCT      = 0.50;       // cut SL by 50% in Wilderness
-const MIN_SMC_CONFIDENCE     = 5;          // minimum confluence score (0-8 scale) — April 21 model
+const MIN_SMC_CONFIDENCE     = 6;          // minimum confluence score (0-8 scale) — 6/8 = 75% gate
 
 // ── ATM Constants ───────────────────────────────────────────────────────────
 const FLAT_TOLERANCE_POINTS  = 0.50;       // ≈ 2 ticks on MES

@@ -71,10 +71,13 @@ export class BacktestEngine {
             ? entryPrice + (riskR * 2.0)  // 1:2 R — institutional runner target
             : entryPrice - (riskR * 2.0);
 
-        // qty === 1: Pure Runner — holds until structural EXIT or SL
+        // qty === 1: Pure Runner — 3R ceiling prevents profit giveback in chop
         if (qty === 1) {
+            const runnerTP = isLong
+                ? entryPrice + (riskR * 3.0)
+                : entryPrice - (riskR * 3.0);
             return [{
-                qty: 1, tpPrice: null, slPrice: stopPrice,
+                qty: 1, tpPrice: runnerTP, slPrice: stopPrice,
                 trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
                 filled: false, pnl: 0,
             }];
@@ -82,6 +85,9 @@ export class BacktestEngine {
 
         // qty === 2: The Split
         if (qty === 2) {
+            const runnerTP = isLong
+                ? entryPrice + (riskR * 3.0)
+                : entryPrice - (riskR * 3.0);
             return [
                 {
                     qty: 1, tpPrice: tp1Price, slPrice: stopPrice,
@@ -89,8 +95,8 @@ export class BacktestEngine {
                     filled: false, pnl: 0,
                 },
                 {
-                    // Runner — no trailing stop, holds on structural logic
-                    qty: 1, tpPrice: null, slPrice: stopPrice,
+                    // Runner — 3R ceiling, prevents full giveback in chop
+                    qty: 1, tpPrice: runnerTP, slPrice: stopPrice,
                     trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
                     filled: false, pnl: 0,
                 },
@@ -101,6 +107,9 @@ export class BacktestEngine {
         const runnerQty = Math.floor(qty / 3);
         const tp1Qty = Math.ceil((qty - runnerQty) / 2);
         const tp2Qty = qty - runnerQty - tp1Qty;
+        const tp3Price = isLong
+            ? entryPrice + (riskR * 3.0)   // runner ceiling: 3R
+            : entryPrice - (riskR * 3.0);
 
         return [
             {
@@ -114,8 +123,8 @@ export class BacktestEngine {
                 filled: false, pnl: 0,
             },
             {
-                // Runner — no arithmetic trail, exits on TradingCore EXIT or EOD
-                qty: runnerQty, tpPrice: null, slPrice: stopPrice,
+                // Runner — 3R ceiling prevents giveback; exits at 3R or SL
+                qty: runnerQty, tpPrice: tp3Price, slPrice: stopPrice,
                 trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
                 filled: false, pnl: 0,
             },
