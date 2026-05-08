@@ -1639,16 +1639,46 @@ function renderCalendar(dateToRender) {
             const dayEvents = window.epicEvents.filter(e => e.date >= cellDate && e.date < nextDay);
             if (dayEvents.length > 0) {
                 const uniqueTypes = new Set(dayEvents.map(e => e.type || 'default'));
+                const typeColors = {
+                    'holiday': '#d500f9',
+                    'birthday': '#00e676',
+                    'bill': '#ff9100',
+                    'fmp-yellow': '#ffd600',
+                    'fmp-red': '#ff4444',
+                    'default': '#66fcf1'
+                };
+                
+                const uniqueTypesArray = Array.from(uniqueTypes);
+                const colors = uniqueTypesArray.map(t => typeColors[t] || typeColors['default']);
                 
                 const indicators = document.createElement('div');
                 indicators.classList.add('epic-cal-indicators');
                 
-                uniqueTypes.forEach(type => {
-                    const dot = document.createElement('div');
-                    dot.classList.add('epic-cal-dot', `dot-${type}`);
-                    indicators.appendChild(dot);
-                });
+                const dot = document.createElement('div');
+                dot.classList.add('epic-cal-dot');
                 
+                if (colors.length === 1) {
+                    dot.style.background = colors[0];
+                    dot.style.boxShadow = `0 0 4px ${colors[0]}`;
+                } else {
+                    const animName = `cycle-${uniqueTypesArray.join('-')}`;
+                    if (!document.getElementById(animName)) {
+                        const style = document.createElement('style');
+                        style.id = animName;
+                        let keyframes = `@keyframes ${animName} {\n`;
+                        const step = 100 / colors.length;
+                        colors.forEach((c, i) => {
+                            keyframes += `${i * step}% { background: ${c}; box-shadow: 0 0 4px ${c}; }\n`;
+                            keyframes += `${(i + 1) * step - 10}% { background: ${c}; box-shadow: 0 0 4px ${c}; }\n`;
+                        });
+                        keyframes += `100% { background: ${colors[0]}; box-shadow: 0 0 4px ${colors[0]}; }\n}`;
+                        style.textContent = keyframes;
+                        document.head.appendChild(style);
+                    }
+                    dot.style.animation = `${animName} ${colors.length * 1.5}s infinite`;
+                }
+                
+                indicators.appendChild(dot);
                 dayCell.appendChild(indicators);
             }
         }
