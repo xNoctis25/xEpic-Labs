@@ -20,14 +20,13 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      # Fixed SCP step: "source: ." copies the entire repo structure flawlessly
-      - name: Copy files to Server
+      - name: Copy Engine to ChicagoBot
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "."
+          source: "engine/MoM"
           target: "~/xEpic-Labs"
 
       - name: Execute Node/PM2 Setup

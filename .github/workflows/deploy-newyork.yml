@@ -1,4 +1,4 @@
-name: Deploy Auth/Web to NewYorkCommand (Zero-Trust)
+name: Deploy to NewYorkCommand (Zero-Trust)
 
 on:
   push:
@@ -6,6 +6,9 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
+      - 'shared/**'
+      - 'engine/**'
+      - '!engine/MoM/**'
       - '.github/workflows/deploy-newyork.yml'
 
 jobs:
@@ -20,14 +23,19 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
 
-      - name: Copy files to NewYorkCommand
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.NYC_SERVER_IP }}
-          username: root
-          key: ${{ secrets.NYC_SSH_PRIVATE_KEY }}
-          source: "."
-          target: "~/xEpic-Labs"
+      - name: Write SSH Key
+        run: |
+          echo "${{ secrets.NYC_SSH_PRIVATE_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+
+      - name: Sync Repo to NewYorkCommand (excludes engine/MoM)
+        run: |
+          rsync -avz --delete \
+            --exclude='engine/MoM' \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            -e "ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key" \
+            ./ root@${{ secrets.NYC_SERVER_IP }}:~/xEpic-Labs/
 
       - name: Execute Node/PM2 Setup for Auth Service
         uses: appleboy/ssh-action@master
