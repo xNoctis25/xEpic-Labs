@@ -1580,9 +1580,9 @@ function renderCalendar(dateToRender) {
     // Set Top Bar Today Text
     const today = new Date();
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const winCalTodayText = document.getElementById('winCalTodayText');
-    if (winCalTodayText) {
-        winCalTodayText.textContent = `${dayNames[today.getDay()]}, ${monthNames[today.getMonth()]} ${today.getDate()}`;
+    const epicCalTodayText = document.getElementById('epicCalTodayText');
+    if (epicCalTodayText) {
+        epicCalTodayText.textContent = `${dayNames[today.getDay()]}, ${monthNames[today.getMonth()]} ${today.getDate()}`;
     }
     
     // Calculate first day of the month and total days
@@ -1598,7 +1598,7 @@ function renderCalendar(dateToRender) {
     // 1. Inject faded days for previous month
     for (let x = firstDayIndex; x > 0; x--) {
         const dayCell = document.createElement('div');
-        dayCell.classList.add('win-cal-day', 'faded');
+        dayCell.classList.add('epic-cal-day', 'faded');
         dayCell.textContent = prevMonthDays - x + 1;
         calendarGrid.appendChild(dayCell);
     }
@@ -1606,7 +1606,7 @@ function renderCalendar(dateToRender) {
     // 2. Inject actual days
     for (let day = 1; day <= totalDays; day++) {
         const dayCell = document.createElement('div');
-        dayCell.classList.add('win-cal-day');
+        dayCell.classList.add('epic-cal-day');
         dayCell.textContent = day;
         
         if (isCurrentMonth && day === currentDay) {
@@ -1622,7 +1622,7 @@ function renderCalendar(dateToRender) {
     
     for (let j = 1; j <= nextMonthDaysCount; j++) {
         const dayCell = document.createElement('div');
-        dayCell.classList.add('win-cal-day', 'faded');
+        dayCell.classList.add('epic-cal-day', 'faded');
         dayCell.textContent = j;
         calendarGrid.appendChild(dayCell);
     }
