@@ -1654,14 +1654,14 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-events-panel {
-    padding: 20px;
+    padding: 15px;
     width: 380px; /* Made wider to fit the tabs alongside Upcoming */
     font-family: 'Inter', -apple-system, sans-serif;
     color: #f8fafc;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    gap: 12px; /* Restored elegant gap for 3 events */
+    gap: 8px; /* Sweet spot gap */
     border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -1686,9 +1686,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 8px; /* Restored padding */
+    padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 15px; /* Added elegant space before 1st event */
+    margin-bottom: 8px; /* Reduced space before 1st event */
 }
 
 .epic-events-tabs {
@@ -1755,7 +1755,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     align-items: center;
     gap: 8px;
     margin-top: auto; /* push to bottom */
-    padding-top: 12px; /* Relaxed padding */
+    padding-top: 10px;
 }
 
 .epic-page-dot {
@@ -1790,11 +1790,11 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px; /* Restored elegant radius */
-    padding: 12px 15px; /* Restored elegant padding */
+    border-radius: 10px;
+    padding: 10px 12px; /* Sweet spot padding */
     display: flex;
     flex-direction: column;
-    gap: 4px; /* Restored gap */
+    gap: 2px;
     transition: all 0.2s ease;
 }
 
@@ -1809,7 +1809,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .epic-event-time::before {
