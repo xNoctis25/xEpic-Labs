@@ -640,6 +640,34 @@ function _stopSessionOverlap() {
 updateMarketClock();
 setInterval(updateMarketClock, 10000);
 
+// ── REAL-TIME EST CLOCK ───────────────────────────────────────────────────────
+function updateRealtimeClock() {
+    const uiRealtimeClock = document.getElementById('uiRealtimeClock');
+    if (!uiRealtimeClock) return;
+
+    // Use Intl.DateTimeFormat to get the EST time
+    const options = {
+        timeZone: 'America/New_York',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+        month: 'short',
+        day: '2-digit'
+    };
+    
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    // e.g. "May 08, 01:44:03 PM"
+    const formatted = formatter.format(new Date());
+    
+    // Convert "May 08, 01:44:03 PM" to "May 08 • 01:44:03 PM ET"
+    const [datePart, timePart] = formatted.split(', ');
+    uiRealtimeClock.textContent = `${datePart} • ${timePart} ET`;
+}
+
+updateRealtimeClock();
+setInterval(updateRealtimeClock, 1000);
+
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
 
 // Measure the real native scrollbar width once (0 on macOS overlay, ~17px on Windows)
