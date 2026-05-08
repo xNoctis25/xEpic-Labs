@@ -533,9 +533,7 @@ if (globalRiskToggleBtn) {
 function updateMarketClock() {
     const uiSessionLabel  = document.getElementById('uiSessionLabel');
     const uiSessionDot    = document.getElementById('uiSessionDot');
-    const uiKillzoneLabel = document.getElementById('uiKillzoneLabel');
-    const uiKillzoneDot   = document.getElementById('uiKillzoneDot');
-    if (!uiSessionLabel || !uiSessionDot || !uiKillzoneLabel || !uiKillzoneDot) return;
+    if (!uiSessionLabel || !uiSessionDot) return;
 
     const nowStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
     const now    = new Date(nowStr);
@@ -556,8 +554,6 @@ function updateMarketClock() {
     if (cmeHolidays.includes(dateStr)) {
         uiSessionLabel.textContent  = 'Closed: Holiday';
         uiSessionDot.className      = 'dot red';
-        uiKillzoneLabel.textContent = 'Killzone: Inactive';
-        uiKillzoneDot.className     = 'dot gray';
         return;
     }
 
@@ -565,8 +561,6 @@ function updateMarketClock() {
     if (day === 6 || (day === 5 && totalMinutes >= 1020) || (day === 0 && totalMinutes < 1080)) {
         uiSessionLabel.textContent  = 'Closed: Weekend';
         uiSessionDot.className      = 'dot red';
-        uiKillzoneLabel.textContent = 'Killzone: Inactive';
-        uiKillzoneDot.className     = 'dot gray';
         return;
     }
 
@@ -574,8 +568,6 @@ function updateMarketClock() {
     if (totalMinutes >= 1020 && totalMinutes < 1080) {
         uiSessionLabel.textContent  = 'Closed: CME Maint';
         uiSessionDot.className      = 'dot red';
-        uiKillzoneLabel.textContent = 'Killzone: Inactive';
-        uiKillzoneDot.className     = 'dot gray';
         return;
     }
 
@@ -588,8 +580,6 @@ function updateMarketClock() {
     //   Tokyo + London:    02:00–04:00 (120–240)
     //   London + New York: 08:00–11:00 (480–660)
     let sessionColor = 'green';
-    let kzText       = '';
-    let kzColor      = 'gray';
 
     const isTokyo  = totalMinutes >= 1080 || totalMinutes < 240;   // 18:00–04:00
     const isLondon = totalMinutes >= 120  && totalMinutes < 660;   // 02:00–11:00
@@ -603,7 +593,6 @@ function updateMarketClock() {
     const isOverlap = activeSessions.length > 1;
 
     if (activeSessions.length === 0) {
-        // 17:00–18:00 gap caught by CME Maint above; this shouldn't fire
         uiSessionLabel.textContent = 'Session: Closed';
         sessionColor = 'red';
         _stopSessionOverlap();
@@ -615,35 +604,7 @@ function updateMarketClock() {
     }
 
     uiSessionDot.className = 'dot ' + (isOverlap ? 'pulse-green' : sessionColor);
-
-    // Killzone classification (matches engine MarketClock exactly)
-    //   London KZ: 02:15–05:00 ET
-    //   NY AM:     09:30–11:30 ET
-    //   NY PM:     13:30–16:15 ET
-    //   Wilderness = futures session open (09:30–17:00) but outside all killzones
-    const isLondonKZ   = totalMinutes >= 135 && totalMinutes < 300;   // 02:15–05:00
-    const isNYAM       = totalMinutes >= 570 && totalMinutes < 690;   // 09:30–11:30
-    const isNYPM       = totalMinutes >= 810 && totalMinutes < 975;   // 13:30–16:15
-    const isMarketOpen = totalMinutes >= 570 && totalMinutes < 1020;  // 09:30–17:00
-
-    if (isLondonKZ) {
-        kzText = 'Killzone: London'; kzColor = 'green';
-    } else if (isNYAM) {
-        kzText = 'Killzone: NY AM'; kzColor = 'green';
-    } else if (isNYPM) {
-        kzText = 'Killzone: NY PM'; kzColor = 'green';
-    } else if (activeSessions.length > 0) {
-        kzText = 'Killzone: Wilderness'; kzColor = 'yellow';
-    } else {
-        kzText = 'Killzone: Inactive'; kzColor = 'gray';
-    }
-
-    uiKillzoneLabel.textContent = kzText;
-    uiKillzoneDot.className     = 'dot ' + (_tradeActive ? 'pulse-' + kzColor : kzColor);
 }
-
-// Trade state — set by updateEngineStatus every 15s, read by updateMarketClock
-var _tradeActive = false;
 
 // ── SESSION OVERLAP CROSSFADE ─────────────────────────────────────────────────
 var _overlapTimer = null;
@@ -678,15 +639,6 @@ function _stopSessionOverlap() {
 
 updateMarketClock();
 setInterval(updateMarketClock, 10000);
-
-// ── ENGINE STATUS (disabled — MoM offline) ──────────────────────────────────
-// Future engines will re-enable status polling
-(function() {
-    const uiEngineLabel = document.getElementById('uiEngineLabel');
-    const uiEngineDot   = document.getElementById('uiEngineDot');
-    if (uiEngineLabel) uiEngineLabel.textContent = 'Engine: Offline';
-    if (uiEngineDot)   uiEngineDot.className = 'dot';
-})();
 
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
 
