@@ -8,7 +8,7 @@ on:
       - 'frontend/**'
       - 'engine/**'
       - '!engine/MoM/**'
-      - '.github/workflows/deploy-newyork.yml'
+      - '.github/workflows/nycommand.yml'
 
 jobs:
   deploy:

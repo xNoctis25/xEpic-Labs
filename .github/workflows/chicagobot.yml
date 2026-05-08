@@ -7,7 +7,7 @@ on:
       - main
     paths:
       - 'engine/MoM/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/chicagobot.yml'
 
 jobs:
   deploy:
