@@ -1688,7 +1688,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     justify-content: space-between;
     padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    margin-bottom: 15px; /* Added padding between Upcoming and events */
+    margin-bottom: 12px; /* Clean padding below Upcoming */
 }
 
 .epic-events-tabs {
@@ -1755,7 +1755,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     align-items: center;
     gap: 8px;
     margin-top: auto; /* push to bottom */
-    padding-top: 15px; /* Added padding between events and dots */
+    padding-top: 12px; /* Clean padding above dots */
 }
 
 .epic-page-dot {
@@ -1784,19 +1784,18 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     margin: 0;
     display: flex;
     flex-direction: column;
-    justify-content: space-between; /* Spreads events evenly to fill the space */
-    flex-grow: 1; /* Takes up all available space between header and dots */
-    gap: 4px; /* Minimum gap fallback */
+    justify-content: flex-start; /* Stack normally from top */
+    gap: 10px; /* Clean, fixed gap */
 }
 
 .epic-events-list li {
     background: rgba(0, 0, 0, 0.2);
     border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 10px; /* Restored elegant radius */
-    padding: 8px 12px; /* Slightly restored padding */
+    border-radius: 12px; /* Elegant radius */
+    padding: 12px 14px; /* Thicker, elegant padding to naturally fill space */
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px; /* Natural gap */
     transition: all 0.2s ease;
 }
 
@@ -1806,7 +1805,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-time {
-    font-size: 0.7rem; /* Restored size slightly */
+    font-size: 0.75rem; /* Elegant text size */
     color: rgba(255, 255, 255, 0.5);
     display: flex;
     align-items: center;
@@ -1835,7 +1834,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-event-title {
-    font-size: 0.85rem; /* Restored size slightly */
+    font-size: 0.9rem; /* Elegant text size */
     font-weight: 500;
     color: #f8fafc;
 }
