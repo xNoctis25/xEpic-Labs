@@ -1659,7 +1659,7 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border-radius: 14px;
     padding: 14px 20px;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     margin-bottom: 20px;
     color: #e2e8f0;

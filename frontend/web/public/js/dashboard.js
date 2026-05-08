@@ -1660,9 +1660,37 @@ if (document.getElementById('homeView')) {
 
 // Event Listeners for Nav
 const calMonthYearBtn = document.getElementById('calMonthYearBtn');
-if (calMonthYearBtn) {
+const hiddenMonthPicker = document.getElementById('hiddenMonthPicker');
+
+if (calMonthYearBtn && hiddenMonthPicker) {
+    // Keep input synced with current viewed month to prevent weird default selections
+    hiddenMonthPicker.value = `${currentCalDate.getFullYear()}-${String(currentCalDate.getMonth() + 1).padStart(2, '0')}`;
+    
     calMonthYearBtn.addEventListener('click', () => {
-        // Feature to be implemented later (Month/Year Picker)
-        alert('Month/Year picker feature is coming soon!');
+        try {
+            hiddenMonthPicker.showPicker();
+        } catch (e) {
+            // Fallback for browsers that don't support showPicker on hidden inputs
+            hiddenMonthPicker.style.opacity = '1';
+            hiddenMonthPicker.style.position = 'absolute';
+            hiddenMonthPicker.style.top = '0';
+            hiddenMonthPicker.style.left = '0';
+            hiddenMonthPicker.style.width = '100%';
+            hiddenMonthPicker.style.height = '100%';
+            hiddenMonthPicker.style.opacity = '0'; // keep visually hidden
+            hiddenMonthPicker.style.pointerEvents = 'auto';
+            hiddenMonthPicker.focus();
+            hiddenMonthPicker.click();
+        }
+    });
+
+    hiddenMonthPicker.addEventListener('change', (e) => {
+        const val = e.target.value; // Format: "YYYY-MM"
+        if (val) {
+            const [year, month] = val.split('-');
+            currentCalDate.setFullYear(parseInt(year, 10), parseInt(month, 10) - 1, 1);
+            renderCalendar(currentCalDate);
+        }
+        hiddenMonthPicker.style.pointerEvents = 'none'; // reset fallback
     });
 }
