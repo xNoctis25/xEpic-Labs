@@ -1659,7 +1659,7 @@ if (document.getElementById('homeView')) {
 }
 
 // Custom Overlay Nav Logic
-const calMonthYearBtn = document.getElementById('calMonthYearBtn');
+const overlayMonthYearText = document.getElementById('calMonthYear'); // Uses the existing ID
 const calMonthPickerOverlay = document.getElementById('calMonthPickerOverlay');
 const calMainBody = document.getElementById('calMainBody');
 const calMonthGrid = document.getElementById('calMonthGrid');
@@ -1669,9 +1669,9 @@ const mainNextYear = document.getElementById('mainNextYear');
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 let overlayYear = currentCalDate.getFullYear();
 
-if (calMonthYearBtn && calMonthPickerOverlay) {
+if (overlayMonthYearText && calMonthPickerOverlay) {
     // Open Overlay
-    calMonthYearBtn.addEventListener('click', () => {
+    overlayMonthYearText.addEventListener('click', () => {
         if (calMonthPickerOverlay.classList.contains('active')) {
             closeOverlay();
             return;
@@ -1704,10 +1704,10 @@ if (calMonthYearBtn && calMonthPickerOverlay) {
     }
 
     function renderOverlay() {
-        if (!calMonthYearBtn || !calMonthGrid) return;
+        if (!overlayMonthYearText || !calMonthGrid) return;
         
         // Update main header to show just the year when overlay is open
-        calMonthYearBtn.textContent = overlayYear;
+        overlayMonthYearText.textContent = overlayYear;
         
         calMonthGrid.innerHTML = '';
 
@@ -1736,11 +1736,11 @@ if (calMonthYearBtn && calMonthPickerOverlay) {
         calMonthPickerOverlay.classList.remove('active');
         calMainBody.classList.remove('dimmed');
         
-        // Hide arrows and restore Month/Year text
+        // Hide arrows
         mainPrevYear.classList.add('hidden');
         mainNextYear.classList.add('hidden');
         
-        // The renderCalendar function handles updating the calMonthYearBtn text to "Month Year"
+        // Restore Month Year text
         renderCalendar(currentCalDate);
     }
 }
