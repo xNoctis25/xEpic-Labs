@@ -218,10 +218,9 @@ export class BacktestEngine {
                 }
 
                 // ── Deferred Candle-Based Breakeven ──────────────────────────
-                // Check if this candle reached +1R. If so, move stops to BE
-                // for the NEXT candle. This prevents same-candle BE + stop-out
-                // (where high spikes to 1R, low dips to entry, trade scratches
-                // but then price continues in the winning direction).
+                // When TP1 fills (+1R), lock TP2 stop at entry (protected).
+                // Runner has NO stop move — it holds its structural SL until
+                // TradingCore fires EXIT or EOD flatten closes it.
                 if (!position.beTriggered) {
                     const reachedBE = isLong
                         ? candle.high >= entryPrice + (position.riskR * 1.0)
@@ -231,12 +230,10 @@ export class BacktestEngine {
                         position.beTriggered = true;
                         for (const leg of legs) {
                             if (leg.filled) continue;
-                            if (isLong && entryPrice > leg.slPrice) {
-                                leg.slPrice = entryPrice;
-                                if (leg.trailingStop) leg.trailPrice = entryPrice;
-                            } else if (!isLong && entryPrice < leg.slPrice) {
-                                leg.slPrice = entryPrice;
-                                if (leg.trailingStop) leg.trailPrice = entryPrice;
+                            // Only move the fixed-TP legs to BE — runner keeps structural SL
+                            if (leg.tpPrice !== null) {
+                                if (isLong && entryPrice > leg.slPrice)  leg.slPrice = entryPrice;
+                                else if (!isLong && entryPrice < leg.slPrice) leg.slPrice = entryPrice;
                             }
                         }
                     }
