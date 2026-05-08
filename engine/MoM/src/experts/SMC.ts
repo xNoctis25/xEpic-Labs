@@ -1,6 +1,5 @@
 import { Candle } from '../market/CandleAggregator';
 import { MarketClock } from '../core/MarketClock';
-import { MultiTimeframeAnalyzer } from './MultiTimeframeAnalyzer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -34,7 +33,7 @@ export interface FvgZone {
 /** Rich signal output from SMC — carries confidence metadata. */
 export interface SmcSignal {
     action:     'BUY' | 'SELL' | 'HOLD';
-    confidence: number;        // 0-100 probability score
+    confidence: number;        // 0-8 confluence score (April model)
     fvgZone?:   FvgZone;       // the FVG that triggered the signal (if any)
     reason?:    string;        // human-readable explanation
 }
@@ -55,7 +54,7 @@ const DISPLACEMENT_MIN_BODY   = 1.5;          // Displacement entry: candle body
 const MIN_WARMUP_CANDLES      = 20;           // Hard gate: 20 candles for all experts
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SMC — Institutional Grade FVG + MSS Signal Engine
+// SMC — Institutional Grade FVG + MSS Signal Engine (April 21 Logic)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class SMC {
@@ -78,9 +77,6 @@ export class SMC {
     public dailyRejectedSetups: string[] = [];
     private rejectionDay = -1;
 
-    // --- Multi-Timeframe Analyzer ref (set per analyze cycle) ---
-    private currentMtf?: MultiTimeframeAnalyzer;
-
     // --- Debug Heartbeat Snapshot ---
     public lastHeartbeat: HeartbeatSnapshot = {
         trend: 'Neutral', fvg: 'None', decision: 'HOLD', activeFvgCount: 0, atr: 0,
@@ -90,8 +86,7 @@ export class SMC {
     // Main Analysis — called every 1-minute candle
     // ─────────────────────────────────────────────────────────────────────────
 
-    public analyze(candle: Candle, indicatorsOnly: boolean = false, mtf?: MultiTimeframeAnalyzer): SmcSignal {
-        this.currentMtf = mtf;
+    public analyze(candle: Candle, indicatorsOnly: boolean = false): SmcSignal {
         this.candles.push(candle);
         this.candleCount++;
 
@@ -158,7 +153,7 @@ export class SMC {
         }
 
         // ── Step 1: Detect NEW FVGs from the last 3 completed candles ─────
-        //    If displacement is strong enough, fire immediately (don't wait for tap)
+        //    If displacement is strong enough (body >= 1.5×ATR), fire immediately
         const displacementSignal = this.detectNewFvgs(candle, vwap, trend);
 
         // ── Step 2: Mitigate / Invalidate old FVGs ────────────────────────
@@ -185,7 +180,7 @@ export class SMC {
             return displacementSignal;
         }
 
-        // ── Step 3b: Scan ALL active FVGs for tap entries ─────────────────
+        // ── Step 3b: Scan ALL active FVGs for tap/retracement entries ─────
         const signal = this.scanForTapEntry(candle, vwap, trend);
 
         if (signal) {
@@ -208,6 +203,7 @@ export class SMC {
 
     // ─────────────────────────────────────────────────────────────────────────
     // FVG Detection — scans the last 3 completed candles for new gaps
+    // Returns a displacement signal immediately if body >= 1.5×ATR
     // ─────────────────────────────────────────────────────────────────────────
 
     private detectNewFvgs(
@@ -219,7 +215,6 @@ export class SMC {
         if (len < 4) return null;
 
         // FVG candles: c1 (edge), c2 (displacement), c3 (edge)
-        // We look at [len-4, len-3, len-2] as the formation, len-1 is current
         const c1 = this.candles[len - 4];
         const c2 = this.candles[len - 3];
         const c3 = this.candles[len - 2];
@@ -246,7 +241,6 @@ export class SMC {
         if (c1.high < c3.low) {
             const gapSize = c3.low - c1.high;
             if (gapSize >= minGap) {
-                // Check for MSS: displacement breaks the most recent swing high
                 const mssValid = recentSwingHigh !== null && c2.close > recentSwingHigh;
 
                 if (!isVolumeValid) {
@@ -254,34 +248,26 @@ export class SMC {
                 } else if (!mssValid) {
                     this.dailyRejectedSetups.push(`${timeStr}: Bullish FVG rejected (MSS failed — no recent swing high break).`);
                 } else {
-                    // Valid FVG — add to persistent registry
                     const vwapConfluence = vwap > 0 && c3.low <= vwap * 1.002 && c1.high >= vwap * 0.998;
                     const body = Math.abs(c2.close - c2.open);
                     const bodyRatio = this.currentATR > 0 ? body / this.currentATR : 0;
-                    const gapRatio = this.currentATR > 0 ? gapSize / this.currentATR : 0;
+                    const gapRatio  = this.currentATR > 0 ? gapSize / this.currentATR : 0;
                     const fvg: FvgZone = {
-                        direction:     'BULLISH',
-                        top:           c3.low,
-                        bottom:        c1.high,
-                        formationTime: c3.timestamp,
-                        formationIdx:  this.candleCount - 2,
-                        isActive:      true,
-                        vwapConfluence,
-                        displacementBodyRatio: bodyRatio,
-                        gapAtrRatio:           gapRatio,
+                        direction: 'BULLISH', top: c3.low, bottom: c1.high,
+                        formationTime: c3.timestamp, formationIdx: this.candleCount - 2,
+                        isActive: true, vwapConfluence,
+                        displacementBodyRatio: bodyRatio, gapAtrRatio: gapRatio,
                     };
                     this.fvgRegistry.push(fvg);
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY) {
-                        const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'BUY', htfScore, false);
+                        const confidence = this.scoreConfidence('BUY', trend, vwapConfluence, vwap, currentCandle);
                         displacementSignal = {
-                            action:     'BUY',
-                            confidence: probability.total,
-                            fvgZone:    fvg,
-                            reason:     `Displacement entry [${c1.high.toFixed(2)}-${c3.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | prob=${probability.total}% | ${probability.breakdown}`,
+                            action: 'BUY', confidence, fvgZone: fvg,
+                            reason: `Displacement entry [${c1.high.toFixed(2)}-${c3.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | conf=${confidence}/8`,
                         };
+                        console.log(`[SMC] ⚡ BULLISH DISPLACEMENT | Zone: [${c1.high.toFixed(2)}, ${c3.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | conf=${confidence}/8`);
                     }
                 }
             }
@@ -301,30 +287,23 @@ export class SMC {
                     const vwapConfluence = vwap > 0 && c3.high >= vwap * 0.998 && c1.low <= vwap * 1.002;
                     const body = Math.abs(c2.close - c2.open);
                     const bodyRatio = this.currentATR > 0 ? body / this.currentATR : 0;
-                    const gapRatio = this.currentATR > 0 ? gapSize / this.currentATR : 0;
+                    const gapRatio  = this.currentATR > 0 ? gapSize / this.currentATR : 0;
                     const fvg: FvgZone = {
-                        direction:     'BEARISH',
-                        top:           c1.low,
-                        bottom:        c3.high,
-                        formationTime: c3.timestamp,
-                        formationIdx:  this.candleCount - 2,
-                        isActive:      true,
-                        vwapConfluence,
-                        displacementBodyRatio: bodyRatio,
-                        gapAtrRatio:           gapRatio,
+                        direction: 'BEARISH', top: c1.low, bottom: c3.high,
+                        formationTime: c3.timestamp, formationIdx: this.candleCount - 2,
+                        isActive: true, vwapConfluence,
+                        displacementBodyRatio: bodyRatio, gapAtrRatio: gapRatio,
                     };
                     this.fvgRegistry.push(fvg);
 
                     // ── DISPLACEMENT ENTRY: strong enough to enter immediately ──
                     if (bodyRatio >= DISPLACEMENT_MIN_BODY && !displacementSignal) {
-                        const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
-                        const probability = this.calculateProbability(currentCandle, fvg, vwap, 'SELL', htfScore, false);
+                        const confidence = this.scoreConfidence('SELL', trend, vwapConfluence, vwap, currentCandle);
                         displacementSignal = {
-                            action:     'SELL',
-                            confidence: probability.total,
-                            fvgZone:    fvg,
-                            reason:     `Displacement entry [${c3.high.toFixed(2)}-${c1.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | prob=${probability.total}% | ${probability.breakdown}`,
+                            action: 'SELL', confidence, fvgZone: fvg,
+                            reason: `Displacement entry [${c3.high.toFixed(2)}-${c1.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | conf=${confidence}/8`,
                         };
+                        console.log(`[SMC] ⚡ BEARISH DISPLACEMENT | Zone: [${c3.high.toFixed(2)}, ${c1.low.toFixed(2)}] | body=${bodyRatio.toFixed(2)}×ATR | conf=${confidence}/8`);
                     }
                 }
             }
@@ -350,12 +329,10 @@ export class SMC {
 
             // Mitigation: price has fully traded through the zone
             if (fvg.direction === 'BULLISH') {
-                // Invalidated if price closes decisively below the bottom of the gap
                 if (candle.close < fvg.bottom - this.currentATR * 0.5) {
                     fvg.isActive = false;
                 }
             } else {
-                // Bearish FVG invalidated if price closes above the top
                 if (candle.close > fvg.top + this.currentATR * 0.5) {
                     fvg.isActive = false;
                 }
@@ -367,7 +344,7 @@ export class SMC {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Tap Entry Scan — check ALL active FVGs for re-entry
+    // Tap Entry Scan — check ALL active FVGs for retracement entries
     // ─────────────────────────────────────────────────────────────────────────
 
     private scanForTapEntry(
@@ -384,39 +361,47 @@ export class SMC {
         for (const fvg of activeFvgs) {
 
             if (fvg.direction === 'BULLISH') {
+                // Tap: candle's low dips into the FVG zone, candle closes above the bottom
                 const tapped = candle.low <= fvg.top && candle.close > fvg.bottom;
                 if (!tapped) continue;
 
-                const age = this.candleCount - fvg.formationIdx;
-                const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('BUY') : 0;
-                const probability = this.calculateProbability(candle, fvg, vwap, 'BUY', htfScore, true);
+                const confidence = this.scoreConfidence('BUY', trend, fvg.vwapConfluence, vwap, candle);
 
                 // Mark as mitigated (no double-tapping)
                 fvg.isActive = false;
 
+                console.log(
+                    `[SMC] 🎯 BULLISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
+                    `Age: ${this.candleCount - fvg.formationIdx} candles | Confidence: ${confidence}/8`
+                );
+
                 return {
                     action:     'BUY',
-                    confidence: probability.total,
+                    confidence,
                     fvgZone:    fvg,
-                    reason:     `Bullish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | prob=${probability.total}% | ${probability.breakdown}`,
+                    reason:     `Bullish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | conf=${confidence}/8`,
                 };
             }
 
             if (fvg.direction === 'BEARISH') {
+                // Tap: candle's high reaches into the FVG zone, candle closes below the top
                 const tapped = candle.high >= fvg.bottom && candle.close < fvg.top;
                 if (!tapped) continue;
 
-                const age = this.candleCount - fvg.formationIdx;
-                const htfScore = this.currentMtf?.isReady() ? this.currentMtf.scoreAlignment('SELL') : 0;
-                const probability = this.calculateProbability(candle, fvg, vwap, 'SELL', htfScore, true);
+                const confidence = this.scoreConfidence('SELL', trend, fvg.vwapConfluence, vwap, candle);
 
                 fvg.isActive = false;
 
+                console.log(
+                    `[SMC] 🎯 BEARISH FVG TAP | Zone: [${fvg.bottom.toFixed(2)}, ${fvg.top.toFixed(2)}] | ` +
+                    `Age: ${this.candleCount - fvg.formationIdx} candles | Confidence: ${confidence}/8`
+                );
+
                 return {
                     action:     'SELL',
-                    confidence: probability.total,
+                    confidence,
                     fvgZone:    fvg,
-                    reason:     `Bearish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | prob=${probability.total}% | ${probability.breakdown}`,
+                    reason:     `Bearish FVG tap [${fvg.bottom.toFixed(2)}-${fvg.top.toFixed(2)}] | conf=${confidence}/8`,
                 };
             }
         }
@@ -425,68 +410,31 @@ export class SMC {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Probability Model — Weighted 0-100% scoring
+    // Confidence Scoring — April 21 model (0-8 scale)
     // ─────────────────────────────────────────────────────────────────────────
+    // Score  Meaning
+    //   3    Base: valid FVG (tap or displacement) — always awarded
+    //  +2    VWAP trend aligned with signal direction
+    //  +2    FVG zone sits at/near VWAP (premium level)
+    //  +1    Current close on correct side of VWAP
+    // MAX 8  Gate: MIN_SMC_CONFIDENCE = 5 (62.5%)
 
-    private calculateProbability(
-        candle: Candle, fvg: FvgZone, vwap: number,
-        action: 'BUY' | 'SELL', mtfScore: number,
-        isFvgTap: boolean = false
-    ): { total: number; breakdown: string } {
+    private scoreConfidence(
+        action: 'BUY' | 'SELL',
+        trend: HeartbeatSnapshot['trend'],
+        vwapConfluence: boolean,
+        vwap: number,
+        candle: Candle,
+    ): number {
+        let confidence = 3; // Base: valid FVG (tap or displacement)
 
-        // ── Factor 1: HTF Alignment (max 30) ─────────────────────────────
-        // Scored by MultiTimeframeAnalyzer.scoreAlignment()
-        // 15M aligned: +15 | 5M aligned: +10 | 1H aligned: +5
-        const htfScore = mtfScore;
+        if (action === 'BUY'  && trend === 'Bullish') confidence += 2;
+        if (action === 'SELL' && trend === 'Bearish') confidence += 2;
+        if (vwapConfluence)                           confidence += 2;
+        if (action === 'BUY'  && vwap > 0 && candle.close > vwap) confidence += 1;
+        if (action === 'SELL' && vwap > 0 && candle.close < vwap) confidence += 1;
 
-        // ── Factor 2: Displacement Strength (max 25) ─────────────────────
-        // body ÷ ATR ratio — how strong was the institutional candle
-        const dispScore = fvg.displacementBodyRatio >= 2.0 ? 25
-                        : fvg.displacementBodyRatio >= 1.5 ? 15
-                        : fvg.displacementBodyRatio >= 1.0 ? 5 : 0;
-
-        // ── Factor 3: Delta Confirmation (max 20) ─────────────────────────
-        // Measures directional aggression: is institutional money behind this move?
-        // Delta = buyVolume - sellVolume (positive = buyers dominating)
-        const delta = candle.buyVolume - candle.sellVolume;
-        const totalSidedVol = candle.buyVolume + candle.sellVolume;
-        const deltaRatio = totalSidedVol > 0 ? Math.abs(delta) / totalSidedVol : 0;
-        const deltaAligned = (action === 'BUY' && delta > 0) || (action === 'SELL' && delta < 0);
-        
-        const deltaScore = !deltaAligned ? 0                // wrong side = 0
-                         : deltaRatio >= 0.40 ? 20          // 70%+ one-sided = max
-                         : deltaRatio >= 0.25 ? 15          // 62%+ one-sided = strong
-                         : deltaRatio >= 0.10 ? 10 : 5;     // slight lean = partial
-
-        // ── Factor 4: VWAP Alignment (max 15) ────────────────────────────
-        // price vs volume-weighted average price — is price on the right side of value
-        const vwapAligned = vwap > 0 && (
-            (action === 'BUY' && candle.close > vwap) ||
-            (action === 'SELL' && candle.close < vwap)
-        );
-        const vwapNeutral = vwap > 0 && Math.abs(candle.close - vwap) / vwap < 0.001; // within 0.1%
-        const vwapScore = vwapAligned ? 15 : vwapNeutral ? 5 : 0;
-
-        // ── Factor 5: Gap Size (max 10) ──────────────────────────────────
-        // gap ÷ ATR ratio — larger gaps = more institutional activity
-        const gapScore = fvg.gapAtrRatio >= 1.0 ? 10 : fvg.gapAtrRatio >= 0.5 ? 5 : 0;
-
-        // ── Factor 6: Trend Counter-Signal Penalty (up to -10) ───────────
-        // If VWAP trend opposes the trade direction, penalize — you're fighting the flow
-        const trendCounterPenalty = vwap > 0 && (
-            (action === 'BUY' && candle.close < vwap) ||
-            (action === 'SELL' && candle.close > vwap)
-        ) ? -10 : 0;
-
-        // ── Factor 7: Wide Stop Penalty (up to -5) ──────────────────────
-        // If the FVG-based stop is stretched beyond 1.5× ATR, structure is weak
-        const gapSize = fvg.top - fvg.bottom;
-        const wideStopPenalty = (this.currentATR > 0 && gapSize > this.currentATR * 1.5) ? -5 : 0;
-
-        const total = Math.max(0, htfScore + dispScore + deltaScore + vwapScore + gapScore + trendCounterPenalty + wideStopPenalty);
-        const breakdown = `HTF:${htfScore}/30|Disp:${dispScore}/25|Delta:${deltaScore}/20|VWAP:${vwapScore}/15|Gap:${gapScore}/10|TrendPen:${trendCounterPenalty}|WidePen:${wideStopPenalty}`;
-
-        return { total, breakdown };
+        return confidence;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -496,7 +444,6 @@ export class SMC {
     /** Finds the most recent 3-bar pivot swing high (a high with lower highs on both sides). */
     private findRecentSwingHigh(): number | null {
         const len = this.candles.length;
-        // Start from len-5 to avoid the FVG candles themselves
         for (let i = len - 5; i >= SWING_PIVOT_BARS; i--) {
             const c = this.candles[i];
             let isPivot = true;

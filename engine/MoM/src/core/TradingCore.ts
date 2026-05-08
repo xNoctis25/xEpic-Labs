@@ -64,7 +64,7 @@ const SL_MAX_ATR_MULT        = 2.0;        // reject setup if structural stop ex
 const SL_MAX_POINTS          = 8.0;        // hard cap — never more than 8pts regardless of ATR
 const SL_MIN_DISTANCE        = 3.0;        // minimum stop distance in points (12 ticks MES)
 const SL_WILDERNESS_PCT      = 0.50;       // cut SL by 50% in Wilderness
-const MIN_SMC_PROBABILITY    = 65;         // minimum probability score (0-100%) to take a trade
+const MIN_SMC_CONFIDENCE     = 5;          // minimum confluence score (0-8 scale) — April 21 model
 
 // ── ATM Constants ───────────────────────────────────────────────────────────
 const FLAT_TOLERANCE_POINTS  = 0.50;       // ≈ 2 ticks on MES
@@ -138,8 +138,7 @@ export class TradingCore {
     /** Hydrate with historical candles — feeds indicators without generating signals. */
     public hydrate(candles: Candle[]): void {
         for (const c of candles) {
-            this.mtfAnalyzer.analyze(c);
-            this.smcExpert.analyze(c, true, this.mtfAnalyzer.isReady() ? this.mtfAnalyzer : undefined);
+            this.smcExpert.analyze(c, true);
         }
     }
 
@@ -178,12 +177,9 @@ export class TradingCore {
             return;  // No new signals during EOD window
         }
 
-        // Feed 1m candle to MTF analyzer
-        this.mtfAnalyzer.analyze(candle);
-
         // Indicators-only when in trade or warmup
         const indicatorsOnly = !this.isHuntingActive || (this.activeTrade !== null);
-        const signal = this.smcExpert.analyze(candle, indicatorsOnly, this.mtfAnalyzer.isReady() ? this.mtfAnalyzer : undefined);
+        const signal = this.smcExpert.analyze(candle, indicatorsOnly);
         this._lastSignal = signal;
 
         // ── Active Trade Monitor (per-candle while in trade) ──
@@ -218,13 +214,13 @@ export class TradingCore {
             return;
         }
 
-        // Minimum probability gate
-        if (signal.confidence < MIN_SMC_PROBABILITY) {
+        // Minimum confidence gate (0-8 scale, April 21 model)
+        if (signal.confidence < MIN_SMC_CONFIDENCE) {
             this.pendingActions.push({
                 type: 'REJECTED', gate: 'PROBABILITY_GATE', regime,
                 direction, price: candle.close,
                 confidence: signal.confidence,
-                reason: `REJECTED by PROBABILITY_GATE | ${direction} ${this.symbol} @ ${candle.close} | Prob: ${signal.confidence}% (min: ${MIN_SMC_PROBABILITY}%) | ${signal.reason}`,
+                reason: `REJECTED by CONFIDENCE_GATE | ${direction} ${this.symbol} @ ${candle.close} | Conf: ${signal.confidence}/8 (min: ${MIN_SMC_CONFIDENCE}/8) | ${signal.reason}`,
             });
             return;
         }

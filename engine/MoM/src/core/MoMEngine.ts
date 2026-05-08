@@ -363,19 +363,9 @@ function onOracleMessage(data: { type: string; [key: string]: unknown }): void {
                 volume: c.volume, buyVolume: 0, sellVolume: 0, timestamp: c.timestamp,
             }));
 
-            // Hydrate TradingCore (feeds both MTF analyzer and SMC expert)
+            // Hydrate TradingCore (warms up SMC expert — ATR, VWAP, FVG registry)
             core.hydrate(hydrationCandles);
-
-            // Print MTF bias after hydration
-            const mtf = core.getMtfAnalyzer();
-            const snap = mtf.getSnapshot();
-            console.log(
-                `[M.o.M] 📊 Multi-Timeframe Analysis Complete\n` +
-                `         1H: ${snap.tf1h.trend} (${snap.tf1h.candleCount} candles) | ` +
-                `15M: ${snap.tf15m.trend} (${snap.tf15m.candleCount} candles) | ` +
-                `5M: ${snap.tf5m.trend} (${snap.tf5m.candleCount} candles)\n` +
-                `         Dominant Bias: ${snap.dominantBias} | Alignment: ${snap.alignmentScore}/3 | Ready: ${snap.isReady ? '✅' : '❌'}`
-            );
+            console.log(`[M.o.M] 📊 Hydration Complete — ${hydrationCandles.length} candles processed | SMC ready`);
             break;
         }
 
