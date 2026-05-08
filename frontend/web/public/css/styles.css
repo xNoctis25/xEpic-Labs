@@ -1719,7 +1719,15 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-grid-header .weekend {
-    color: rgba(255, 255, 255, 0.3);
+    color: #66fcf1;
+}
+
+.epic-cal-day.weekend {
+    color: #66fcf1;
+}
+
+.epic-cal-day.weekend.faded {
+    color: rgba(102, 252, 241, 0.3);
 }
 
 .epic-cal-grid {
