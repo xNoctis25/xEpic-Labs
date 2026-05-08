@@ -71,11 +71,11 @@ export class BacktestEngine {
             ? entryPrice + (riskR * 2.0)  // 1:2 R — institutional runner target
             : entryPrice - (riskR * 2.0);
 
-        // qty === 1: Pure Runner
+        // qty === 1: Pure Runner — holds until structural EXIT or SL
         if (qty === 1) {
             return [{
                 qty: 1, tpPrice: null, slPrice: stopPrice,
-                trailingStop: true, trailDistance: riskR, trailPrice: stopPrice,
+                trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
                 filled: false, pnl: 0,
             }];
         }
@@ -89,8 +89,9 @@ export class BacktestEngine {
                     filled: false, pnl: 0,
                 },
                 {
+                    // Runner — no trailing stop, holds on structural logic
                     qty: 1, tpPrice: null, slPrice: stopPrice,
-                    trailingStop: true, trailDistance: riskR, trailPrice: stopPrice,
+                    trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
                     filled: false, pnl: 0,
                 },
             ];
@@ -113,8 +114,9 @@ export class BacktestEngine {
                 filled: false, pnl: 0,
             },
             {
+                // Runner — no arithmetic trail, exits on TradingCore EXIT or EOD
                 qty: runnerQty, tpPrice: null, slPrice: stopPrice,
-                trailingStop: true, trailDistance: riskR, trailPrice: stopPrice,
+                trailingStop: false, trailDistance: riskR, trailPrice: stopPrice,
                 filled: false, pnl: 0,
             },
         ];
