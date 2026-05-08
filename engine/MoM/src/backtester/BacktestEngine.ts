@@ -159,6 +159,11 @@ export class BacktestEngine {
             if (currentDrawdown > maxDrawdown) maxDrawdown = currentDrawdown;
             if (currentDrawdownDollars > maxDrawdownDollars) maxDrawdownDollars = currentDrawdownDollars;
 
+            // ── KILLZONE GATE — mirrors live MoMEngine behavior ───────────
+            // Feed every candle to TradingCore for indicator warmup (ATR, VWAP,
+            // FVG registry) but only ENTER new trades during killzone windows.
+            const inKillzone = MarketClock.isWithinTradingWindow(candle.timestamp);
+
             // ── SIMULATE FILLS on existing position (before TradingCore sees the candle) ──
             if (position) {
                 const { entryPrice, isLong, legs, dollarPerPoint } = position;
@@ -287,6 +292,9 @@ export class BacktestEngine {
                     case 'ENTER': {
                         // Respect cooldown
                         if (position || candle.timestamp < cooldownUntil) break;
+
+                        // ── KILLZONE GATE: only enter during London/AM/PM windows ──
+                        if (!inKillzone) break;
 
                         // Position sizing
                         const sizing = PositionSizer.calculate(equity, action.riskR!, config.INDICES);

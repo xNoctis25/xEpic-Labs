@@ -43,11 +43,12 @@ export interface SmcSignal {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ATR_PERIOD              = 14;           // Rolling ATR lookback
-const FVG_GAP_ATR_MULT        = 0.25;         // Min gap = ATR * 0.25
+const FVG_GAP_MIN_ATR         = 0.50;         // Min gap = ATR * 0.50 (was 0.25 — too noisy)
+const FVG_GAP_MAX_ATR         = 2.50;         // Max gap = ATR * 2.50 (filters crash/overnight gaps)
 const VOLUME_SPIKE_MULT       = 1.5;          // Displacement candle must be 1.5× median
 const VOLUME_OUTLIER_CAP      = 3.0;          // Cap candle volume at 3× median before averaging
 const SWING_PIVOT_BARS        = 3;            // 3-bar pivot for swing detection
-const MAX_FVG_AGE_CANDLES     = 60;           // Invalidate FVGs older than 60 candles
+const MAX_FVG_AGE_CANDLES     = 20;           // Invalidate FVGs older than 20 candles (was 60)
 const MAX_CANDLES             = 100;          // Ring buffer size — trim older candles
 const CME_SESSION_RESET_HOUR  = 18;           // 6:00 PM ET = CME Globex session open
 const DISPLACEMENT_MIN_BODY   = 1.5;          // Displacement entry: candle body >= 1.5× ATR
@@ -219,7 +220,8 @@ export class SMC {
         const c2 = this.candles[len - 3];
         const c3 = this.candles[len - 2];
 
-        const minGap = this.currentATR * FVG_GAP_ATR_MULT;
+        const minGap = this.currentATR * FVG_GAP_MIN_ATR;
+        const maxGap = this.currentATR * FVG_GAP_MAX_ATR;
 
         // --- Volume validation (median-based with outlier cap) ---
         const medianVol = this.getMedianVolume();
@@ -240,7 +242,7 @@ export class SMC {
         // ── Bullish FVG: c1.high < c3.low (price jumped up, leaving a void) ──
         if (c1.high < c3.low) {
             const gapSize = c3.low - c1.high;
-            if (gapSize >= minGap) {
+            if (gapSize >= minGap && gapSize <= maxGap) {
                 const mssValid = recentSwingHigh !== null && c2.close > recentSwingHigh;
 
                 if (!isVolumeValid) {
@@ -276,7 +278,7 @@ export class SMC {
         // ── Bearish FVG: c1.low > c3.high (price dropped, leaving a void) ──
         if (c1.low > c3.high) {
             const gapSize = c1.low - c3.high;
-            if (gapSize >= minGap) {
+            if (gapSize >= minGap && gapSize <= maxGap) {
                 const mssValid = recentSwingLow !== null && c2.close < recentSwingLow;
 
                 if (!isVolumeValid) {
