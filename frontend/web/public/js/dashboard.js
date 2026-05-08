@@ -679,37 +679,14 @@ function _stopSessionOverlap() {
 updateMarketClock();
 setInterval(updateMarketClock, 10000);
 
-// ── MOM ENGINE STATUS POLLING ──────────────────────────────────────────────────
-async function updateEngineStatus() {
-    const uiEngineLabel  = document.getElementById('uiEngineLabel');
-    const uiEngineDot    = document.getElementById('uiEngineDot');
-    const uiKillzoneDot  = document.getElementById('uiKillzoneDot');
-    if (!uiEngineLabel || !uiEngineDot) return;
-
-    try {
-        const res = await auth.request('/trading/engine/status', { method: 'GET' });
-
-        // ── Engine pill ───────────────────────────────────────────────
-        if (res.status === 'HALTED') {
-            uiEngineLabel.textContent = 'MoM: Halted';
-            uiEngineDot.className = 'dot pulse-yellow';
-        } else {
-            uiEngineLabel.textContent = 'MoM Engine';
-            uiEngineDot.className = 'dot green';
-        }
-
-        // ── Killzone pulse: store trade state for updateMarketClock to use ──
-        _tradeActive = !!res.in_trade;
-
-    } catch (err) {
-        console.error('Failed to get engine status:', err);
-        uiEngineLabel.textContent = 'MoM: Offline';
-        uiEngineDot.className = 'dot red';
-    }
-}
-
-updateEngineStatus();
-setInterval(updateEngineStatus, 15000); // Check every 15s
+// ── ENGINE STATUS (disabled — MoM offline) ──────────────────────────────────
+// Future engines will re-enable status polling
+(function() {
+    const uiEngineLabel = document.getElementById('uiEngineLabel');
+    const uiEngineDot   = document.getElementById('uiEngineDot');
+    if (uiEngineLabel) uiEngineLabel.textContent = 'Engine: Offline';
+    if (uiEngineDot)   uiEngineDot.className = 'dot';
+})();
 
 // ── NOVA LAYOUT ENGINE ──────────────────────────────────────────────────────
 

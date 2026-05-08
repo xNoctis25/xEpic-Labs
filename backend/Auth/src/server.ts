@@ -47,17 +47,17 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // ── SSE: real-time notification push ─────────────────────────────────────────
 // Tracks all connected dashboard clients
 const sseClients = new Set<any>();
-let lastBroadcastId = 0;
+let lastBroadcastTs = new Date(0).toISOString();
 
 /**
  * Polls the DB every 5 seconds for new notifications.
- * Broadcasts any new rows to all connected SSE clients.
+ * Uses created_at timestamps (UUID primary keys aren't sequential).
  */
 async function startSsePoller(): Promise<void> {
     try {
-        const maxRes = await pool.query('SELECT COALESCE(MAX(id), 0) AS maxid FROM engine_notifications');
-        lastBroadcastId = parseInt(maxRes.rows[0]?.maxid ?? '0', 10) || 0;
-        console.log(`[SSE] Poller started — watching from notification id > ${lastBroadcastId}`);
+        const maxRes = await pool.query('SELECT COALESCE(MAX(created_at), NOW()) AS max_ts FROM notifications');
+        lastBroadcastTs = maxRes.rows[0]?.max_ts ?? new Date().toISOString();
+        console.log(`[SSE] Poller started — watching from ${lastBroadcastTs}`);
     } catch (_) {}
 
     setInterval(async () => {
@@ -65,12 +65,12 @@ async function startSsePoller(): Promise<void> {
         try {
             const res = await pool.query(
                 `SELECT id, event_type, message, read, created_at
-                   FROM engine_notifications WHERE id > $1 ORDER BY id ASC`,
-                [lastBroadcastId]
+                   FROM notifications WHERE created_at > $1 ORDER BY created_at ASC`,
+                [lastBroadcastTs]
             );
             if (res.rows.length === 0) return;
 
-            lastBroadcastId = res.rows[res.rows.length - 1].id;
+            lastBroadcastTs = res.rows[res.rows.length - 1].created_at;
             const msg = `event: notification\ndata: ${JSON.stringify({ count: res.rows.length })}\n\n`;
 
             for (const client of sseClients) {
@@ -116,36 +116,15 @@ pool.query(`
     ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS account_balance NUMERIC(12,2) DEFAULT NULL;
     ALTER TABLE prop_accounts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
-    CREATE TABLE IF NOT EXISTS engine_config (
-        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        active_playbook VARCHAR(20) NOT NULL DEFAULT 'PROP_FIRM'
-                        CHECK (active_playbook IN ('PROP_FIRM', 'CASH_ACCOUNT')),
-        engine_state    VARCHAR(20) DEFAULT 'OFFLINE',
-        updated_at      TIMESTAMPTZ DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS engine_notifications (
+    CREATE TABLE IF NOT EXISTS notifications (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         event_type  VARCHAR(30) NOT NULL,
         message     TEXT        NOT NULL,
         read        BOOLEAN     DEFAULT FALSE,
         created_at  TIMESTAMPTZ DEFAULT NOW()
     );
-
-    CREATE TABLE IF NOT EXISTS engine_halts (
-        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        halt_type   VARCHAR(30) NOT NULL,
-        is_active   BOOLEAN DEFAULT TRUE,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
-    );
 `).then(async () => {
     try {
-        // Seed engine_config singleton (idempotent)
-        const existing = await pool.query('SELECT id FROM engine_config LIMIT 1');
-        if (existing.rows.length === 0) {
-            await pool.query('INSERT INTO engine_config DEFAULT VALUES');
-        }
-
         console.log('[DB] Seeding Topstep configurations...');
         const metrics = [
             ['Topstep', 50000, 3000, 2000, 5],
@@ -649,33 +628,6 @@ app.post('/api/auth/chat', async (req, res) => {
         }
         contents.push({ role: 'user', parts: [{ text: message }] });
 
-        // ── Inject live engine state into context ─────────────────────────────
-        const [haltRes, configRes] = await Promise.all([
-            pool.query(`SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1`),
-            pool.query(`SELECT active_playbook, engine_state FROM engine_config LIMIT 1`),
-        ]);
-        const activeHalt    = haltRes.rows[0]?.halt_type ?? null;
-        const engineState   = configRes.rows[0]?.engine_state ?? 'OFFLINE';
-        const activePlaybook= configRes.rows[0]?.active_playbook ?? 'PROP_FIRM';
-
-        const engineStateLabel: Record<string, string> = {
-            OFFLINE:   '⚫ OFFLINE — not running',
-            BOOTING:   '🟡 BOOTING — starting up, not yet hydrated',
-            HYDRATING: '🔵 HYDRATING — loading historical market data, not yet ready',
-            WARM_UP:   '🟠 WARM_UP — experts initializing, almost ready',
-            HUNTING:   '🟢 HUNTING — fully operational, scanning for setups',
-            HALTED:    `🔴 HALTED — entries blocked (${activeHalt ?? 'MANUAL_HALT'})`,
-        };
-        const stateDesc = engineStateLabel[engineState] ?? engineState;
-        const liveContext = `
-
-[LIVE ENGINE STATE — as of this message]
-- Operational State: ${stateDesc}
-- Active Playbook: ${activePlaybook}
-- Halt Status: ${activeHalt ? `HALTED (${activeHalt})` : 'CLEAR — no active halts'}
-
-IMPORTANT: Use this data to answer questions about the engine. Do NOT infer or guess the engine state from the conversation history. The above is ground truth pulled directly from the database.`;
-
         const ai = new GoogleGenAI({ apiKey: apiKey });
         const response = await ai.models.generateContent({
             model: targetModel,
@@ -696,114 +648,12 @@ Your personality:
 - When you lack real-time data, acknowledge it briefly then provide analysis
 - Never refuse to engage. Always find an angle that adds value.
 
-You also have the ability to control the M.o.M trading engine. If the user tells you to stop trading, halt the engine, or close positions, you MUST execute the appropriate tool.
-- Halt Trading: Halts new entries.
-- Resume Trading: Clears all halts.
-- Close Trade: Wipes the board and halts permanently.
-- Switch Playbook: Switches the engine between PROP_FIRM (prop firm risk rules, buffer-based sizing) and CASH_ACCOUNT (standard buying power sizing). Use when the user says 'switch to prop firm', 'use prop firm playbook', 'switch to cash account', 'use cash account mode', etc.
-
-The user's name is: ${decoded.username}${liveContext}`,
-                tools: [{
-                    functionDeclarations: [
-                        {
-                            name: "halt_engine",
-                            description: "Halts the trading engine normally. The engine will not enter new trades, but will manage existing ones. Use this when the user says 'stop trading'.",
-                            parameters: { type: "OBJECT" as any, properties: {} }
-                        },
-                        {
-                            name: "resume_engine",
-                            description: "Resumes the trading engine and clears all halts. Use this when the user says 'resume trading'.",
-                            parameters: { type: "OBJECT" as any, properties: {} }
-                        },
-                        {
-                            name: "close_engine",
-                            description: "Emergency closes the trading engine. It immediately wipes the board (closes all open positions and orders) and halts permanently. Use this when the user says 'close the trade' or 'emergency stop'.",
-                            parameters: { type: "OBJECT" as any, properties: {} }
-                        },
-                        {
-                            name: "switch_playbook",
-                            description: "Switches the M.o.M engine playbook between PROP_FIRM and CASH_ACCOUNT. PROP_FIRM uses buffer-based position sizing across active prop accounts. CASH_ACCOUNT uses standard buying power. Use when the user says 'switch to prop firm', 'use prop firm playbook', 'switch to cash account', 'use cash account mode', etc.",
-                            parameters: {
-                                type: "OBJECT" as any,
-                                properties: {
-                                    playbook: {
-                                        type: "STRING" as any,
-                                        enum: ["PROP_FIRM", "CASH_ACCOUNT"],
-                                        description: "The playbook to activate."
-                                    }
-                                },
-                                required: ["playbook"]
-                            }
-                        }
-                    ]
-                }]
+The user's name is: ${decoded.username}`,
             }
         });
 
-        if (response.functionCalls && response.functionCalls.length > 0) {
-            const call = response.functionCalls[0];
-            let toolOutput = "";
-            try {
-                if (call.name === "halt_engine") {
-                    await pool.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('MANUAL_HALT', TRUE)`);
-                    toolOutput = "Engine successfully halted.";
-                } else if (call.name === "resume_engine") {
-                    await pool.query(`UPDATE engine_halts SET is_active = FALSE WHERE is_active = TRUE`);
-                    toolOutput = "Engine successfully resumed. All halts cleared.";
-                } else if (call.name === "close_engine") {
-                    await pool.query(`INSERT INTO engine_halts (halt_type, is_active) VALUES ('EMERGENCY_CLOSE', TRUE)`);
-                    toolOutput = "Engine emergency closed. All positions will be flattened immediately.";
-                } else if (call.name === "switch_playbook") {
-                    const playbook = ((call.args as any)?.playbook ?? '').toUpperCase() as string;
-                    if (!['PROP_FIRM', 'CASH_ACCOUNT'].includes(playbook)) {
-                        toolOutput = "Invalid playbook value. Must be PROP_FIRM or CASH_ACCOUNT.";
-                    } else {
-                        await pool.query(
-                            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW() WHERE id = 1`,
-                            [playbook]
-                        );
-                        await pool.query(
-                            `INSERT INTO engine_notifications (event_type, message) VALUES ($1, $2)`,
-                            ['PLAYBOOK_SWITCH', `🔄 Playbook → ${playbook} via Nova`]
-                        );
-                        // Build a contextual response with current buffer status
-                        let bufInfo = '';
-                        if (playbook === 'PROP_FIRM') {
-                            const bufRes = await pool.query(
-                                `SELECT account_balance, account_size, max_loss_limit FROM prop_accounts WHERE status = 'ACTIVE'`
-                            );
-                            if (bufRes.rows.length === 0) {
-                                bufInfo = ' No active prop accounts found — entries will be blocked until an account is set to ACTIVE.';
-                            } else {
-                                const buffers = bufRes.rows.map((r: any) =>
-                                    Number(r.max_loss_limit) + (Number(r.account_balance ?? r.account_size) - Number(r.account_size))
-                                );
-                                const minBuf = Math.min(...buffers);
-                                const contracts = minBuf >= 1500
-                                    ? `${Math.floor(minBuf / 1500)} ES`
-                                    : `${Math.floor(minBuf / 150)} MES`;
-                                bufInfo = ` Min buffer: $${minBuf.toFixed(0)} → sizing for ${contracts}.`;
-                            }
-                        }
-                        toolOutput = `Playbook switched to ${playbook}.${bufInfo} The engine will pick up the change within 30 seconds.`;
-                    }
-                }
-            } catch (err) {
-                console.error("[NOVA TOOL ERROR]", err);
-                toolOutput = "Failed to execute engine command due to database error.";
-            }
-            
-            // Re-prompt model with tool output
-            const followUp = await ai.models.generateContent({
-                model: targetModel,
-                contents: [
-                    ...contents,
-                    { role: 'model', parts: [{ functionCall: call }] },
-                    { role: 'user', parts: [{ functionResponse: { name: call.name, response: { result: toolOutput } } }] }
-                ]
-            });
-            return res.status(200).json({ reply: followUp.text });
-        }
+        // Tool calls removed — no engine to control currently
+        // Future: re-add tools for reminders, calendar events, etc.
 
         res.status(200).json({ reply: response.text });
     } catch (error: any) {
@@ -959,59 +809,8 @@ app.patch('/api/auth/trading/prop-accounts/:id', async (req, res) => {
     }
 });
 
-app.get('/api/auth/trading/engine/status', async (req, res) => {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ message: 'No token provided.' });
-        }
-        try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
-        catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
-
-        const haltResult = await pool.query(
-            "SELECT halt_type FROM engine_halts WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 1"
-        );
-
-        if (haltResult.rows.length > 0) {
-            res.status(200).json({ status: 'HALTED', reason: haltResult.rows[0].halt_type, in_trade: false });
-        } else {
-            res.status(200).json({ status: 'ACTIVE', in_trade: false });
-        }
-    } catch (error) {
-        console.error('[API ERROR] /engine/status GET:', error);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-});
-
-// ── ENGINE PLAYBOOK (Nova command) ───────────────────────────────────────────
-app.patch('/api/auth/trading/engine/playbook', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'No token provided.' });
-    }
-    try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
-    catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
-    try {
-        const { playbook } = req.body;
-        if (!['PROP_FIRM', 'CASH_ACCOUNT'].includes(playbook)) {
-            return res.status(400).json({ message: 'Invalid playbook. Use PROP_FIRM or CASH_ACCOUNT.' });
-        }
-        await pool.query(
-            `UPDATE engine_config SET active_playbook = $1, updated_at = NOW()`,    
-            [playbook]
-        );
-        // Push a notification so dashboard immediately reflects the switch
-        await pool.query(
-            `INSERT INTO engine_notifications (event_type, message) VALUES ($1, $2)`,
-            ['PLAYBOOK_SWITCH', `🔄 Playbook → ${playbook} via Nova`]
-        );
-        console.log(`[API] ✅ Engine playbook switched to: ${playbook}`);
-        res.status(200).json({ message: `Playbook switched to ${playbook}.`, playbook });
-    } catch (error: any) {
-        console.error('[API ERROR] /engine/playbook PATCH:', error);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-});
+// Engine status and playbook endpoints removed — MoM engine is offline
+// Future engines will register their own status routes
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
 app.get('/api/auth/trading/notifications', async (req, res) => {
@@ -1031,12 +830,12 @@ app.get('/api/auth/trading/notifications', async (req, res) => {
         const [rowsRes, countRes, unreadRes] = await Promise.all([
             pool.query(
                 `SELECT id, event_type, message, read, created_at
-                   FROM engine_notifications ${whereClause}
+                   FROM notifications ${whereClause}
                   ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
                 [limit, offset]
             ),
-            pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications ${whereClause}`),
-            pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`),
+            pool.query(`SELECT COUNT(*) AS cnt FROM notifications ${whereClause}`),
+            pool.query(`SELECT COUNT(*) AS cnt FROM notifications WHERE read = FALSE`),
         ]);
         res.status(200).json({
             notifications: rowsRes.rows,
@@ -1059,7 +858,7 @@ app.patch('/api/auth/trading/notifications/read-all', async (req, res) => {
     try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
-        await pool.query(`UPDATE engine_notifications SET read = TRUE WHERE read = FALSE`);
+        await pool.query(`UPDATE notifications SET read = TRUE WHERE read = FALSE`);
         res.status(200).json({ message: 'All notifications marked as read.' });
     } catch (error: any) {
         console.error('[API ERROR] /notifications/read-all PATCH:', error);
@@ -1077,7 +876,7 @@ app.patch('/api/auth/trading/notifications/:id/read', async (req, res) => {
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
         const { id } = req.params;
-        await pool.query(`UPDATE engine_notifications SET read = TRUE WHERE id = $1`, [id]);
+        await pool.query(`UPDATE notifications SET read = TRUE WHERE id = $1`, [id]);
         res.status(200).json({ message: 'Notification marked as read.' });
     } catch (error: any) {
         console.error('[API ERROR] /notifications/:id/read PATCH:', error);
@@ -1093,7 +892,7 @@ app.get('/api/auth/trading/notifications/unread-count', async (req, res) => {
     try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
-        const res2 = await pool.query(`SELECT COUNT(*) AS cnt FROM engine_notifications WHERE read = FALSE`);
+        const res2 = await pool.query(`SELECT COUNT(*) AS cnt FROM notifications WHERE read = FALSE`);
         res.status(200).json({ unread: parseInt(res2.rows[0].cnt, 10) });
     } catch (error: any) {
         console.error('[API ERROR] /notifications/unread-count GET:', error);
@@ -1112,7 +911,7 @@ app.delete('/api/auth/trading/notifications/:id', async (req, res) => {
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
         const { id } = req.params;
-        await pool.query(`DELETE FROM engine_notifications WHERE id = $1`, [id]);
+        await pool.query(`DELETE FROM notifications WHERE id = $1`, [id]);
         res.status(200).json({ message: 'Notification deleted.' });
     } catch (error: any) {
         console.error('[API ERROR] /notifications/:id DELETE:', error);
@@ -1129,7 +928,7 @@ app.delete('/api/auth/trading/notifications', async (req, res) => {
     try { jwt.verify(authHeader.split(' ')[1], JWT_SECRET); }
     catch { return res.status(401).json({ message: 'Token expired or invalid.' }); }
     try {
-        await pool.query(`DELETE FROM engine_notifications`);
+        await pool.query(`DELETE FROM notifications`);
         res.status(200).json({ message: 'All notifications cleared.' });
     } catch (error: any) {
         console.error('[API ERROR] /notifications DELETE:', error);
