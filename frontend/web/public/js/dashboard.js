@@ -1785,9 +1785,8 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
                     btn.classList.add('selected');
                 }
                 
-                // Show as "1990s" or "1990-1999"
-                btn.textContent = `${d}s`;
-                // Alternatively could just be d, but 's' makes it clear it's a decade
+                // Show as "1990", "2000", "2010"
+                btn.textContent = d;
                 
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();

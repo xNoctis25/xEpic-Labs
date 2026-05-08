@@ -1879,10 +1879,10 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 
 .epic-cal-month-btn.selected {
-    background: rgba(52, 211, 153, 0.2);
-    border: 1px solid #34d399;
+    background: rgba(52, 211, 153, 0.1);
+    border: 2px solid #34d399;
     color: #34d399;
-    box-shadow: 0 4px 15px rgba(52, 211, 153, 0.2);
+    box-shadow: none;
 }
 
 .epic-cal-today-action {
