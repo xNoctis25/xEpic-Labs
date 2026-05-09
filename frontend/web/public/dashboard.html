@@ -42,7 +42,27 @@
             <div class="status-pill"><span class="status-label" id="uiSessionLabel">Session: New York</span><span class="dot green" id="uiSessionDot"></span></div>
             <div class="status-pill"><span class="status-label" id="uiDbLabel">Neon DB</span><span class="dot green" id="uiDbDot"></span></div>
             <span class="notif-divider">|</span>
-            <div class="clock-widget-wrap" id="clockWidgetWrap">
+            <div class="notif-bell-wrap" id="notifBellWrap">
+                <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+                </button>
+                <!-- Notification Dropdown -->
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-header">
+                        <span class="notif-title">🔔 Notifications</span>
+                        <button class="notif-mark-read" id="notifMarkRead">Mark all read</button>
+                    </div>
+                    <div class="notif-list" id="notifList">
+                        <div class="notif-empty">No notifications yet.</div>
+                    </div>
+                    <div class="notif-footer">
+                        <div class="notif-pagination" id="notifPagination"></div>
+                        <a href="#" class="notif-history-link" id="notifHistoryLink">View All History</a>
+                    </div>
+                </div>
+            </div>
+<div class="clock-widget-wrap" id="clockWidgetWrap">
                 <div id="uiRealtimeClock" style="color: rgba(255, 255, 255, 0.6); font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; line-height: 1.3;">--:--:-- ET</div>
                 <div class="epic-calendar-wrapper">
                     <!-- Events Panel -->
@@ -108,29 +128,9 @@
                     </div>
                 </div>
             </div>
-            <div class="notif-bell-wrap" id="notifBellWrap">
-                <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                    <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
-                </button>
-                <!-- Notification Dropdown -->
-                <div class="notif-dropdown" id="notifDropdown">
-                    <div class="notif-header">
-                        <span class="notif-title">🔔 Notifications</span>
-                        <button class="notif-mark-read" id="notifMarkRead">Mark all read</button>
-                    </div>
-                    <div class="notif-list" id="notifList">
-                        <div class="notif-empty">No notifications yet.</div>
-                    </div>
-                    <div class="notif-footer">
-                        <div class="notif-pagination" id="notifPagination"></div>
-                        <a href="#" class="notif-history-link" id="notifHistoryLink">View All History</a>
-                    </div>
-                </div>
             </div>
         </div>
     </header>
-
     <div class="app-layout">
         <aside class="app-sidebar">
             <div class="sidebar-nav top">
@@ -423,6 +423,6 @@
     </div>
 
     <script src="/js/api.js?v=35.0"></script>
-    <script src="/js/dashboard.js?v=88.40"></script>
+    <script src="/js/dashboard.js?v=88.41"></script>
 </body>
 </html>
