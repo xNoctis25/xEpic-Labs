@@ -1635,22 +1635,62 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .custom-select-trigger.open { border-color: rgba(102, 252, 241, 0.5) !important; box-shadow: 0 0 0 3px rgba(102, 252, 241, 0.08) !important; }
 .custom-select-trigger.open svg { transform: rotate(180deg) !important; }
 
+/* Clock Hover Widget Container */
+.clock-widget-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: default;
+    height: 100%;
+}
+
+/* Invisible bridge to maintain hover state when moving mouse down */
+.clock-widget-wrap::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: -50px;
+    right: -100px;
+    height: 30px;
+    z-index: 9998;
+}
+
 .epic-calendar-wrapper {
     display: flex;
     justify-content: center;
     align-items: stretch;
-    margin: 30px auto 10px auto;
-    width: fit-content;
+    width: max-content;
     
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.01) 100%);
+    /* Popover positioning */
+    position: absolute;
+    top: calc(100% + 20px);
+    right: -20px; /* Align slightly right of the clock */
+    z-index: 9999;
+    
+    /* Initial Hidden State */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(15px);
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    
+    /* Original Styling */
+    background: linear-gradient(135deg, rgba(20, 22, 26, 0.85) 0%, rgba(20, 22, 26, 0.95) 100%);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-top: 1px solid rgba(255, 255, 255, 0.2);
     border-left: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 24px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.03);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.03);
     overflow: hidden;
+}
+
+/* Show on Hover */
+.clock-widget-wrap:hover .epic-calendar-wrapper,
+.epic-calendar-wrapper:hover {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 }
 
 .epic-events-panel {

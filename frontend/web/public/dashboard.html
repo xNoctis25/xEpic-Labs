@@ -42,7 +42,72 @@
             <div class="status-pill"><span class="status-label" id="uiSessionLabel">Session: New York</span><span class="dot green" id="uiSessionDot"></span></div>
             <div class="status-pill"><span class="status-label" id="uiDbLabel">Neon DB</span><span class="dot green" id="uiDbDot"></span></div>
             <span class="notif-divider">|</span>
-            <div id="uiRealtimeClock" style="color: rgba(255, 255, 255, 0.6); font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; line-height: 1.3;">--:--:-- ET</div>
+            <div class="clock-widget-wrap" id="clockWidgetWrap">
+                <div id="uiRealtimeClock" style="color: rgba(255, 255, 255, 0.6); font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; line-height: 1.3;">--:--:-- ET</div>
+                <div class="epic-calendar-wrapper">
+                    <!-- Events Panel -->
+                    <div class="epic-events-panel">
+                        <div class="epic-events-header-row">
+                            <h3 class="epic-events-title">Upcoming</h3>
+                            <div class="epic-events-tabs">
+                                <button class="epic-event-tab" data-tab="nextWeek">Next Week</button>
+                                <button class="epic-event-tab" data-tab="thisWeek">This Week</button>
+                                <button class="epic-event-tab active" data-tab="today">Today</button>
+                            </div>
+                        </div>
+                        
+                        <div class="epic-events-tab-content active" id="tab-today">
+                            <ul class="epic-events-list" id="eventsTodayList"></ul>
+                            <div class="epic-events-pagination" id="pagination-today"></div>
+                        </div>
+                        
+                        <div class="epic-events-tab-content" id="tab-thisWeek">
+                            <ul class="epic-events-list" id="eventsThisWeekList"></ul>
+                            <div class="epic-events-pagination" id="pagination-thisWeek"></div>
+                        </div>
+                        
+                        <div class="epic-events-tab-content" id="tab-nextWeek">
+                            <ul class="epic-events-list" id="eventsNextWeekList"></ul>
+                            <div class="epic-events-pagination" id="pagination-nextWeek"></div>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Widget -->
+                    <div class="epic-calendar-widget">
+                    <!-- Header Box -->
+                    <div class="epic-cal-header-box" id="calHeaderBox">
+                        <span class="epic-cal-month-year clickable" id="calMonthYear" title="Change Month/Year">May 2026</span>
+                        <div class="epic-cal-today-action hidden" id="calTodayBtn">Today</div>
+                    </div>
+                    
+                    <!-- Main Calendar -->
+                    <div class="epic-cal-body" id="calMainBody">
+                        <div class="epic-cal-grid-header">
+                            <span class="weekend">Su</span>
+                            <span class="weekday">Mo</span>
+                            <span class="weekday">Tu</span>
+                            <span class="weekday">We</span>
+                            <span class="weekday">Th</span>
+                            <span class="weekday">Fr</span>
+                            <span class="weekend">Sa</span>
+                        </div>
+                        
+                        <div id="calendarGrid" class="epic-cal-grid">
+                            <!-- Days injected via JS -->
+                        </div>
+                    </div>
+                    <!-- Custom Month/Year Picker Overlay -->
+                    <div class="epic-cal-overlay" id="calMonthPickerOverlay">
+                        <div class="epic-cal-month-grid" id="calMonthGrid">
+                            <!-- Months injected via JS -->
+                        </div>
+                        <div class="epic-cal-month-grid hidden" id="calYearGrid">
+                            <!-- Years injected via JS -->
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </div>
             <div class="notif-bell-wrap" id="notifBellWrap">
                 <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -99,71 +164,7 @@
 
             <div id="homeView" class="view-section">
                 <div class="home-body">
-                    <div class="epic-calendar-wrapper">
-                        
-                        <!-- Events Panel -->
-                        <div class="epic-events-panel">
-                            <div class="epic-events-header-row">
-                                <h3 class="epic-events-title">Upcoming</h3>
-                                <div class="epic-events-tabs">
-                                    <button class="epic-event-tab" data-tab="nextWeek">Next Week</button>
-                                    <button class="epic-event-tab" data-tab="thisWeek">This Week</button>
-                                    <button class="epic-event-tab active" data-tab="today">Today</button>
-                                </div>
-                            </div>
-                            
-                            <div class="epic-events-tab-content active" id="tab-today">
-                                <ul class="epic-events-list" id="eventsTodayList"></ul>
-                                <div class="epic-events-pagination" id="pagination-today"></div>
-                            </div>
-                            
-                            <div class="epic-events-tab-content" id="tab-thisWeek">
-                                <ul class="epic-events-list" id="eventsThisWeekList"></ul>
-                                <div class="epic-events-pagination" id="pagination-thisWeek"></div>
-                            </div>
-                            
-                            <div class="epic-events-tab-content" id="tab-nextWeek">
-                                <ul class="epic-events-list" id="eventsNextWeekList"></ul>
-                                <div class="epic-events-pagination" id="pagination-nextWeek"></div>
-                            </div>
-                        </div>
 
-                        <!-- Calendar Widget -->
-                        <div class="epic-calendar-widget">
-                        <!-- Header Box -->
-                        <div class="epic-cal-header-box" id="calHeaderBox">
-                            <span class="epic-cal-month-year clickable" id="calMonthYear" title="Change Month/Year">May 2026</span>
-                            <div class="epic-cal-today-action hidden" id="calTodayBtn">Today</div>
-                        </div>
-                        
-                        <!-- Main Calendar -->
-                        <div class="epic-cal-body" id="calMainBody">
-                            <div class="epic-cal-grid-header">
-                                <span class="weekend">Su</span>
-                                <span class="weekday">Mo</span>
-                                <span class="weekday">Tu</span>
-                                <span class="weekday">We</span>
-                                <span class="weekday">Th</span>
-                                <span class="weekday">Fr</span>
-                                <span class="weekend">Sa</span>
-                            </div>
-                            
-                            <div id="calendarGrid" class="epic-cal-grid">
-                                <!-- Days injected via JS -->
-                            </div>
-                        </div>
-                        <!-- Custom Month/Year Picker Overlay -->
-                        <div class="epic-cal-overlay" id="calMonthPickerOverlay">
-                            <div class="epic-cal-month-grid" id="calMonthGrid">
-                                <!-- Months injected via JS -->
-                            </div>
-                            <div class="epic-cal-month-grid hidden" id="calYearGrid">
-                                <!-- Years injected via JS -->
-                            </div>
-
-                        </div>
-                        </div>
-                    </div>
                     
 
                 </div>
@@ -422,6 +423,6 @@
     </div>
 
     <script src="/js/api.js?v=35.0"></script>
-    <script src="/js/dashboard.js?v=88.38"></script>
+    <script src="/js/dashboard.js?v=88.39"></script>
 </body>
 </html>
