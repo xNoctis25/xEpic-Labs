@@ -670,8 +670,36 @@ function updateRealtimeClock() {
         const timeVal = timeParts[0];
         const amPm = timeParts[1];
         
+        let dotHtml = '<span style="opacity: 0.5; margin-left: 4px;">•</span>';
+        if (window.epicEvents) {
+            const today = new Date();
+            const cellDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const nextDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+            const dayEvents = window.epicEvents.filter(e => e.date >= cellDate && e.date < nextDay);
+            
+            if (dayEvents.length > 0) {
+                const uniqueTypes = new Set(dayEvents.map(e => e.type || 'default'));
+                const typeColors = {
+                    'holiday': '#d500f9',
+                    'birthday': '#00e676',
+                    'bill': '#ff9100',
+                    'news': '#ff1744',
+                    'fmp-red': '#ff1744',
+                    'fmp-yellow': '#f4b41a',
+                    'default': '#f4b41a'
+                };
+                
+                let dots = '';
+                uniqueTypes.forEach(type => {
+                    const color = typeColors[type] || typeColors.default;
+                    dots += `<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${color}; margin-left:4px; box-shadow: 0 0 4px ${color}80;"></span>`;
+                });
+                dotHtml = `<span style="display:inline-flex; align-items:center; margin-left:2px;">${dots}</span>`;
+            }
+        }
+        
         uiRealtimeClock.innerHTML = `
-            <div style="color: #e3e3e3; padding-bottom: 2px;">${parts[0]}, ${parts[1]} <span style="opacity: 0.5; margin-left: 4px;">•</span></div>
+            <div style="color: #e3e3e3; padding-bottom: 2px; display:flex; align-items:center;">${parts[0]}, ${parts[1]} ${dotHtml}</div>
             <div><span style="color: #66fcf1;">${timeVal}</span> <span style="color: rgba(255,255,255,0.6);">${amPm} ET</span></div>
         `;
     } else {
