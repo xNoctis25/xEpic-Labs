@@ -1866,10 +1866,10 @@ async function renderEvents() {
                 const flagMap = { 'US': '🇺🇸', 'GB': '🇬🇧', 'EU': '🇪🇺', 'CA': '🇨🇦', 'AU': '🇦🇺', 'JP': '🇯🇵' };
                 
                 fmpData.forEach(evt => {
-                    const flag = flagMap[evt.country] || '';
                     window.epicEvents.push({
                         id: evt.id,
-                        title: `${flag} ${evt.event_name}`,
+                        title: evt.event_name,
+                        countryCode: evt.country ? evt.country.toLowerCase() : null,
                         date: new Date(evt.event_date),
                         type: evt.impact === 'High' ? 'fmp-red' : 'fmp-yellow',
                         isArchived: evt.is_archived
@@ -1955,7 +1955,23 @@ async function renderEvents() {
             
             const titleSpan = document.createElement('span');
             titleSpan.classList.add('epic-event-title');
-            titleSpan.textContent = evt.title;
+            titleSpan.style.display = 'flex';
+            titleSpan.style.alignItems = 'center';
+            titleSpan.style.gap = '6px';
+            
+            if (evt.countryCode) {
+                const flagImg = document.createElement('img');
+                flagImg.src = `https://flagcdn.com/w20/${evt.countryCode}.png`;
+                flagImg.style.width = '16px';
+                flagImg.style.height = '12px';
+                flagImg.style.objectFit = 'cover';
+                flagImg.style.borderRadius = '2px';
+                titleSpan.appendChild(flagImg);
+            }
+            
+            const textSpan = document.createElement('span');
+            textSpan.textContent = evt.title;
+            titleSpan.appendChild(textSpan);
             
             li.appendChild(timeSpan);
             li.appendChild(titleSpan);
