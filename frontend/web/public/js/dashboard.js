@@ -1762,7 +1762,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             if (calYearGrid) calYearGrid.classList.add('hidden');
             if (calMonthGrid) calMonthGrid.classList.remove('hidden');
             
-            overlayMonthYearText.textContent = 'Month';
+            overlayMonthYearText.textContent = overlayYear;
             calMonthGrid.innerHTML = '';
 
             monthNames.forEach((month, index) => {
