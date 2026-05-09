@@ -1738,12 +1738,8 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             renderOverlay();
             calMonthPickerOverlay.classList.add('active');
             calMainBody.classList.add('dimmed');
-        } else if (overlayMode === 'months') {
-            // Switch to years mode
-            overlayMode = 'years';
-            renderOverlay();
         }
-        // If already in years, we stay there (disabled decades view per user request)
+        // Disabled Years/Decades view per user request
     });
 
     if (calTodayBtn) {
@@ -1764,7 +1760,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             if (calDecadeGrid) calDecadeGrid.classList.add('hidden');
             if (calMonthGrid) calMonthGrid.classList.remove('hidden');
             
-            overlayMonthYearText.textContent = 'Month';
+            overlayMonthYearText.textContent = overlayYear;
             calMonthGrid.innerHTML = '';
 
             monthNames.forEach((month, index) => {
@@ -1784,34 +1780,6 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
                 });
                 calMonthGrid.appendChild(btn);
             });
-        } else if (overlayMode === 'years') {
-            if (calMonthGrid) calMonthGrid.classList.add('hidden');
-            if (calDecadeGrid) calDecadeGrid.classList.add('hidden');
-            if (calYearGrid) calYearGrid.classList.remove('hidden');
-            
-            // Generate a 12-year window based on the decade
-            const decadeStart = Math.floor(overlayYear / 10) * 10;
-            overlayMonthYearText.textContent = 'Year';
-            
-            calYearGrid.innerHTML = '';
-            for (let i = 0; i < 12; i++) {
-                const y = decadeStart + i;
-                const btn = document.createElement('button');
-                btn.classList.add('epic-cal-month-btn');
-                
-                if (y === currentCalDate.getFullYear()) {
-                    btn.classList.add('selected');
-                }
-                
-                btn.textContent = y;
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    overlayYear = y;
-                    overlayMode = 'months';
-                    renderOverlay();
-                });
-                calYearGrid.appendChild(btn);
-            }
         }
     }
 
