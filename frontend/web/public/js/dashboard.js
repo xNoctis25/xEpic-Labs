@@ -2047,20 +2047,34 @@ setInterval(() => {
                         body: JSON.stringify({ event_type: 'fmp_alert', message: `Blackout Period STARTED for ${evt.title}` })
                     }).catch(console.error);
                 }
-            } else if (isPastBlackout && evt.isActive) {
-                evt.isActive = false;
-                uiChanged = true;
-                if (!evt.notifiedEnd && evt.notifiedStart && !localStorage.getItem(`fmp_sim_clear_${evt.id}`)) {
-                    evt.notifiedEnd = true;
+            } else if (isPastBlackout) {
+                if (evt.isActive) {
+                    evt.isActive = false;
+                    uiChanged = true;
+                }
+                
+                if (!localStorage.getItem(`fmp_sim_clear_${evt.id}`)) {
                     localStorage.setItem(`fmp_sim_clear_${evt.id}`, 'true');
                     auth.request('/trading/notifications', {
                         method: 'POST',
                         body: JSON.stringify({ event_type: 'fmp_clear', message: `Blackout Period ENDED for ${evt.title}` })
                     }).catch(console.error);
                 }
+                
+                if (!evt.isArchived) {
+                    evt.isArchived = true;
+                    uiChanged = true;
+                }
             }
         }
     });
+    
+    // Archive (remove) any past events from the array
+    const originalLength = window.epicEvents.length;
+    window.epicEvents = window.epicEvents.filter(e => !e.isArchived);
+    if (window.epicEvents.length !== originalLength) {
+        uiChanged = true;
+    }
     
     if (uiChanged && typeof renderEvents === 'function') {
         // Re-render UI to show/hide ACTIVE badge
