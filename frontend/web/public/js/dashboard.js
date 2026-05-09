@@ -670,7 +670,7 @@ function updateRealtimeClock() {
         const timeVal = timeParts[0];
         const amPm = timeParts[1];
         
-        let dotHtml = '<span style="opacity: 0.5; margin-left: 4px;">•</span>';
+        let dotHtml = '<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:rgba(255,255,255,0.3); margin-left:8px;"></span>';
         if (window.epicEvents) {
             const today = new Date();
             const cellDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -678,7 +678,7 @@ function updateRealtimeClock() {
             const dayEvents = window.epicEvents.filter(e => e.date >= cellDate && e.date < nextDay);
             
             if (dayEvents.length > 0) {
-                const uniqueTypes = new Set(dayEvents.map(e => e.type || 'default'));
+                const uniqueTypes = Array.from(new Set(dayEvents.map(e => e.type || 'default')));
                 const typeColors = {
                     'holiday': '#d500f9',
                     'birthday': '#00e676',
@@ -689,12 +689,31 @@ function updateRealtimeClock() {
                     'default': '#f4b41a'
                 };
                 
-                let dots = '';
-                uniqueTypes.forEach(type => {
-                    const color = typeColors[type] || typeColors.default;
-                    dots += `<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${color}; margin-left:4px; box-shadow: 0 0 4px ${color}80;"></span>`;
-                });
-                dotHtml = `<span style="display:inline-flex; align-items:center; margin-left:2px;">${dots}</span>`;
+                const colors = uniqueTypes.map(t => typeColors[t] || typeColors['default']);
+                
+                let animationStyle = '';
+                let dotColor = colors[0];
+                let dotShadow = `0 0 4px ${colors[0]}`;
+                
+                if (colors.length > 1) {
+                    const animName = `clock-cycle-${uniqueTypes.join('-')}`;
+                    if (!document.getElementById(animName)) {
+                        const style = document.createElement('style');
+                        style.id = animName;
+                        let keyframes = `@keyframes ${animName} {\n`;
+                        const step = 100 / colors.length;
+                        colors.forEach((c, i) => {
+                            keyframes += `${i * step}% { background: ${c}; box-shadow: 0 0 4px ${c}; }\n`;
+                            keyframes += `${(i + 1) * step - 10}% { background: ${c}; box-shadow: 0 0 4px ${c}; }\n`;
+                        });
+                        keyframes += `100% { background: ${colors[0]}; box-shadow: 0 0 4px ${colors[0]}; }\n}`;
+                        style.textContent = keyframes;
+                        document.head.appendChild(style);
+                    }
+                    animationStyle = `animation: ${animName} ${colors.length * 1.5}s infinite;`;
+                }
+                
+                dotHtml = `<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${dotColor}; box-shadow:${dotShadow}; margin-left:8px; ${animationStyle}"></span>`;
             }
         }
         
@@ -1713,7 +1732,9 @@ function renderCalendar(dateToRender) {
                 }
                 
                 indicators.appendChild(dot);
-                dayCell.appendChild(indicators);
+                if (!(isCurrentMonth && day === currentDay)) {
+                    dayCell.appendChild(indicators);
+                }
             }
         }
         
