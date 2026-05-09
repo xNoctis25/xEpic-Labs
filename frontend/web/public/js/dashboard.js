@@ -1900,45 +1900,40 @@ function renderEvents() {
     
     // Base array exported to window for Calendar access
     window.epicEvents = window.epicEvents || [];
-    window.epicEvents.length = 0; // clear existing
     
-    // Hardcoded 2026 US Federal Holidays
-    const holidays2026 = [
-        { date: new Date(2026, 0, 1), title: "New Year's Day" },
-        { date: new Date(2026, 0, 19), title: "MLK Jr. Day" },
-        { date: new Date(2026, 1, 16), title: "Presidents' Day" },
-        { date: new Date(2026, 4, 25), title: "Memorial Day" },
-        { date: new Date(2026, 5, 19), title: "Juneteenth" },
-        { date: new Date(2026, 6, 3), title: "Independence Day (Observed)" },
-        { date: new Date(2026, 8, 7), title: "Labor Day" },
-        { date: new Date(2026, 9, 12), title: "Columbus Day" },
-        { date: new Date(2026, 10, 11), title: "Veterans Day" },
-        { date: new Date(2026, 10, 26), title: "Thanksgiving Day" },
-        { date: new Date(2026, 11, 25), title: "Christmas Day" }
-    ];
-    
-    holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
+    if (window.epicEvents.length === 0) {
+        // Hardcoded 2026 US Federal Holidays
+        const holidays2026 = [
+            { date: new Date(2026, 0, 1), title: "New Year's Day" },
+            { date: new Date(2026, 0, 19), title: "MLK Jr. Day" },
+            { date: new Date(2026, 1, 16), title: "Presidents' Day" },
+            { date: new Date(2026, 4, 25), title: "Memorial Day" },
+            { date: new Date(2026, 5, 19), title: "Juneteenth" },
+            { date: new Date(2026, 6, 3), title: "Independence Day (Observed)" },
+            { date: new Date(2026, 8, 7), title: "Labor Day" },
+            { date: new Date(2026, 9, 12), title: "Columbus Day" },
+            { date: new Date(2026, 10, 11), title: "Veterans Day" },
+            { date: new Date(2026, 10, 26), title: "Thanksgiving Day" },
+            { date: new Date(2026, 11, 25), title: "Christmas Day" }
+        ];
+        
+        holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
 
-    // Generate diverse typed data to trigger pagination
-    for (let i = 0; i < 3; i++) {
-        window.epicEvents.push({ title: `FMP Alert ${i + 1}`, date: new Date(now.getTime() + (i + 1) * 60 * 60 * 1000), type: i % 2 === 0 ? 'fmp-red' : 'fmp-yellow' });
+        const todayAt1810 = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), startOfToday.getDate(), 18, 10, 0);
+        window.epicEvents.push({ 
+            title: 'Core CPI m/m', 
+            date: todayAt1810, 
+            type: 'fmp-yellow',
+            blackoutStart: new Date(todayAt1810.getTime() - 15 * 60 * 1000), // 17:55
+            blackoutEnd: new Date(todayAt1810.getTime() + 15 * 60 * 1000),   // 18:25
+            isActive: false,
+            notifiedStart: false,
+            notifiedEnd: false
+        });
+        
+        // Sort events chronologically
+        window.epicEvents.sort((a, b) => a.date - b.date);
     }
-    window.epicEvents.push({ title: `Server Bill`, date: new Date(now.getTime() + 5 * 60 * 60 * 1000), type: 'bill' });
-    window.epicEvents.push({ title: `Meeting`, date: new Date(now.getTime() + 6 * 60 * 60 * 1000), type: 'default' });
-    
-    if (daysUntilSaturday > 0) {
-        for (let i = 0; i < 3; i++) {
-            window.epicEvents.push({ title: `FMP Report ${i + 1}`, date: new Date(startOfToday.getTime() + 1 * 24 * 60 * 60 * 1000 + i * 4 * 60 * 60 * 1000), type: 'fmp-yellow' });
-        }
-        window.epicEvents.push({ title: `Birthday Dinner`, date: new Date(startOfToday.getTime() + 2 * 24 * 60 * 60 * 1000), type: 'birthday' });
-    }
-    
-    for (let i = 0; i < 5; i++) {
-        window.epicEvents.push({ title: `Utility Bill`, date: new Date(startOfToday.getTime() + 8 * 24 * 60 * 60 * 1000 + i * 12 * 60 * 60 * 1000), type: 'bill' });
-    }
-    
-    // Sort events chronologically
-    window.epicEvents.sort((a, b) => a.date - b.date);
     
     // Categorize
     const todayEvents = [];
@@ -2015,6 +2010,15 @@ function renderEvents() {
             
             li.appendChild(timeSpan);
             li.appendChild(titleSpan);
+            
+            if (evt.isActive) {
+                li.style.position = 'relative';
+                const activeBadge = document.createElement('span');
+                activeBadge.textContent = 'ACTIVE';
+                activeBadge.style.cssText = 'position: absolute; right: 12px; bottom: 10px; font-size: 0.65rem; background: rgba(255, 193, 7, 0.15); color: #ffc107; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(255, 193, 7, 0.4); letter-spacing: 1px; box-shadow: 0 0 8px rgba(255, 193, 7, 0.2);';
+                li.appendChild(activeBadge);
+            }
+            
             listEl.appendChild(li);
         });
         
@@ -2073,3 +2077,43 @@ if (document.getElementById('eventsTodayList')) {
     renderEvents();
 }
 
+// ── NYCOMMAND SIMULATOR TICK (FMP EVENTS) ───────────────────────────
+setInterval(() => {
+    if (!window.epicEvents || typeof auth === 'undefined') return;
+    const nowTime = new Date().getTime();
+    let uiChanged = false;
+    
+    window.epicEvents.forEach(evt => {
+        if (evt.type && evt.type.startsWith('fmp') && evt.blackoutStart && evt.blackoutEnd) {
+            const isInsideBlackout = nowTime >= evt.blackoutStart.getTime() && nowTime < evt.blackoutEnd.getTime();
+            const isPastBlackout = nowTime >= evt.blackoutEnd.getTime();
+            
+            if (isInsideBlackout && !evt.isActive) {
+                evt.isActive = true;
+                uiChanged = true;
+                if (!evt.notifiedStart) {
+                    evt.notifiedStart = true;
+                    auth.request('/trading/notifications', {
+                        method: 'POST',
+                        body: JSON.stringify({ event_type: 'fmp_alert', message: `Blackout Period STARTED for ${evt.title}` })
+                    }).catch(console.error);
+                }
+            } else if (isPastBlackout && evt.isActive) {
+                evt.isActive = false;
+                uiChanged = true;
+                if (!evt.notifiedEnd && evt.notifiedStart) {
+                    evt.notifiedEnd = true;
+                    auth.request('/trading/notifications', {
+                        method: 'POST',
+                        body: JSON.stringify({ event_type: 'fmp_clear', message: `Blackout Period ENDED for ${evt.title}` })
+                    }).catch(console.error);
+                }
+            }
+        }
+    });
+    
+    if (uiChanged && typeof renderEvents === 'function') {
+        // Re-render UI to show/hide ACTIVE badge
+        renderEvents();
+    }
+}, 1000);

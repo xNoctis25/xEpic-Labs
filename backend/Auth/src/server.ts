@@ -845,6 +845,16 @@ app.patch('/api/auth/trading/prop-accounts/:id', async (req, res) => {
 // Future engines will register their own status routes
 
 // ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+app.post('/api/auth/trading/notifications', async (req, res) => {
+    try {
+        const { event_type, message } = req.body;
+        await pool.query('INSERT INTO notifications (event_type, message) VALUES ($1, $2)', [event_type || 'info', message]);
+        res.status(201).json({ message: 'Notification created' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create notification' });
+    }
+});
+
 app.get('/api/auth/trading/notifications', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
