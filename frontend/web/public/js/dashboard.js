@@ -1998,8 +1998,8 @@ async function renderEvents() {
     
     // Initial Render
     renderPage('today');
-    renderPage('thisWeek');
-    renderPage('nextWeek');
+    renderPage('tomorrow');
+    renderPage('next7Days');
     
     // Tab Switching Logic
     const tabs = document.querySelectorAll('.epic-event-tab');
