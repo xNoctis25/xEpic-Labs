@@ -1822,10 +1822,10 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
 // =========================================
 async function renderEvents() {
     const eventsTodayList = document.getElementById('eventsTodayList');
-    const eventsThisWeekList = document.getElementById('eventsThisWeekList');
-    const eventsNextWeekList = document.getElementById('eventsNextWeekList');
+    const eventsTomorrowList = document.getElementById('eventsTomorrowList');
+    const eventsNext7DaysList = document.getElementById('eventsNext7DaysList');
     
-    if (!eventsTodayList || !eventsThisWeekList || !eventsNextWeekList) return;
+    if (!eventsTodayList || !eventsTomorrowList || !eventsNext7DaysList) return;
     
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1833,14 +1833,11 @@ async function renderEvents() {
     const endOfToday = new Date(startOfToday);
     endOfToday.setDate(endOfToday.getDate() + 1);
     
-    // This week ends on Saturday at 23:59:59.
-    // If today is Sunday (0), end of week is Saturday (6) -> 6 days ahead.
-    const daysUntilSaturday = 6 - now.getDay();
-    const endOfThisWeek = new Date(startOfToday);
-    endOfThisWeek.setDate(endOfThisWeek.getDate() + daysUntilSaturday + 1); // +1 because we use < for comparison
+    const endOfTomorrow = new Date(endOfToday);
+    endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
     
-    const endOfNextWeek = new Date(endOfThisWeek);
-    endOfNextWeek.setDate(endOfNextWeek.getDate() + 7);
+    const endOfNext7Days = new Date(endOfTomorrow);
+    endOfNext7Days.setDate(endOfNext7Days.getDate() + 6);
     
     // Base array exported to window for Calendar access
     window.epicEvents = window.epicEvents || [];
@@ -1889,16 +1886,16 @@ async function renderEvents() {
     
     // Categorize
     const todayEvents = [];
-    const thisWeekEvents = [];
-    const nextWeekEvents = [];
+    const tomorrowEvents = [];
+    const next7DaysEvents = [];
     
     window.epicEvents.forEach(evt => {
         if (evt.date >= startOfToday && evt.date < endOfToday) {
             todayEvents.push(evt);
-        } else if (evt.date >= endOfToday && evt.date < endOfThisWeek) {
-            thisWeekEvents.push(evt);
-        } else if (evt.date >= endOfThisWeek && evt.date < endOfNextWeek) {
-            nextWeekEvents.push(evt);
+        } else if (evt.date >= endOfToday && evt.date < endOfTomorrow) {
+            tomorrowEvents.push(evt);
+        } else if (evt.date >= endOfTomorrow && evt.date < endOfNext7Days) {
+            next7DaysEvents.push(evt);
         }
     });
     
@@ -1922,8 +1919,8 @@ async function renderEvents() {
     // State to track current page for each tab
     const paginationState = {
         'today': { page: 1, events: todayEvents, listEl: eventsTodayList, paginatorEl: document.getElementById('pagination-today'), stylingClass: '' },
-        'thisWeek': { page: 1, events: thisWeekEvents, listEl: eventsThisWeekList, paginatorEl: document.getElementById('pagination-thisWeek'), stylingClass: 'upcoming' },
-        'nextWeek': { page: 1, events: nextWeekEvents, listEl: eventsNextWeekList, paginatorEl: document.getElementById('pagination-nextWeek'), stylingClass: 'next-week' }
+        'tomorrow': { page: 1, events: tomorrowEvents, listEl: eventsTomorrowList, paginatorEl: document.getElementById('pagination-tomorrow'), stylingClass: 'upcoming' },
+        'next7Days': { page: 1, events: next7DaysEvents, listEl: eventsNext7DaysList, paginatorEl: document.getElementById('pagination-next7Days'), stylingClass: 'next-week' }
     };
     
     function renderPage(tabId) {
