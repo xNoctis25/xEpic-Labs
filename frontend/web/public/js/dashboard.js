@@ -1820,7 +1820,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
 // =========================================
 // EVENTS PANEL ENGINE
 // =========================================
-function renderEvents() {
+async function renderEvents() {
     const eventsTodayList = document.getElementById('eventsTodayList');
     const eventsThisWeekList = document.getElementById('eventsThisWeekList');
     const eventsNextWeekList = document.getElementById('eventsNextWeekList');
@@ -1862,22 +1862,26 @@ function renderEvents() {
         ];
         
         holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
-
-        // 18:10 EDT is precisely 22:10 UTC
-        const targetDateStr = new Date().toISOString().split('T')[0] + 'T22:10:00Z';
-        const todayAt1810 = new Date(targetDateStr);
         
-        window.epicEvents.push({ 
-            title: 'Core CPI m/m', 
-            id: 'sim_event_1810',
-            date: todayAt1810, 
-            type: 'fmp-yellow',
-            blackoutStart: new Date(todayAt1810.getTime() - 15 * 60 * 1000), // 17:55 EDT
-            blackoutEnd: new Date(todayAt1810.getTime() + 15 * 60 * 1000),   // 18:25 EDT
-            isActive: false,
-            notifiedStart: false,
-            notifiedEnd: false
-        });
+        try {
+            if (typeof auth !== 'undefined') {
+                const fmpData = await auth.request('/trading/events');
+                const flagMap = { 'US': '🇺🇸', 'GB': '🇬🇧', 'EU': '🇪🇺', 'CA': '🇨🇦', 'AU': '🇦🇺', 'JP': '🇯🇵' };
+                
+                fmpData.forEach(evt => {
+                    const flag = flagMap[evt.country] || '';
+                    window.epicEvents.push({
+                        id: evt.id,
+                        title: `${flag} ${evt.event_name}`,
+                        date: new Date(evt.event_date),
+                        type: evt.impact === 'High' ? 'fmp-red' : 'fmp-yellow',
+                        isArchived: evt.is_archived
+                    });
+                });
+            }
+        } catch (e) {
+            console.error('Failed to fetch real FMP events:', e);
+        }
         
         // Sort events chronologically
         window.epicEvents.sort((a, b) => a.date - b.date);
@@ -2024,60 +2028,3 @@ function renderEvents() {
 if (document.getElementById('eventsTodayList')) {
     renderEvents();
 }
-
-// ── NYCOMMAND SIMULATOR TICK (FMP EVENTS) ───────────────────────────
-setInterval(() => {
-    if (!window.epicEvents || typeof auth === 'undefined') return;
-    const nowTime = new Date().getTime();
-    let uiChanged = false;
-    
-    window.epicEvents.forEach(evt => {
-        if (evt.type && evt.type.startsWith('fmp') && evt.blackoutStart && evt.blackoutEnd) {
-            const isInsideBlackout = nowTime >= evt.blackoutStart.getTime() && nowTime < evt.blackoutEnd.getTime();
-            const isPastBlackout = nowTime >= evt.blackoutEnd.getTime();
-            
-            if (isInsideBlackout && !evt.isActive) {
-                evt.isActive = true;
-                uiChanged = true;
-                if (!evt.notifiedStart && !localStorage.getItem(`fmp_sim_alert_${evt.id}`)) {
-                    evt.notifiedStart = true;
-                    localStorage.setItem(`fmp_sim_alert_${evt.id}`, 'true');
-                    auth.request('/trading/notifications', {
-                        method: 'POST',
-                        body: JSON.stringify({ event_type: 'fmp_alert', message: `Blackout Period STARTED for ${evt.title}` })
-                    }).catch(console.error);
-                }
-            } else if (isPastBlackout) {
-                if (evt.isActive) {
-                    evt.isActive = false;
-                    uiChanged = true;
-                }
-                
-                if (!localStorage.getItem(`fmp_sim_clear_${evt.id}`)) {
-                    localStorage.setItem(`fmp_sim_clear_${evt.id}`, 'true');
-                    auth.request('/trading/notifications', {
-                        method: 'POST',
-                        body: JSON.stringify({ event_type: 'fmp_clear', message: `Blackout Period ENDED for ${evt.title}` })
-                    }).catch(console.error);
-                }
-                
-                if (!evt.isArchived) {
-                    evt.isArchived = true;
-                    uiChanged = true;
-                }
-            }
-        }
-    });
-    
-    // Archive (remove) any past events from the array
-    const originalLength = window.epicEvents.length;
-    window.epicEvents = window.epicEvents.filter(e => !e.isArchived);
-    if (window.epicEvents.length !== originalLength) {
-        uiChanged = true;
-    }
-    
-    if (uiChanged && typeof renderEvents === 'function') {
-        // Re-render UI to show/hide ACTIVE badge
-        renderEvents();
-    }
-}, 1000);

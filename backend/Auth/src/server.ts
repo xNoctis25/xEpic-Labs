@@ -147,11 +147,14 @@ pool.query(`
         event_name VARCHAR(255) NOT NULL,
         event_date TIMESTAMPTZ NOT NULL,
         impact VARCHAR(20) NOT NULL,
+        country VARCHAR(10),
         actual NUMERIC(10,4),
         estimate NUMERIC(10,4),
         previous NUMERIC(10,4),
         blackout_start TIMESTAMPTZ,
         blackout_end TIMESTAMPTZ,
+        notified_start BOOLEAN DEFAULT FALSE,
+        notified_end BOOLEAN DEFAULT FALSE,
         is_archived BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -1012,6 +1015,106 @@ app.get('/api/auth/trading/notifications/stream', (req: any, res: any) => {
     });
 });
 
+// ── FMP ECONOMIC EVENT ENGINE ──────────────────────────────────────────────────
+const MAJORS = ['US', 'GB', 'EU', 'CA', 'AU', 'JP'];
+const FLAG_MAP: Record<string, string> = { 'US': '🇺🇸', 'GB': '🇬🇧', 'EU': '🇪🇺', 'CA': '🇨🇦', 'AU': '🇦🇺', 'JP': '🇯🇵' };
+const FMP_API_KEY = process.env.FMP_API_KEY || '';
+
+async function syncFmpEvents() {
+    if (!FMP_API_KEY) {
+        console.error('[NYCommand] Missing FMP_API_KEY. Skipping economic event sync.');
+        return;
+    }
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const nextWeekDate = new Date();
+        nextWeekDate.setDate(nextWeekDate.getDate() + 7);
+        const nextWeek = nextWeekDate.toISOString().split('T')[0];
+        
+        console.log(`[NYCommand] Fetching FMP Economic Calendar: ${today} to ${nextWeek}`);
+        const res = await fetch(`https://financialmodelingprep.com/stable/economic-calendar?from=${today}&to=${nextWeek}&apikey=${FMP_API_KEY}`);
+        if (!res.ok) throw new Error(`FMP API Error: ${res.statusText}`);
+        
+        const data = await res.json();
+        let inserted = 0;
+        
+        for (const evt of data) {
+            if (!evt.impact || evt.impact === 'Low' || !evt.country || !MAJORS.includes(evt.country)) continue;
+            
+            const eventId = `${evt.country}_${evt.event}_${evt.date}`.replace(/\s+/g, '_');
+            const eventDate = new Date(evt.date + "Z"); // FMP returns "2026-05-10 12:30:00" string, append Z or parse safely. Wait, FMP returns "2026-05-10 12:30:00" in EST. Let's assume GMT or use the exact string. FMP economic calendar returns date in UTC. E.g "2026-05-10 12:30:00" is actually UTC string but missing the Z. Let's append "Z".
+            const blackoutStart = new Date(new Date(evt.date + "Z").getTime() - 15 * 60 * 1000);
+            const blackoutEnd = new Date(new Date(evt.date + "Z").getTime() + 15 * 60 * 1000);
+            
+            await pool.query(`
+                INSERT INTO economic_events (
+                    id, event_name, event_date, impact, country, 
+                    actual, estimate, previous, blackout_start, blackout_end
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                ON CONFLICT (id) DO UPDATE SET
+                    actual = EXCLUDED.actual,
+                    estimate = EXCLUDED.estimate,
+                    previous = EXCLUDED.previous
+            `, [
+                eventId, evt.event, new Date(evt.date + "Z").toISOString(), evt.impact, evt.country,
+                evt.actual ?? null, evt.estimate ?? null, evt.previous ?? null,
+                blackoutStart.toISOString(), blackoutEnd.toISOString()
+            ]);
+            inserted++;
+        }
+        console.log(`[NYCommand] Synced ${inserted} High/Medium FMP Events.`);
+    } catch (e) {
+        console.error('[NYCommand] Failed to sync FMP events:', e);
+    }
+}
+
+function startFmpTickEngine() {
+    setInterval(async () => {
+        try {
+            const startRes = await pool.query(`
+                SELECT id, event_name, country FROM economic_events
+                WHERE blackout_start <= NOW() AND notified_start = FALSE AND is_archived = FALSE
+            `);
+            for (const row of startRes.rows) {
+                const flag = FLAG_MAP[row.country] || '🌐';
+                await pool.query('INSERT INTO notifications (event_type, message) VALUES ($1, $2)', ['fmp_alert', `${flag} Blackout STARTED: ${row.event_name}`]);
+                await pool.query('UPDATE economic_events SET notified_start = TRUE WHERE id = $1', [row.id]);
+            }
+            
+            const endRes = await pool.query(`
+                SELECT id, event_name, country FROM economic_events
+                WHERE blackout_end <= NOW() AND notified_end = FALSE AND is_archived = FALSE
+            `);
+            for (const row of endRes.rows) {
+                const flag = FLAG_MAP[row.country] || '🌐';
+                await pool.query('INSERT INTO notifications (event_type, message) VALUES ($1, $2)', ['fmp_clear', `${flag} Blackout ENDED: ${row.event_name}`]);
+                await pool.query('UPDATE economic_events SET notified_end = TRUE, is_archived = TRUE WHERE id = $1', [row.id]);
+            }
+        } catch (e) {
+            console.error('[NYCommand] FMP Tick Engine Error:', e);
+        }
+    }, 10000);
+}
+
+app.get('/api/auth/trading/events', async (req: any, res: any) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Unauthorized' });
+    }
+    try { 
+        jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+        const result = await pool.query(`
+            SELECT * FROM economic_events 
+            WHERE is_archived = FALSE AND event_date >= NOW() - INTERVAL '1 day'
+            ORDER BY event_date ASC
+        `);
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('[API ERROR] /trading/events GET:', err);
+        res.status(500).json({ error: 'Failed to fetch events' });
+    }
+});
+
 // ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req: any, res: any) => {
     res.status(200).json({ status: 'Auth API Online', timestamp: new Date().toISOString() });
@@ -1025,4 +1128,8 @@ app.listen(PORT, () => {
     console.log(`║  Neon DB: ${process.env.NEON_DATABASE_URL ? '✅ Connected' : '❌ MISSING URL'}                     ║`);
     console.log(`╚══════════════════════════════════════════════════════╝`);
     void startSsePoller();
+    
+    // Boot NYCommand Engine
+    void syncFmpEvents();
+    startFmpTickEngine();
 });
