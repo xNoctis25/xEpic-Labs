@@ -670,8 +670,23 @@ function updateRealtimeClock() {
         const timeVal = timeParts[0];
         const amPm = timeParts[1];
         
-        let dotHtml = '<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:rgba(255,255,255,0.3); margin-left:8px;"></span>';
-        if (window.epicEvents) {
+        if (!uiRealtimeClock.dataset.initialized) {
+            uiRealtimeClock.innerHTML = `
+                <div style="color: #e3e3e3; padding-bottom: 2px; display:flex; align-items:center;">
+                    <span id="uiClockDate"></span> 
+                    <span id="uiClockDot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:rgba(255,255,255,0.3); margin-left:8px; transition: background-color 0.5s ease, box-shadow 0.5s ease;"></span>
+                </div>
+                <div><span id="uiClockTime" style="color: #66fcf1;"></span> <span id="uiClockAmPm" style="color: rgba(255,255,255,0.6);"></span></div>
+            `;
+            uiRealtimeClock.dataset.initialized = 'true';
+        }
+        
+        document.getElementById('uiClockDate').textContent = `${parts[0]}, ${parts[1]}`;
+        document.getElementById('uiClockTime').textContent = timeVal;
+        document.getElementById('uiClockAmPm').textContent = `${amPm} ET`;
+        
+        const uiClockDot = document.getElementById('uiClockDot');
+        if (window.epicEvents && uiClockDot) {
             const today = new Date();
             const cellDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
             const nextDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
@@ -691,38 +706,21 @@ function updateRealtimeClock() {
                 
                 const colors = uniqueTypes.map(t => typeColors[t] || typeColors['default']);
                 
-                let animationStyle = '';
-                let dotColor = colors[0];
-                let dotShadow = `0 0 4px ${colors[0]}`;
+                // Cycle through colors using JS based on current seconds (switch every 2s)
+                const currentSecond = new Date().getSeconds();
+                const colorIndex = Math.floor(currentSecond / 2) % colors.length;
+                const activeColor = colors[colorIndex];
                 
-                if (colors.length > 1) {
-                    const animName = `clock-cycle-${uniqueTypes.join('-')}`;
-                    if (!document.getElementById(animName)) {
-                        const style = document.createElement('style');
-                        style.id = animName;
-                        let keyframes = `@keyframes ${animName} {\n`;
-                        const step = 100 / colors.length;
-                        colors.forEach((c, i) => {
-                            keyframes += `${i * step}% { background: ${c}; box-shadow: 0 0 4px ${c}; }\n`;
-                            keyframes += `${(i + 1) * step - 10}% { background: ${c}; box-shadow: 0 0 4px ${c}; }\n`;
-                        });
-                        keyframes += `100% { background: ${colors[0]}; box-shadow: 0 0 4px ${colors[0]}; }\n}`;
-                        style.textContent = keyframes;
-                        document.head.appendChild(style);
-                    }
-                    animationStyle = `animation: ${animName} ${colors.length * 1.5}s infinite;`;
-                }
-                
-                dotHtml = `<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:${dotColor}; box-shadow:${dotShadow}; margin-left:8px; ${animationStyle}"></span>`;
+                uiClockDot.style.backgroundColor = activeColor;
+                uiClockDot.style.boxShadow = `0 0 4px ${activeColor}80`;
+            } else {
+                uiClockDot.style.backgroundColor = 'rgba(255,255,255,0.3)';
+                uiClockDot.style.boxShadow = 'none';
             }
         }
-        
-        uiRealtimeClock.innerHTML = `
-            <div style="color: #e3e3e3; padding-bottom: 2px; display:flex; align-items:center;">${parts[0]}, ${parts[1]} ${dotHtml}</div>
-            <div><span style="color: #66fcf1;">${timeVal}</span> <span style="color: rgba(255,255,255,0.6);">${amPm} ET</span></div>
-        `;
     } else {
         uiRealtimeClock.innerHTML = formatted + " ET";
+        uiRealtimeClock.dataset.initialized = '';
     }
 }
 
