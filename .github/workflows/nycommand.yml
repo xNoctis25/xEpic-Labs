@@ -38,7 +38,7 @@ jobs:
             -e "ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key" \
             ./ root@${{ secrets.NYC_SERVER_IP }}:~/xEpic-Labs/
 
-      - name: Execute Node/PM2 Setup for Auth Service
+      - name: Execute Node/PM2 Setup for Core Service
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.NYC_SERVER_IP }}
@@ -53,10 +53,10 @@ jobs:
             if ! command -v pm2 &> /dev/null; then
               sudo npm install -g pm2
             fi
-            cd ~/xEpic-Labs/backend/Auth
+            cd ~/xEpic-Labs/backend/Core
             npm install
             npm run build
-            echo "🗽 [NEWYORKCOMMAND DO] Executing Auth Service Deployment..."
+            echo "🗽 [NEWYORKCOMMAND DO] Executing Core Service Deployment..."
             pm2 flush
-            pm2 restart auth-service --update-env || pm2 start dist/server.js --name "auth-service"
+            pm2 restart core-service --update-env || pm2 start dist/server.js --name "core-service"
             pm2 save
