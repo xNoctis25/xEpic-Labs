@@ -1742,12 +1742,8 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             // Switch to years mode
             overlayMode = 'years';
             renderOverlay();
-        } else if (overlayMode === 'years') {
-            // Switch to decades mode
-            overlayMode = 'decades';
-            renderOverlay();
         }
-        // If already in decades, we stay there (or go higher, but we stop at decades)
+        // If already in years, we stay there (disabled decades view per user request)
     });
 
     if (calTodayBtn) {
@@ -1768,7 +1764,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             if (calDecadeGrid) calDecadeGrid.classList.add('hidden');
             if (calMonthGrid) calMonthGrid.classList.remove('hidden');
             
-            overlayMonthYearText.textContent = overlayYear;
+            overlayMonthYearText.textContent = 'Month';
             calMonthGrid.innerHTML = '';
 
             monthNames.forEach((month, index) => {
@@ -1795,8 +1791,7 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
             
             // Generate a 12-year window based on the decade
             const decadeStart = Math.floor(overlayYear / 10) * 10;
-            // E.g., if year is 2026 -> decadeStart = 2020. We will show 2020-2031.
-            overlayMonthYearText.textContent = `${decadeStart} - ${decadeStart + 11}`;
+            overlayMonthYearText.textContent = 'Year';
             
             calYearGrid.innerHTML = '';
             for (let i = 0; i < 12; i++) {
@@ -1816,43 +1811,6 @@ if (overlayMonthYearText && calMonthPickerOverlay) {
                     renderOverlay();
                 });
                 calYearGrid.appendChild(btn);
-            }
-        } else if (overlayMode === 'decades') {
-            if (calMonthGrid) calMonthGrid.classList.add('hidden');
-            if (calYearGrid) calYearGrid.classList.add('hidden');
-            if (calDecadeGrid) calDecadeGrid.classList.remove('hidden');
-            
-            // Generate a 12-decade window (120 years).
-            // Calculate a century-aligned anchor to center around
-            // E.g., if year is 2026, let's show 1950 - 2069 (12 decades).
-            // A simple anchor: subtract 5 decades to keep the current year somewhat centered.
-            const decadeStart = Math.floor(overlayYear / 10) * 10;
-            const gridDecadeStart = decadeStart - 50; 
-            
-            overlayMonthYearText.textContent = `${gridDecadeStart} - ${gridDecadeStart + 119}`;
-            
-            const currentDecade = Math.floor(currentCalDate.getFullYear() / 10) * 10;
-            
-            calDecadeGrid.innerHTML = '';
-            for (let i = 0; i < 12; i++) {
-                const d = gridDecadeStart + (i * 10);
-                const btn = document.createElement('button');
-                btn.classList.add('epic-cal-month-btn');
-                
-                if (d === currentDecade) {
-                    btn.classList.add('selected');
-                }
-                
-                // Show as "1990", "2000", "2010"
-                btn.textContent = d;
-                
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    overlayYear = d; // Sets the focus to the start of that decade
-                    overlayMode = 'years';
-                    renderOverlay();
-                });
-                calDecadeGrid.appendChild(btn);
             }
         }
     }
