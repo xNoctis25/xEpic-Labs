@@ -123,6 +123,38 @@ pool.query(`
         read        BOOLEAN     DEFAULT FALSE,
         created_at  TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS system_jobs (
+        job_name VARCHAR(50) PRIMARY KEY,
+        last_run TIMESTAMPTZ,
+        status VARCHAR(20) DEFAULT 'Idle',
+        locked_by VARCHAR(50)
+    );
+
+    CREATE TABLE IF NOT EXISTS custom_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        event_type VARCHAR(50) DEFAULT 'default',
+        start_date TIMESTAMPTZ NOT NULL,
+        end_date TIMESTAMPTZ DEFAULT NULL,
+        recurrence VARCHAR(20) DEFAULT 'none',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS economic_events (
+        id VARCHAR(50) PRIMARY KEY,
+        event_name VARCHAR(255) NOT NULL,
+        event_date TIMESTAMPTZ NOT NULL,
+        impact VARCHAR(20) NOT NULL,
+        actual NUMERIC(10,4),
+        estimate NUMERIC(10,4),
+        previous NUMERIC(10,4),
+        blackout_start TIMESTAMPTZ,
+        blackout_end TIMESTAMPTZ,
+        is_archived BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+    );
 `).then(async () => {
     try {
         console.log('[DB] Seeding Topstep configurations...');
