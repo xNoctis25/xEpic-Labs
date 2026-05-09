@@ -1919,13 +1919,17 @@ function renderEvents() {
         
         holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
 
-        const todayAt1810 = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), startOfToday.getDate(), 18, 10, 0);
+        // 18:10 EDT is precisely 22:10 UTC
+        const targetDateStr = new Date().toISOString().split('T')[0] + 'T22:10:00Z';
+        const todayAt1810 = new Date(targetDateStr);
+        
         window.epicEvents.push({ 
             title: 'Core CPI m/m', 
+            id: 'sim_event_1810',
             date: todayAt1810, 
             type: 'fmp-yellow',
-            blackoutStart: new Date(todayAt1810.getTime() - 15 * 60 * 1000), // 17:55
-            blackoutEnd: new Date(todayAt1810.getTime() + 15 * 60 * 1000),   // 18:25
+            blackoutStart: new Date(todayAt1810.getTime() - 15 * 60 * 1000), // 17:55 EDT
+            blackoutEnd: new Date(todayAt1810.getTime() + 15 * 60 * 1000),   // 18:25 EDT
             isActive: false,
             notifiedStart: false,
             notifiedEnd: false
@@ -2091,8 +2095,9 @@ setInterval(() => {
             if (isInsideBlackout && !evt.isActive) {
                 evt.isActive = true;
                 uiChanged = true;
-                if (!evt.notifiedStart) {
+                if (!evt.notifiedStart && !localStorage.getItem(`fmp_sim_alert_${evt.id}`)) {
                     evt.notifiedStart = true;
+                    localStorage.setItem(`fmp_sim_alert_${evt.id}`, 'true');
                     auth.request('/trading/notifications', {
                         method: 'POST',
                         body: JSON.stringify({ event_type: 'fmp_alert', message: `Blackout Period STARTED for ${evt.title}` })
@@ -2101,8 +2106,9 @@ setInterval(() => {
             } else if (isPastBlackout && evt.isActive) {
                 evt.isActive = false;
                 uiChanged = true;
-                if (!evt.notifiedEnd && evt.notifiedStart) {
+                if (!evt.notifiedEnd && evt.notifiedStart && !localStorage.getItem(`fmp_sim_clear_${evt.id}`)) {
                     evt.notifiedEnd = true;
+                    localStorage.setItem(`fmp_sim_clear_${evt.id}`, 'true');
                     auth.request('/trading/notifications', {
                         method: 'POST',
                         body: JSON.stringify({ event_type: 'fmp_clear', message: `Blackout Period ENDED for ${evt.title}` })
