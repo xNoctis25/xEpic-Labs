@@ -482,52 +482,6 @@ if (changePwdForm) {
     });
 }
 
-// ── GLOBAL RISK TOGGLE ────────────────────────────────────────────────────────
-const globalRiskToggleBtn = document.getElementById('globalRiskToggleBtn');
-
-function updateGlobalRiskToggle(riskProfile) {
-    if (!globalRiskToggleBtn) return;
-    globalRiskToggleBtn.style.display = 'flex';
-    
-    if (riskProfile === 'SAFE') {
-        globalRiskToggleBtn.textContent = 'Risk: SAFE 🛡️';
-        globalRiskToggleBtn.style.background = 'rgba(52, 211, 153, 0.2)';
-        globalRiskToggleBtn.style.color = '#34d399';
-        globalRiskToggleBtn.style.borderColor = '#34d399';
-    } else {
-        globalRiskToggleBtn.textContent = 'Risk: MAX 🚀';
-        globalRiskToggleBtn.style.background = 'rgba(248, 113, 113, 0.2)';
-        globalRiskToggleBtn.style.color = '#f87171';
-        globalRiskToggleBtn.style.borderColor = '#f87171';
-    }
-}
-
-if (globalRiskToggleBtn) {
-    globalRiskToggleBtn.addEventListener('click', async (e) => {
-        e.preventDefault();
-        const currentRisk = localStorage.getItem('globalRiskProfile') || 'SAFE';
-        const newRisk = currentRisk === 'SAFE' ? 'AGGRESSIVE' : 'SAFE';
-        const originalText = globalRiskToggleBtn.textContent;
-        globalRiskToggleBtn.textContent = 'Updating...';
-        globalRiskToggleBtn.disabled = true;
-
-        try {
-            await auth.request('/trading/risk', {
-                method: 'PATCH',
-                body: JSON.stringify({ risk_profile: newRisk })
-            });
-            localStorage.setItem('globalRiskProfile', newRisk);
-            updateGlobalRiskToggle(newRisk);
-            await loadPropAccounts(); // Refresh table
-        } catch (err) {
-            console.error('Failed to toggle risk:', err);
-            globalRiskToggleBtn.textContent = originalText;
-            alert(err.message || 'Failed to update risk profile.');
-        } finally {
-            globalRiskToggleBtn.disabled = false;
-        }
-    });
-}
 
 // ── LIVE MARKET CLOCK ─────────────────────────────────────────────────────────
 function updateMarketClock() {
@@ -926,12 +880,8 @@ async function loadPropAccounts() {
         if (!accounts || accounts.length === 0) {
             evalList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts found.</td></tr>';
             fundedList.innerHTML = '<tr><td colspan="5" style="padding: 15px; text-align: center; color: var(--text-muted);">No funded accounts found.</td></tr>';
-            updateGlobalRiskToggle(localStorage.getItem('globalRiskProfile') || 'SAFE');
             return;
         }
-
-        let firstRisk = null;
-
 
         accounts.forEach(acc => {
             // ── Core calculations ─────────────────────────────────────────────
@@ -1001,11 +951,6 @@ async function loadPropAccounts() {
             if (acc.phase === 'EVAL') evalHtml += rowHtml;
             else fundedHtml += rowHtml;
 
-            if (firstRisk === null) {
-                firstRisk = acc.risk_profile;
-                localStorage.setItem('globalRiskProfile', firstRisk);
-                updateGlobalRiskToggle(firstRisk);
-            }
         });
 
         evalList.innerHTML   = evalHtml   || '<tr><td colspan="8" style="padding: 15px; text-align: center; color: var(--text-muted);">No evaluation accounts.</td></tr>';
@@ -1567,7 +1512,6 @@ if (propForm) {
                     account_name: document.getElementById('propAccountName').value,
                     firm: 'Topstep',
                     phase: document.getElementById('propPhaseValue').value,
-                    risk_profile: localStorage.getItem('globalRiskProfile') || 'SAFE',
                     account_size: Number(document.getElementById('propSize').value)
                 })
             });
