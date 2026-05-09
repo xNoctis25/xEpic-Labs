@@ -1998,7 +1998,7 @@ async function renderEvents() {
                 
                 const dots = paginatorEl.querySelectorAll('.epic-page-dot');
                 dots.forEach(dot => {
-                    dot.addEventListener('click', (e) => {
+                    dot.addEventListener('mouseenter', (e) => {
                         const targetPage = parseInt(e.target.getAttribute('data-page'));
                         if (targetPage !== state.page) {
                             state.page = targetPage;
@@ -2022,7 +2022,7 @@ async function renderEvents() {
     const tabContents = document.querySelectorAll('.epic-events-tab-content');
     
     tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
+        tab.addEventListener('mouseenter', () => {
             tabs.forEach(t => t.classList.remove('active'));
             tabContents.forEach(c => c.classList.remove('active'));
             
