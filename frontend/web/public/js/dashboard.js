@@ -1142,7 +1142,7 @@ if (editPropAccountForm) {
 // 🔔 NOTIFICATION CENTER
 // ─────────────────────────────────────────────────────────────────────────────
 (function initNotificationCenter() {
-    const bellBtn     = document.getElementById('notifBellBtn');
+    const bellWrap    = document.getElementById('notifBellWrap');
     const dropdown    = document.getElementById('notifDropdown');
     const badge       = document.getElementById('notifBadge');
     const list        = document.getElementById('notifList');
@@ -1157,7 +1157,7 @@ if (editPropAccountForm) {
     const historyMark = document.getElementById('notifHistoryMarkAll');
     const historyClose= document.getElementById('notifHistoryClose');
 
-    if (!bellBtn || !dropdown) return;
+    if (!bellWrap || !dropdown) return;
 
     let currentPage = 1;
     const PAGE_LIMIT = 20;
@@ -1271,14 +1271,20 @@ if (editPropAccountForm) {
         });
     }
 
-    // ── Bell click — toggle dropdown ──────────────────────────────────────
-    bellBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const isOpen = dropdown.classList.contains('open');
-        dropdown.classList.toggle('open', !isOpen);
-        if (!isOpen) {
-            await loadDropdown(1);  // just shows list — user marks manually
-        }
+    // ── Bell hover — load dropdown ────────────────────────────────────────
+    let hoverTimeout;
+    bellWrap.addEventListener('mouseenter', async () => {
+        // Clear any closing timeout
+        if (hoverTimeout) clearTimeout(hoverTimeout);
+        
+        dropdown.classList.add('open'); // Fallback JS state
+        await loadDropdown(1);
+    });
+    
+    bellWrap.addEventListener('mouseleave', () => {
+        hoverTimeout = setTimeout(() => {
+            dropdown.classList.remove('open');
+        }, 150); // Small delay to prevent flickering
     });
 
     // ── Mark all read button (dropdown header) — reload list after ────────

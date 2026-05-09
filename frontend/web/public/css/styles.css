@@ -875,15 +875,33 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(102,252,241,0.05);
     backdrop-filter: blur(20px);
     z-index: 9000;
-    display: none;
+    display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: notifSlideIn 0.18s ease;
+    
+    /* Hover Dropdown Logic */
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.25s cubic-bezier(0.25, 1, 0.5, 1);
 }
-.notif-dropdown.open { display: flex; }
-@keyframes notifSlideIn {
-    from { opacity: 0; transform: translateY(-8px); }
-    to   { opacity: 1; transform: translateY(0); }
+
+/* Invisible bridge */
+.notif-bell-wrap::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 60px;
+    height: 15px;
+    z-index: 8999;
+}
+
+.notif-bell-wrap:hover .notif-dropdown,
+.notif-dropdown.open { 
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
 }
 
 .notif-header {
