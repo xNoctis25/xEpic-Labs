@@ -1958,6 +1958,7 @@ async function renderEvents() {
             titleSpan.style.display = 'flex';
             titleSpan.style.alignItems = 'center';
             titleSpan.style.gap = '6px';
+            titleSpan.style.minWidth = '0';
             
             if (evt.countryCode) {
                 const flagImg = document.createElement('img');
@@ -1966,11 +1967,15 @@ async function renderEvents() {
                 flagImg.style.height = '12px';
                 flagImg.style.objectFit = 'cover';
                 flagImg.style.borderRadius = '2px';
+                flagImg.style.flexShrink = '0';
                 titleSpan.appendChild(flagImg);
             }
             
             const textSpan = document.createElement('span');
             textSpan.textContent = evt.title;
+            textSpan.style.whiteSpace = 'nowrap';
+            textSpan.style.overflow = 'hidden';
+            textSpan.style.textOverflow = 'ellipsis';
             titleSpan.appendChild(textSpan);
             
             li.appendChild(timeSpan);
