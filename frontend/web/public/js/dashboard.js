@@ -1973,6 +1973,7 @@ async function renderEvents() {
             
             const textSpan = document.createElement('span');
             textSpan.textContent = evt.title;
+            textSpan.title = evt.title; // Native browser tooltip on hover
             textSpan.style.whiteSpace = 'nowrap';
             textSpan.style.overflow = 'hidden';
             textSpan.style.textOverflow = 'ellipsis';
