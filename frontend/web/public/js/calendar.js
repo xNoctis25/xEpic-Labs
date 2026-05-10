@@ -59,8 +59,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const fmpData = fmpRes.ok ? await fmpRes.json() : [];
             const parsedFMP = fmpData.filter(e => e.impact === 'High' || e.impact === 'Medium').map(e => ({
                 id: e.id || Math.random().toString(),
-                title: e.event,
-                date: new Date(e.date),
+                title: e.event_name || e.event,
+                date: new Date(e.event_date || e.date),
                 type: e.impact === 'High' ? 'fmp-red' : 'fmp-yellow',
                 isCustom: false
             }));
@@ -259,6 +259,86 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Error deleting event:', err);
         }
     }
+
+    // ── LOGOUT & REAL-TIME CLOCK ──────────────────────────────
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('jwt_token');
+            sessionStorage.removeItem('jwt_token');
+            window.location.href = '/index.html';
+        });
+    }
+
+    function updateRealtimeClock() {
+        const uiRealtimeClock = document.getElementById('uiRealtimeClock');
+        if (!uiRealtimeClock) return;
+
+        const options = {
+            timeZone: 'America/New_York',
+            weekday: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+            month: 'short',
+            day: '2-digit'
+        };
+        
+        const formatter = new Intl.DateTimeFormat('en-US', options);
+        const formatted = formatter.format(new Date());
+        const parts = formatted.split(', ');
+        
+        if (parts.length === 3) {
+            const timeParts = parts[2].split(' ');
+            const timeVal = timeParts[0];
+            const amPm = timeParts[1];
+            
+            if (!uiRealtimeClock.dataset.initialized) {
+                uiRealtimeClock.innerHTML = `
+                    <div style="color: #e3e3e3; padding-bottom: 2px; display:flex; align-items:center;">
+                        <span id="uiClockDate"></span> 
+                        <span id="uiClockDot" style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:rgba(255,255,255,0.3); margin-left:8px; transition: background-color 0.5s ease, box-shadow 0.5s ease;"></span>
+                    </div>
+                    <div><span id="uiClockTime" style="color: #66fcf1;"></span> <span id="uiClockAmPm" style="color: rgba(255,255,255,0.6);"></span></div>
+                `;
+                uiRealtimeClock.dataset.initialized = 'true';
+            }
+            
+            document.getElementById('uiClockDate').textContent = `${parts[0]}, ${parts[1]}`;
+            document.getElementById('uiClockTime').textContent = timeVal;
+            document.getElementById('uiClockAmPm').textContent = `${amPm} ET`;
+            
+            const uiClockDot = document.getElementById('uiClockDot');
+            if (events && events.length > 0 && uiClockDot) {
+                const today = new Date();
+                const cellDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const nextDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+                const dayEvents = events.filter(e => e.date >= cellDate && e.date < nextDay);
+                
+                if (dayEvents.length > 0) {
+                    const uniqueTypes = Array.from(new Set(dayEvents.map(e => e.type || 'default')));
+                    const colors = uniqueTypes.map(t => CATEGORY_MAP[t] ? CATEGORY_MAP[t].color : '#f4b41a');
+                    
+                    const currentSecond = new Date().getSeconds();
+                    const colorIndex = Math.floor(currentSecond / 2) % colors.length;
+                    const activeColor = colors[colorIndex];
+                    
+                    uiClockDot.style.backgroundColor = activeColor;
+                    uiClockDot.style.boxShadow = `0 0 4px ${activeColor}80`;
+                } else {
+                    uiClockDot.style.backgroundColor = 'rgba(255,255,255,0.3)';
+                    uiClockDot.style.boxShadow = 'none';
+                }
+            }
+        } else {
+            uiRealtimeClock.innerHTML = formatted + " ET";
+            uiRealtimeClock.dataset.initialized = '';
+        }
+    }
+
+    setInterval(updateRealtimeClock, 1000);
 
     // Init
     loadAllEvents();
