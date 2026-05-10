@@ -2458,25 +2458,60 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     padding: 0;
     overflow: hidden;
 }
-.cal-select {
-    background: transparent;
-    border: none;
+/* Custom Dropdown Styling */
+.custom-dropdown {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+}
+.dropdown-trigger {
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background-color 0.2s, color 0.2s;
     color: #fff;
+    user-select: none;
+}
+.dropdown-trigger:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: rgba(18, 20, 24, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 8px 0;
+    min-width: 140px;
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, transform 0.2s, visibility 0.2s;
+    z-index: 100;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    max-height: 300px;
+    overflow-y: auto;
+}
+.custom-dropdown.active .dropdown-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(4px);
+}
+.dropdown-item {
+    padding: 8px 16px;
+    color: #a0aab5;
     font-size: 1.1rem;
     font-weight: 500;
-    cursor: pointer;
-    outline: none;
-    padding: 0 4px;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
+    transition: background-color 0.2s, color 0.2s;
     text-align: center;
+    user-select: none;
 }
-.cal-select option {
-    background: #121418;
+.dropdown-item:hover, .dropdown-item.selected {
+    background: rgba(255, 255, 255, 0.05);
     color: #fff;
-    font-size: 1rem;
 }
+
 .full-calendar-header {
     display: flex;
     justify-content: space-between;

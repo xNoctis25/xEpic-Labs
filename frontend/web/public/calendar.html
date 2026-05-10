@@ -166,12 +166,18 @@
         <div class="glass-panel main-content">
             <div class="full-calendar-container">
                 <div class="full-calendar-header" style="position: relative; justify-content: center; height: 40px; margin-bottom: 32px; display: flex; align-items: center;">
-                    <div class="cal-nav-group" style="margin: 0 auto;">
-                        <button id="calPrevMonth" class="icon-btn">&larr;</button>
-                        <select id="calMonthSelect" class="cal-select"></select>
-                        <select id="calYearSelect" class="cal-select"></select>
-                        <button id="calNextMonth" class="icon-btn">&rarr;</button>
-                        <button id="calTodayFullBtn" class="epic-btn secondary hidden">Today</button>
+                    <div class="cal-nav-group" style="margin: 0 auto; background: transparent; border: none; font-size: 1.5rem; font-weight: 600; gap: 8px; padding: 0;">
+                        <!-- Custom Month Dropdown -->
+                        <div class="custom-dropdown" id="monthDropdown">
+                            <div class="dropdown-trigger" id="monthDropdownTrigger">May</div>
+                            <div class="dropdown-menu" id="monthDropdownMenu"></div>
+                        </div>
+
+                        <!-- Custom Year Dropdown -->
+                        <div class="custom-dropdown" id="yearDropdown">
+                            <div class="dropdown-trigger" id="yearDropdownTrigger">2026</div>
+                            <div class="dropdown-menu" id="yearDropdownMenu"></div>
+                        </div>
                     </div>
                     <button class="epic-btn primary" id="addEventBtn" style="position: absolute; right: 0;">+ Add Event</button>
                 </div>
@@ -227,6 +233,6 @@
         </div>
     </div>
 
-    <script src="/js/calendar.js?v=1.4"></script>
+    <script src="/js/calendar.js?v=1.5"></script>
 </body>
 </html>

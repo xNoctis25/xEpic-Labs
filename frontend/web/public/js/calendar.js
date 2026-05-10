@@ -15,10 +15,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // DOM Elements
     const grid = document.getElementById('fullCalendarGrid');
-    const monthSelect = document.getElementById('calMonthSelect');
-    const yearSelect = document.getElementById('calYearSelect');
-    const prevBtn = document.getElementById('calPrevMonth');
-    const nextBtn = document.getElementById('calNextMonth');
+    const monthTrigger = document.getElementById('monthDropdownTrigger');
+    const monthMenu = document.getElementById('monthDropdownMenu');
+    const yearTrigger = document.getElementById('yearDropdownTrigger');
+    const yearMenu = document.getElementById('yearDropdownMenu');
+    const monthDropdown = document.getElementById('monthDropdown');
+    const yearDropdown = document.getElementById('yearDropdown');
     const todayBtn = document.getElementById('calTodayFullBtn');
     
     // Modal Elements
@@ -92,9 +94,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         grid.innerHTML = '';
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-        monthSelect.value = month;
-        yearSelect.value = year;
+        monthTrigger.textContent = months[month];
+        yearTrigger.textContent = year;
+
+        // Highlight selected items
+        document.querySelectorAll('.dropdown-item').forEach(el => el.classList.remove('selected'));
+        const mItem = document.querySelector(`.dropdown-item[data-type="month"][data-value="${month}"]`);
+        if (mItem) mItem.classList.add('selected');
+        const yItem = document.querySelector(`.dropdown-item[data-type="year"][data-value="${year}"]`);
+        if (yItem) yItem.classList.add('selected');
 
         const firstDayIndex = new Date(year, month, 1).getDay();
         const lastDate = new Date(year, month + 1, 0).getDate();
@@ -196,16 +206,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // ── NAVIGATION ─────────────────────────────────────────────
-    prevBtn.addEventListener('click', () => {
-        currentDate.setMonth(currentDate.getMonth() - 1);
-        renderCalendar();
-    });
-
-    nextBtn.addEventListener('click', () => {
-        currentDate.setMonth(currentDate.getMonth() + 1);
-        renderCalendar();
-    });
-
     if(todayBtn) {
         todayBtn.addEventListener('click', () => {
             currentDate = new Date();
@@ -214,14 +214,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Dropdown Handlers
-    monthSelect.addEventListener('change', (e) => {
-        currentDate.setMonth(parseInt(e.target.value));
-        renderCalendar();
+    function closeDropdowns(e) {
+        if (!monthDropdown.contains(e.target)) monthDropdown.classList.remove('active');
+        if (!yearDropdown.contains(e.target)) yearDropdown.classList.remove('active');
+    }
+    
+    document.addEventListener('click', closeDropdowns);
+
+    monthTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        yearDropdown.classList.remove('active');
+        monthDropdown.classList.toggle('active');
     });
 
-    yearSelect.addEventListener('change', (e) => {
-        currentDate.setFullYear(parseInt(e.target.value));
-        renderCalendar();
+    yearTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        monthDropdown.classList.remove('active');
+        yearDropdown.classList.toggle('active');
     });
 
     // ── MODAL & FORMS ─────────────────────────────────────────
@@ -355,21 +364,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setInterval(updateRealtimeClock, 1000);
 
-    // Initialize Select Dropdowns
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    months.forEach((m, i) => {
-        const opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = m;
-        monthSelect.appendChild(opt);
+    // Initialize Custom Dropdowns
+    const monthsList = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    monthsList.forEach((m, i) => {
+        const div = document.createElement('div');
+        div.className = 'dropdown-item';
+        div.dataset.type = 'month';
+        div.dataset.value = i;
+        div.textContent = m;
+        div.addEventListener('click', () => {
+            currentDate.setMonth(i);
+            renderCalendar();
+            monthDropdown.classList.remove('active');
+        });
+        monthMenu.appendChild(div);
     });
 
     const currYear = new Date().getFullYear();
     for (let y = currYear - 5; y <= currYear + 5; y++) {
-        const opt = document.createElement('option');
-        opt.value = y;
-        opt.textContent = y;
-        yearSelect.appendChild(opt);
+        const div = document.createElement('div');
+        div.className = 'dropdown-item';
+        div.dataset.type = 'year';
+        div.dataset.value = y;
+        div.textContent = y;
+        div.addEventListener('click', () => {
+            currentDate.setFullYear(y);
+            renderCalendar();
+            yearDropdown.classList.remove('active');
+        });
+        yearMenu.appendChild(div);
     }
 
     // Init
