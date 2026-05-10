@@ -1843,19 +1843,32 @@ async function renderEvents() {
     window.epicEvents = window.epicEvents || [];
     
     if (window.epicEvents.length === 0) {
-        // Hardcoded 2026 US Federal Holidays
+        // Hardcoded 2026 US Federal and Standard Holidays
         const holidays2026 = [
-            { date: new Date(2026, 0, 1), title: "New Year's Day" },
-            { date: new Date(2026, 0, 19), title: "MLK Jr. Day" },
-            { date: new Date(2026, 1, 16), title: "Presidents' Day" },
-            { date: new Date(2026, 4, 25), title: "Memorial Day" },
-            { date: new Date(2026, 5, 19), title: "Juneteenth" },
-            { date: new Date(2026, 6, 3), title: "Independence Day (Observed)" },
-            { date: new Date(2026, 8, 7), title: "Labor Day" },
-            { date: new Date(2026, 9, 12), title: "Columbus Day" },
-            { date: new Date(2026, 10, 11), title: "Veterans Day" },
-            { date: new Date(2026, 10, 26), title: "Thanksgiving Day" },
-            { date: new Date(2026, 11, 25), title: "Christmas Day" }
+            // Federal Holidays
+            { date: new Date(2026, 0, 1), title: "New Year's Day - Federal Holiday" },
+            { date: new Date(2026, 0, 19), title: "MLK Jr. Day - Federal Holiday" },
+            { date: new Date(2026, 1, 16), title: "Presidents' Day - Federal Holiday" },
+            { date: new Date(2026, 4, 25), title: "Memorial Day - Federal Holiday" },
+            { date: new Date(2026, 5, 19), title: "Juneteenth - Federal Holiday" },
+            { date: new Date(2026, 6, 3), title: "Independence Day (Observed) - Federal Holiday" },
+            { date: new Date(2026, 8, 7), title: "Labor Day - Federal Holiday" },
+            { date: new Date(2026, 9, 12), title: "Columbus Day - Federal Holiday" },
+            { date: new Date(2026, 10, 11), title: "Veterans Day - Federal Holiday" },
+            { date: new Date(2026, 10, 26), title: "Thanksgiving Day - Federal Holiday" },
+            { date: new Date(2026, 11, 25), title: "Christmas Day - Federal Holiday" },
+            
+            // Standard / Cultural Holidays
+            { date: new Date(2026, 1, 14), title: "Valentine's Day - Standard" },
+            { date: new Date(2026, 2, 17), title: "St. Patrick's Day - Standard" },
+            { date: new Date(2026, 3, 5), title: "Easter Sunday - Standard" },
+            { date: new Date(2026, 4, 5), title: "Cinco de Mayo - Standard" },
+            { date: new Date(2026, 4, 10), title: "Mother's Day - Standard" },
+            { date: new Date(2026, 5, 21), title: "Father's Day - Standard" },
+            { date: new Date(2026, 9, 31), title: "Halloween - Standard" },
+            { date: new Date(2026, 10, 27), title: "Black Friday - Standard" },
+            { date: new Date(2026, 11, 24), title: "Christmas Eve - Standard" },
+            { date: new Date(2026, 11, 31), title: "New Year's Eve - Standard" }
         ];
         
         holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
