@@ -1880,8 +1880,50 @@ async function renderEvents() {
             console.error('Failed to fetch real FMP events:', e);
         }
         
-        // Sort events chronologically
-        window.epicEvents.sort((a, b) => a.date - b.date);
+        // Sort events chronologically and hierarchically
+        window.epicEvents.sort((a, b) => {
+            // 1. Sort by Calendar Date (Ignore Time for a moment)
+            const dateA = new Date(a.date.getFullYear(), a.date.getMonth(), a.date.getDate()).getTime();
+            const dateB = new Date(b.date.getFullYear(), b.date.getMonth(), b.date.getDate()).getTime();
+            if (dateA !== dateB) return dateA - dateB;
+
+            // Define hierarchy weights
+            const typeWeight = {
+                'birthday': 6,
+                'holiday': 5,
+                'bill': 4,
+                'fmp-red': 3,
+                'fmp-yellow': 2,
+                'default': 1
+            };
+            const weightA = typeWeight[a.type] || 1;
+            const weightB = typeWeight[b.type] || 1;
+            
+            // 2. Are they All-Day events?
+            const isAllDayA = ['birthday', 'holiday', 'bill'].includes(a.type);
+            const isAllDayB = ['birthday', 'holiday', 'bill'].includes(b.type);
+            
+            if (isAllDayA && !isAllDayB) return -1; // All day events float to the top of the day
+            if (!isAllDayA && isAllDayB) return 1;
+            
+            if (isAllDayA && isAllDayB) {
+                // Both are all-day, sort by weight (Birthday > Holiday > Bill)
+                if (weightA !== weightB) return weightB - weightA;
+                // If same exact type, sort alphabetical
+                return a.title.localeCompare(b.title);
+            }
+
+            // 3. Both are time-based, sort by exact time
+            const timeA = a.date.getTime();
+            const timeB = b.date.getTime();
+            if (timeA !== timeB) return timeA - timeB;
+
+            // 4. Same exact time! Sort by Importance (High Impact > Low Impact)
+            if (weightA !== weightB) return weightB - weightA;
+
+            // 5. Same exact time AND same importance! Sort alphabetically
+            return a.title.localeCompare(b.title);
+        });
     }
     
     // Categorize
