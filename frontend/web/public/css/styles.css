@@ -2453,11 +2453,29 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     display: flex;
     flex-direction: column;
     flex-grow: 1;
-    background: rgba(18, 20, 24, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    padding: 24px;
+    background: transparent;
+    border: none;
+    padding: 0;
     overflow: hidden;
+}
+.cal-select {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    padding: 0 4px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    text-align: center;
+}
+.cal-select option {
+    background: #121418;
+    color: #fff;
+    font-size: 1rem;
 }
 .full-calendar-header {
     display: flex;

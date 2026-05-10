@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // DOM Elements
     const grid = document.getElementById('fullCalendarGrid');
-    const monthYearTitle = document.getElementById('calCurrentMonthYear');
+    const monthSelect = document.getElementById('calMonthSelect');
+    const yearSelect = document.getElementById('calYearSelect');
     const prevBtn = document.getElementById('calPrevMonth');
     const nextBtn = document.getElementById('calNextMonth');
     const todayBtn = document.getElementById('calTodayFullBtn');
@@ -92,7 +93,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
 
-        monthYearTitle.textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        monthSelect.value = month;
+        yearSelect.value = year;
 
         const firstDayIndex = new Date(year, month, 1).getDay();
         const lastDate = new Date(year, month + 1, 0).getDate();
@@ -204,8 +206,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderCalendar();
     });
 
-    todayBtn.addEventListener('click', () => {
-        currentDate = new Date();
+    if(todayBtn) {
+        todayBtn.addEventListener('click', () => {
+            currentDate = new Date();
+            renderCalendar();
+        });
+    }
+
+    // Dropdown Handlers
+    monthSelect.addEventListener('change', (e) => {
+        currentDate.setMonth(parseInt(e.target.value));
+        renderCalendar();
+    });
+
+    yearSelect.addEventListener('change', (e) => {
+        currentDate.setFullYear(parseInt(e.target.value));
         renderCalendar();
     });
 
@@ -339,6 +354,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     setInterval(updateRealtimeClock, 1000);
+
+    // Initialize Select Dropdowns
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    months.forEach((m, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = m;
+        monthSelect.appendChild(opt);
+    });
+
+    const currYear = new Date().getFullYear();
+    for (let y = currYear - 5; y <= currYear + 5; y++) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        yearSelect.appendChild(opt);
+    }
 
     // Init
     loadAllEvents();
