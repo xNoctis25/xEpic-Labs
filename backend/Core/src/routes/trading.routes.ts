@@ -161,5 +161,42 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
+// ── CUSTOM USER EVENTS (CALENDAR) ─────────────────────────────────────────────
+router.get('/custom-events', authenticateJWT, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM custom_events ORDER BY event_date ASC');
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('[API ERROR] /custom-events GET:', err);
+        res.status(500).json({ error: 'Failed to fetch custom events' });
+    }
+});
+
+router.post('/custom-events', authenticateJWT, async (req, res) => {
+    try {
+        const { title, event_date, event_type } = req.body;
+        if (!title || !event_date || !event_type) return res.status(400).json({ error: 'Missing required fields' });
+        
+        const result = await pool.query(
+            'INSERT INTO custom_events (title, event_date, event_type) VALUES ($1, $2, $3) RETURNING *',
+            [title, event_date, event_type]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('[API ERROR] /custom-events POST:', err);
+        res.status(500).json({ error: 'Failed to create custom event' });
+    }
+});
+
+router.delete('/custom-events/:id', authenticateJWT, async (req, res) => {
+    try {
+        const { id } = req.params;
+        await pool.query('DELETE FROM custom_events WHERE id = $1', [id]);
+        res.status(200).json({ message: 'Event deleted' });
+    } catch (err) {
+        console.error('[API ERROR] /custom-events DELETE:', err);
+        res.status(500).json({ error: 'Failed to delete custom event' });
+    }
+});
 
 export default router;

@@ -649,12 +649,15 @@ function updateRealtimeClock() {
             if (dayEvents.length > 0) {
                 const uniqueTypes = Array.from(new Set(dayEvents.map(e => e.type || 'default')));
                 const typeColors = {
-                    'holiday': '#d500f9',
-                    'birthday': '#00e676',
-                    'bill': '#ff9100',
-                    'news': '#ff1744',
-                    'fmp-red': '#ff1744',
+                    'holiday': '#aa00ff',
+                    'birthday': '#00e5ff',
+                    'expense': '#1de9b6',
+                    'income': '#39ff14',
+                    'trade': '#2979ff',
+                    'personal': '#f900a6',
+                    'rollover': '#ffffff',
                     'fmp-yellow': '#f4b41a',
+                    'fmp-red': '#ff1744',
                     'default': '#f4b41a'
                 };
                 
@@ -1635,12 +1638,16 @@ function renderCalendar(dateToRender) {
             if (dayEvents.length > 0) {
                 const uniqueTypes = new Set(dayEvents.map(e => e.type || 'default'));
                 const typeColors = {
-                    'holiday': '#d500f9',
-                    'birthday': '#00e676',
-                    'bill': '#ff9100',
-                    'fmp-yellow': '#ffd600',
-                    'fmp-red': '#ff4444',
-                    'default': '#66fcf1'
+                    'holiday': '#aa00ff',
+                    'birthday': '#00e5ff',
+                    'expense': '#1de9b6',
+                    'income': '#39ff14',
+                    'trade': '#2979ff',
+                    'personal': '#f900a6',
+                    'rollover': '#ffffff',
+                    'fmp-yellow': '#f4b41a',
+                    'fmp-red': '#ff1744',
+                    'default': '#f4b41a'
                 };
                 
                 const uniqueTypesArray = Array.from(uniqueTypes);
@@ -1888,9 +1895,29 @@ async function renderEvents() {
                         isArchived: evt.is_archived
                     });
                 });
+                const customEmojis = {
+                    'income': '💵',
+                    'birthday': '🎂',
+                    'expense': '💳',
+                    'trade': '📈',
+                    'personal': '🚩',
+                    'rollover': '🔄'
+                };
+                
+                const customData = await auth.request('/trading/custom-events');
+                customData.forEach(evt => {
+                    const emj = customEmojis[evt.event_type] || '';
+                    window.epicEvents.push({
+                        id: evt.id,
+                        title: emj ? `${emj} ${evt.title}` : evt.title,
+                        date: new Date(evt.event_date),
+                        type: evt.event_type,
+                        isCustom: true
+                    });
+                });
             }
         } catch (e) {
-            console.error('Failed to fetch real FMP events:', e);
+            console.error('Failed to fetch real FMP/Custom events:', e);
         }
         
         // Sort events chronologically and hierarchically

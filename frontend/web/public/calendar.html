@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>xEpic Labs &mdash; Calendar Manager</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/css/styles.css?v=2.1">
+</head>
+<body class="dashboard-body">
+
+    <header class="global-top-header">
+        <div class="brand-area">
+            <div class="logo-mark">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" style="width:40px; height:40px;">
+                  <defs>
+                    <linearGradient id="epicMetalDash" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stop-color="#ffffff" />
+                      <stop offset="40%" stop-color="#d1d8e0" />
+                      <stop offset="100%" stop-color="#7a8594" />
+                    </linearGradient>
+                    <filter id="neonGlowDash" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="3" result="blur" />
+                      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                    </filter>
+                  </defs>
+                  <g>
+                    <path d="M 25 20 L 45 20 L 45 100 L 25 100 Z" fill="url(#epicMetalDash)" />
+                    <path d="M 45 20 L 100 20 L 85 38 L 45 38 Z" fill="url(#epicMetalDash)" />
+                    <path d="M 45 100 L 100 100 L 85 82 L 45 82 Z" fill="url(#epicMetalDash)" />
+                    <path d="M 65 42 Q 65 60 42 60 Q 65 60 65 78 Q 65 60 88 60 Q 65 60 65 42 Z" fill="#ffffff" filter="url(#neonGlowDash)" />
+                  </g>
+                </svg>
+            </div>
+            <div class="brand-text">
+                <h1>xEpic Labs</h1>
+                <p class="slogan">The Future of Finance</p>
+            </div>
+        </div>
+
+        <div class="system-status-pills">
+            <div class="status-pill"><span class="status-label" id="uiSessionLabel">Session: New York</span><span class="dot green" id="uiSessionDot"></span></div>
+            <div class="status-pill"><span class="status-label" id="uiDbLabel">Neon DB</span><span class="dot green" id="uiDbDot"></span></div>
+            <span class="notif-divider">|</span>
+            <div class="notif-bell-wrap" id="notifBellWrap">
+                <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span class="notif-badge" id="notifBadge" style="display:none;">0</span>
+                </button>
+                <!-- Notification Dropdown -->
+                <div class="notif-dropdown" id="notifDropdown">
+                    <div class="notif-header">
+                        <span class="notif-title">🔔 Notifications</span>
+                        <button class="notif-mark-read" id="notifMarkRead">Mark all read</button>
+                    </div>
+                    <div class="notif-list" id="notifList">
+                        <div class="notif-empty">No notifications yet.</div>
+                    </div>
+                    <div class="notif-footer">
+                        <div class="notif-pagination" id="notifPagination"></div>
+                        <a href="#" class="notif-history-link" id="notifHistoryLink">View All History</a>
+                    </div>
+                </div>
+            </div>
+<div class="clock-widget-wrap" id="clockWidgetWrap">
+                <div id="uiRealtimeClock" style="color: rgba(255, 255, 255, 0.6); font-size: 0.85rem; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; line-height: 1.3;">--:--:-- ET</div>
+                <div class="epic-calendar-wrapper">
+                    <!-- Events Panel -->
+                    <div class="epic-events-panel">
+                        <div class="epic-events-header-row">
+                            <h3 class="epic-events-title">Upcoming</h3>
+                            <div class="epic-events-tabs">
+                                <button class="epic-event-tab" data-tab="next7Days">Next 7 Days</button>
+                                <button class="epic-event-tab" data-tab="tomorrow">Tomorrow</button>
+                                <button class="epic-event-tab active" data-tab="today">Today</button>
+                            </div>
+                        </div>
+                        
+                        <div class="epic-events-tab-content active" id="tab-today">
+                            <ul class="epic-events-list" id="eventsTodayList"></ul>
+                            <div class="epic-events-pagination" id="pagination-today"></div>
+                        </div>
+                        
+                        <div class="epic-events-tab-content" id="tab-tomorrow">
+                            <ul class="epic-events-list" id="eventsTomorrowList"></ul>
+                            <div class="epic-events-pagination" id="pagination-tomorrow"></div>
+                        </div>
+                        
+                        <div class="epic-events-tab-content" id="tab-next7Days">
+                            <ul class="epic-events-list" id="eventsNext7DaysList"></ul>
+                            <div class="epic-events-pagination" id="pagination-next7Days"></div>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Widget -->
+                    <div class="epic-calendar-widget">
+                    <!-- Header Box -->
+                    <div class="epic-cal-header-box" id="calHeaderBox">
+                        <span class="epic-cal-month-year clickable" id="calMonthYear" title="Change Month/Year">May 2026</span>
+                        <div class="epic-cal-today-action hidden" id="calTodayBtn">Today</div>
+                    </div>
+                    
+                    <!-- Main Calendar -->
+                    <div class="epic-cal-body" id="calMainBody">
+                        <div class="epic-cal-grid-header">
+                            <span class="weekend">Su</span>
+                            <span class="weekday">Mo</span>
+                            <span class="weekday">Tu</span>
+                            <span class="weekday">We</span>
+                            <span class="weekday">Th</span>
+                            <span class="weekday">Fr</span>
+                            <span class="weekend">Sa</span>
+                        </div>
+                        
+                        <div id="calendarGrid" class="epic-cal-grid">
+                            <!-- Days injected via JS -->
+                        </div>
+                    </div>
+                    <!-- Custom Month/Year Picker Overlay -->
+                    <div class="epic-cal-overlay" id="calMonthPickerOverlay">
+                        <div class="epic-cal-month-grid" id="calMonthGrid">
+                            <!-- Months injected via JS -->
+                        </div>
+                        <div class="epic-cal-month-grid hidden" id="calYearGrid">
+                            <!-- Years injected via JS -->
+                        </div>
+                    </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </header>
+    <div class="app-layout">
+        <aside class="app-sidebar">
+            <div class="sidebar-nav top">
+                <a href="/dashboard.html" class="nav-item" id="navHome" title="Command Center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                </a>
+                <a href="#" class="nav-item" id="navNova" title="Nova Terminal">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2z"></path></svg>
+                </a>
+                <a href="#" class="nav-item" id="navTrading" title="Trading Dashboard">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                </a>
+                <a href="/calendar.html" class="nav-item active" id="navCalendar" title="Calendar Manager">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                </a>
+                <a href="#" class="nav-item" title="Insights">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                </a>
+                <a href="#" class="nav-item" title="Reports">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                </a>
+            </div>
+            <div class="sidebar-nav bottom">
+                <a href="#" class="nav-item" id="navSettings" title="Settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </a>
+                <a href="#" class="nav-item" id="logoutBtn" title="Secure Sign Out">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                </a>
+            </div>
+        </aside>
+
+        <div class="glass-panel main-content">
+            <div class="full-calendar-container">
+                <div class="full-calendar-header">
+                    <h2>Calendar Manager</h2>
+                    <div class="full-calendar-actions">
+                        <button class="epic-btn primary" id="addEventBtn">+ Add Event</button>
+                        <div class="cal-nav-group">
+                            <button id="calPrevMonth" class="icon-btn">&larr;</button>
+                            <span id="calCurrentMonthYear" class="cal-title">May 2026</span>
+                            <button id="calNextMonth" class="icon-btn">&rarr;</button>
+                            <button id="calTodayFullBtn" class="epic-btn secondary hidden">Today</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="full-calendar-grid-header">
+                    <span class="weekend">Sun</span>
+                    <span class="weekday">Mon</span>
+                    <span class="weekday">Tue</span>
+                    <span class="weekday">Wed</span>
+                    <span class="weekday">Thu</span>
+                    <span class="weekday">Fri</span>
+                    <span class="weekend">Sat</span>
+                </div>
+                
+                <div class="full-calendar-grid" id="fullCalendarGrid">
+                    <!-- Grid cells injected via JS -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Event Modal -->
+    <div id="addEventModal" class="glass-modal hidden">
+        <div class="glass-modal-content">
+            <div class="glass-modal-header">
+                <h3>Add Calendar Event</h3>
+                <button id="closeEventModal" class="close-btn">&times;</button>
+            </div>
+            <form id="addEventForm">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="eventTitle" required placeholder="e.g. [10:00 AM] Topstep Evaluation" />
+                </div>
+                <div class="form-group">
+                    <label>Date</label>
+                    <input type="date" id="eventDate" required />
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="eventType" required>
+                        <option value="income">💵 Income / Payday</option>
+                        <option value="birthday">🎂 Birthday</option>
+                        <option value="expense">💳 Bill / Expense</option>
+                        <option value="trade">💰 Prop Firm / Funding</option>
+                        <option value="personal">🌴 Personal / No-Trade</option>
+                        <option value="rollover">🔄 Contract Rollover</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="epic-btn primary">Save Event</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/calendar.js?v=1.0"></script>
+</body>
+</html>

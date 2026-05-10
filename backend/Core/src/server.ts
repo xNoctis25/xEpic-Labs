@@ -104,6 +104,14 @@ pool.query(`
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS custom_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(255) NOT NULL,
+        event_date TIMESTAMPTZ NOT NULL,
+        event_type VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
     INSERT INTO prop_firm_metrics (firm_name, account_size, profit_target, max_loss_limit, max_position_size)
     VALUES 
         ('Topstep', 50000, 3000, 2000, 5),
