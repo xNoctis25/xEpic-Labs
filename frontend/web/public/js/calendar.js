@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('jwt_token') || sessionStorage.getItem('jwt_token');
     if (!token) {
-        window.location.href = '/login.html';
+        window.location.href = '/index.html';
         return;
     }
 
