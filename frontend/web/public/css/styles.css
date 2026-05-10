@@ -2465,11 +2465,13 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     cursor: pointer;
 }
 .dropdown-trigger {
-    padding: 4px 8px;
+    padding: 4px 12px;
     border-radius: 6px;
     transition: background-color 0.2s, color 0.2s;
     color: #fff;
     user-select: none;
+    font-size: 1.8rem;
+    font-weight: 700;
 }
 .dropdown-trigger:hover {
     background: rgba(255, 255, 255, 0.1);
