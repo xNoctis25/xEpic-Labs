@@ -1976,18 +1976,18 @@ async function renderEvents() {
             textSpan.style.whiteSpace = 'nowrap';
             textSpan.style.overflow = 'hidden';
             textSpan.style.textOverflow = 'ellipsis';
+            textSpan.style.flexGrow = '1';
             titleSpan.appendChild(textSpan);
+            
+            if (evt.isActive) {
+                const activeBadge = document.createElement('span');
+                activeBadge.textContent = 'ACTIVE';
+                activeBadge.style.cssText = 'margin-left: auto; flex-shrink: 0; font-size: 0.65rem; background: rgba(255, 193, 7, 0.15); color: #ffc107; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(255, 193, 7, 0.4); letter-spacing: 1px; box-shadow: 0 0 8px rgba(255, 193, 7, 0.2); line-height: 1;';
+                titleSpan.appendChild(activeBadge);
+            }
             
             li.appendChild(timeSpan);
             li.appendChild(titleSpan);
-            
-            if (evt.isActive) {
-                li.style.position = 'relative';
-                const activeBadge = document.createElement('span');
-                activeBadge.textContent = 'ACTIVE';
-                activeBadge.style.cssText = 'position: absolute; right: 12px; bottom: 10px; font-size: 0.65rem; background: rgba(255, 193, 7, 0.15); color: #ffc107; padding: 2px 6px; border-radius: 4px; font-weight: bold; border: 1px solid rgba(255, 193, 7, 0.4); letter-spacing: 1px; box-shadow: 0 0 8px rgba(255, 193, 7, 0.2);';
-                li.appendChild(activeBadge);
-            }
             
             listEl.appendChild(li);
         });
