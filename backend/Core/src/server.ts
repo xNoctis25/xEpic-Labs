@@ -13,7 +13,7 @@ import tradingRoutes from './routes/trading.routes';
 import novaRoutes from './routes/nova.routes';
 
 // Services
-import { startSsePoller, syncFmpEvents, startFmpTickEngine } from './services/nycommand';
+import { startSsePoller, syncFmpEvents, startFmpTickEngine, startEarlyCloseEngine } from './services/nycommand';
 
 dotenv.config();
 
@@ -127,4 +127,5 @@ app.listen(PORT, () => {
     void startSsePoller();
     void syncFmpEvents();
     startFmpTickEngine();
+    startEarlyCloseEngine();
 });

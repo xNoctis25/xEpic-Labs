@@ -1851,7 +1851,7 @@ async function renderEvents() {
             { date: new Date(2026, 1, 16), title: "🏛️ Presidents' Day - Federal" },
             { date: new Date(2026, 4, 25), title: "🪖 Memorial Day - Federal" },
             { date: new Date(2026, 5, 19), title: "⛓️‍💥 Juneteenth - Federal" },
-            { date: new Date(2026, 6, 3), title: "🎆 Independence Day (Observed) - Federal" },
+            { date: new Date(2026, 6, 3), title: "🎆 Independence Day (Observed) - Federal", earlyCloseTime: '13:15:00', earlyCloseTitle: "⏱️ Independence Day (Observed) - Early Close (1:15 PM)" },
             { date: new Date(2026, 8, 7), title: "🛠️ Labor Day - Federal" },
             { date: new Date(2026, 9, 12), title: "⛵ Columbus Day - Federal" },
             { date: new Date(2026, 10, 11), title: "🎖️ Veterans Day - Federal" },
@@ -1866,8 +1866,8 @@ async function renderEvents() {
             { date: new Date(2026, 4, 10), title: "💐 Mother's Day - Standard" },
             { date: new Date(2026, 5, 21), title: "👔 Father's Day - Standard" },
             { date: new Date(2026, 9, 31), title: "🎃 Halloween - Standard" },
-            { date: new Date(2026, 10, 27), title: "🛒 Black Friday - Standard" },
-            { date: new Date(2026, 11, 24), title: "🎁 Christmas Eve - Standard" },
+            { date: new Date(2026, 10, 27), title: "🛒 Black Friday - Standard", earlyCloseTime: '13:15:00', earlyCloseTitle: "⏱️ Black Friday - Early Close (1:15 PM)" },
+            { date: new Date(2026, 11, 24), title: "🎁 Christmas Eve - Standard", earlyCloseTime: '13:15:00', earlyCloseTitle: "⏱️ Christmas Eve - Early Close (1:15 PM)" },
             { date: new Date(2026, 11, 31), title: "🍾 New Year's Eve - Standard" }
         ];
         
@@ -2027,12 +2027,48 @@ async function renderEvents() {
             }
             
             const textSpan = document.createElement('span');
-            textSpan.textContent = evt.title;
-            textSpan.title = evt.title; // Native browser tooltip on hover
-            textSpan.style.whiteSpace = 'nowrap';
-            textSpan.style.overflow = 'hidden';
-            textSpan.style.textOverflow = 'ellipsis';
             textSpan.style.flexGrow = '1';
+
+            if (evt.earlyCloseTime) {
+                // Ensure ET Timezone check
+                const now = new Date();
+                const closeDate = new Date(evt.date);
+                const [h, m, s] = evt.earlyCloseTime.split(':');
+                closeDate.setHours(h, m, s, 0);
+                
+                // Adjust for ET vs Local
+                const offsetMs = (now.getTimezoneOffset() - 240) * 60000; // Rough offset to EDT
+                const adjustedClose = new Date(closeDate.getTime() + offsetMs);
+
+                if (now < adjustedClose) {
+                    textSpan.classList.add('epic-crossfade-container');
+                    textSpan.title = evt.title + " / " + evt.earlyCloseTitle;
+                    
+                    const spanA = document.createElement('span');
+                    spanA.classList.add('epic-crossfade-a');
+                    spanA.textContent = evt.title;
+                    
+                    const spanB = document.createElement('span');
+                    spanB.classList.add('epic-crossfade-b');
+                    spanB.textContent = evt.earlyCloseTitle;
+                    
+                    textSpan.appendChild(spanA);
+                    textSpan.appendChild(spanB);
+                } else {
+                    textSpan.textContent = evt.title;
+                    textSpan.title = evt.title;
+                    textSpan.style.whiteSpace = 'nowrap';
+                    textSpan.style.overflow = 'hidden';
+                    textSpan.style.textOverflow = 'ellipsis';
+                }
+            } else {
+                textSpan.textContent = evt.title;
+                textSpan.title = evt.title;
+                textSpan.style.whiteSpace = 'nowrap';
+                textSpan.style.overflow = 'hidden';
+                textSpan.style.textOverflow = 'ellipsis';
+            }
+            
             titleSpan.appendChild(textSpan);
             
             if (evt.isActive) {
@@ -2096,6 +2132,13 @@ async function renderEvents() {
             }
         });
     });
+    
+    // Time-Lock Interval: Re-render pages every minute to strip animations if time expires
+    setInterval(() => {
+        renderPage('today');
+        renderPage('tomorrow');
+        renderPage('next7Days');
+    }, 60000);
 }
 
 // Call renderEvents initially

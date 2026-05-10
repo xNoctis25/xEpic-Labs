@@ -2206,6 +2206,201 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
     opacity: 0.8;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    row-gap: 4px; /* Tighter gaps */
+    column-gap: 4px;
+}
+
+.epic-cal-day {
+    aspect-ratio: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start; /* changed to allow dots at bottom */
+    padding-top: 8px; /* push date down slightly */
+    font-size: 0.85rem; /* Smaller text */
+    font-weight: 400;
+    color: #66fcf1;
+    border-radius: 50%; /* Perfect circle */
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+    width: 100%;
+    position: relative;
+}
+
+/* Calendar Event Indicators (Dots) */
+.epic-cal-indicators {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+    margin-top: 2px;
+    height: 4px; /* fixed height for the dots row */
+    align-items: center;
+    justify-content: center;
+}
+
+.epic-cal-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+}
+
+.epic-cal-dot.dot-holiday { background: #d500f9; box-shadow: 0 0 4px #d500f9; }
+.epic-cal-dot.dot-birthday { background: #00e676; box-shadow: 0 0 4px #00e676; }
+.epic-cal-dot.dot-bill { background: #ff9100; box-shadow: 0 0 4px #ff9100; }
+.epic-cal-dot.dot-fmp-yellow { background: #ffd600; box-shadow: 0 0 4px #ffd600; }
+.epic-cal-dot.dot-fmp-red { background: #ff4444; box-shadow: 0 0 4px #ff4444; }
+.epic-cal-dot.dot-default { background: #66fcf1; box-shadow: 0 0 4px #66fcf1; }
+
+
+
+.epic-cal-day:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.epic-cal-day.faded {
+    color: rgba(255, 255, 255, 0.15);
+}
+.epic-cal-day.faded:hover {
+    background: none;
+    cursor: default;
+}
+
+.epic-cal-day.today {
+    background: rgba(52, 211, 153, 0.15); /* Glassy Green */
+    border: 1px solid #34d399; /* Solid green border */
+    color: #34d399 !important;
+    font-weight: 600;
+    box-shadow: 0 0 20px rgba(52, 211, 153, 0.3); /* Green glow */
+}
+
+.epic-cal-day.today:hover {
+    background: rgba(52, 211, 153, 0.25);
+    box-shadow: 0 0 25px rgba(52, 211, 153, 0.4);
+}
+
+/* Optional Dot Underneath (used if needed via JS) */
+.epic-cal-day .dot {
+    width: 3px;
+    height: 3px;
+    background: #34d399;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 2px; /* moved up slightly */
+    display: none;
+}
+.epic-cal-day.has-event .dot {
+    display: block;
+}
+.epic-cal-day.today .dot {
+    display: none; /* Hide dot if it's the current day */
+}
+
+/* Note Card */
+.epic-cal-note-card {
+    background: rgba(20, 22, 28, 0.5);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 12px 16px; /* Tighter padding */
+    width: 290px; /* Reduced width */
+    margin: 0 auto;
+    font-family: 'Inter', -apple-system, sans-serif;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.epic-cal-note-card .note-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.epic-cal-note-card .note-header span {
+    color: #34d399;
+    font-weight: 500;
+    font-size: 0.8rem; /* Smaller text */
+}
+
+.epic-cal-note-card p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.8rem; /* Smaller text */
+    line-height: 1.4;
+}
+
+/* Custom Month Picker Overlay */
+.epic-calendar-widget {
+    position: relative; /* Ensure overlay bounds to widget */
+    overflow: hidden; /* Hide overflow when sliding in/out */
+}
+
+.epic-cal-overlay {
+    position: absolute;
+    top: 48px; /* Start right below the header */
+    left: 0;
+    width: 100%;
+    height: calc(100% - 48px);
+    background: transparent; /* Rely on widget's background */
+    padding: 10px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+    transform: translateY(10px);
+}
+
+.epic-cal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.epic-cal-month-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.epic-cal-month-btn {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    color: #e2e8f0;
+    padding: 12px 0;
+    text-align: center;
+    font-weight: 500;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.epic-cal-month-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(0.97);
+}
+
+.epic-cal-month-btn.selected {
+    background: rgba(52, 211, 153, 0.1);
+    border: 2px solid #34d399;
+    color: #34d399;
+    box-shadow: none;
+}
+
+.epic-cal-today-action {
+    position: absolute;
+    right: 0;
+    padding: 4px 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #34d399;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+    opacity: 0.8;
 }
 
 .epic-cal-today-action:hover {
@@ -2214,4 +2409,33 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     text-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
 }
 
-
+/* ── EARLY CLOSE CROSSFADE ANIMATION ── */
+.epic-crossfade-container {
+    display: grid;
+    flex-grow: 1;
+    min-width: 0;
+}
+.epic-crossfade-container > span {
+    grid-area: 1 / 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.epic-crossfade-a {
+    animation: epicCrossfadeA 8s infinite ease-in-out;
+}
+.epic-crossfade-b {
+    animation: epicCrossfadeB 8s infinite ease-in-out;
+}
+@keyframes epicCrossfadeA {
+    0%, 40% { opacity: 1; transform: translateY(0); }
+    45%, 50% { opacity: 0; transform: translateY(-4px); }
+    55%, 95% { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes epicCrossfadeB {
+    0%, 40% { opacity: 0; transform: translateY(4px); }
+    45%, 50% { opacity: 0; transform: translateY(-4px); }
+    55%, 95% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(4px); }
+}
