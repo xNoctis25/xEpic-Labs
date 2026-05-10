@@ -1846,17 +1846,17 @@ async function renderEvents() {
         // Hardcoded 2026 US Federal and Standard Holidays
         const holidays2026 = [
             // Federal Holidays
-            { date: new Date(2026, 0, 1), title: "🥂 New Year's Day - Federal Holiday" },
-            { date: new Date(2026, 0, 19), title: "✊🏿 MLK Jr. Day - Federal Holiday" },
-            { date: new Date(2026, 1, 16), title: "🏛️ Presidents' Day - Federal Holiday" },
-            { date: new Date(2026, 4, 25), title: "🪖 Memorial Day - Federal Holiday" },
-            { date: new Date(2026, 5, 19), title: "⛓️‍💥 Juneteenth - Federal Holiday" },
-            { date: new Date(2026, 6, 3), title: "🎆 Independence Day (Observed) - Federal Holiday" },
-            { date: new Date(2026, 8, 7), title: "🛠️ Labor Day - Federal Holiday" },
-            { date: new Date(2026, 9, 12), title: "⛵ Columbus Day - Federal Holiday" },
-            { date: new Date(2026, 10, 11), title: "🎖️ Veterans Day - Federal Holiday" },
-            { date: new Date(2026, 10, 26), title: "🦃 Thanksgiving Day - Federal Holiday" },
-            { date: new Date(2026, 11, 25), title: "🎄 Christmas Day - Federal Holiday" },
+            { date: new Date(2026, 0, 1), title: "🥂 New Year's Day - Federal" },
+            { date: new Date(2026, 0, 19), title: "✊🏿 MLK Jr. Day - Federal" },
+            { date: new Date(2026, 1, 16), title: "🏛️ Presidents' Day - Federal" },
+            { date: new Date(2026, 4, 25), title: "🪖 Memorial Day - Federal" },
+            { date: new Date(2026, 5, 19), title: "⛓️‍💥 Juneteenth - Federal" },
+            { date: new Date(2026, 6, 3), title: "🎆 Independence Day (Observed) - Federal" },
+            { date: new Date(2026, 8, 7), title: "🛠️ Labor Day - Federal" },
+            { date: new Date(2026, 9, 12), title: "⛵ Columbus Day - Federal" },
+            { date: new Date(2026, 10, 11), title: "🎖️ Veterans Day - Federal" },
+            { date: new Date(2026, 10, 26), title: "🦃 Thanksgiving Day - Federal" },
+            { date: new Date(2026, 11, 25), title: "🎄 Christmas Day - Federal" },
             
             // Standard / Cultural Holidays
             { date: new Date(2026, 1, 14), title: "💖 Valentine's Day - Standard" },
