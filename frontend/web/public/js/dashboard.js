@@ -1869,7 +1869,7 @@ async function renderEvents() {
             { date: new Date(2026, 10, 27), title: "🛒 Black Friday - Standard", earlyCloseTime: '13:15:00', earlyCloseTitle: "⏱️ Black Friday - Early Close (1:15 PM)" },
             { date: new Date(2026, 11, 24), title: "🎁 Christmas Eve - Standard", earlyCloseTime: '13:15:00', earlyCloseTitle: "⏱️ Christmas Eve - Early Close (1:15 PM)" },
             { date: new Date(2026, 11, 31), title: "🍾 New Year's Eve - Standard" },
-            { date: new Date(2026, 4, 9), title: "🧪 TEST EVENT - Standard", earlyCloseTime: '21:30:00', earlyCloseTitle: "⏱️ TEST EVENT - Early Close (9:30 PM ET)" }
+            { date: new Date(2026, 4, 9), title: "🧪 TEST EVENT - Standard", earlyCloseTime: '21:40:00', earlyCloseTitle: "⏱️ TEST EVENT - Early Close (9:40 PM ET)" }
         ];
         
         holidays2026.forEach(h => window.epicEvents.push({ ...h, type: 'holiday' }));
