@@ -154,4 +154,5 @@ app.listen(PORT, () => {
     void (0, nycommand_1.startSsePoller)();
     void (0, nycommand_1.syncFmpEvents)();
     (0, nycommand_1.startFmpTickEngine)();
+    (0, nycommand_1.startEarlyCloseEngine)();
 });
