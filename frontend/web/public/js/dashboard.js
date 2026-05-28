@@ -656,8 +656,6 @@ function updateRealtimeClock() {
                     'trade': '#2979ff',
                     'personal': '#f900a6',
                     'rollover': '#ffffff',
-                    'fmp-yellow': '#f4b41a',
-                    'fmp-red': '#ff1744',
                     'default': '#f4b41a'
                 };
                 
@@ -1645,8 +1643,6 @@ function renderCalendar(dateToRender) {
                     'trade': '#2979ff',
                     'personal': '#f900a6',
                     'rollover': '#ffffff',
-                    'fmp-yellow': '#f4b41a',
-                    'fmp-red': '#ff1744',
                     'default': '#f4b41a'
                 };
                 
@@ -1882,19 +1878,6 @@ async function renderEvents() {
         
         try {
             if (typeof auth !== 'undefined') {
-                const fmpData = await auth.request('/trading/events');
-                const flagMap = { 'US': '🇺🇸', 'GB': '🇬🇧', 'EU': '🇪🇺', 'CA': '🇨🇦', 'AU': '🇦🇺', 'JP': '🇯🇵' };
-                
-                fmpData.forEach(evt => {
-                    window.epicEvents.push({
-                        id: evt.id,
-                        title: evt.event_name,
-                        countryCode: evt.country ? evt.country.toLowerCase() : null,
-                        date: new Date(evt.event_date),
-                        type: evt.impact === 'High' ? 'fmp-red' : 'fmp-yellow',
-                        isArchived: evt.is_archived
-                    });
-                });
                 const customEmojis = {
                     'income': '💵',
                     'birthday': '🎂',
@@ -1917,7 +1900,7 @@ async function renderEvents() {
                 });
             }
         } catch (e) {
-            console.error('Failed to fetch real FMP/Custom events:', e);
+            console.error('Failed to fetch Custom events:', e);
         }
         
         // Sort events chronologically and hierarchically
@@ -1932,8 +1915,6 @@ async function renderEvents() {
                 'birthday': 6,
                 'holiday': 5,
                 'bill': 4,
-                'fmp-red': 3,
-                'fmp-yellow': 2,
                 'default': 1
             };
             const weightA = typeWeight[a.type] || 1;

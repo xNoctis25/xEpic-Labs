@@ -37,8 +37,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         'trade': { color: '#2979ff', emoji: '📈', label: 'Prop Firm' },
         'personal': { color: '#f900a6', emoji: '🚩', label: 'Personal' },
         'rollover': { color: '#ffffff', emoji: '🔄', label: 'Rollover' },
-        'fmp-red': { color: '#ff1744', emoji: '🔴', label: 'High Impact' },
-        'fmp-yellow': { color: '#f4b41a', emoji: '🟡', label: 'Med Impact' },
         'holiday': { color: '#aa00ff', emoji: '🎆', label: 'Holiday' }
     };
 
@@ -57,16 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isCustom: true
             }));
 
-            // Fetch FMP Events
-            const fmpRes = await fetch('/api/auth/trading/events', { headers: API_HEADERS });
-            const fmpData = fmpRes.ok ? await fmpRes.json() : [];
-            const parsedFMP = fmpData.filter(e => e.impact === 'High' || e.impact === 'Medium').map(e => ({
-                id: e.id || Math.random().toString(),
-                title: e.event_name || e.event,
-                date: new Date(e.event_date || e.date),
-                type: e.impact === 'High' ? 'fmp-red' : 'fmp-yellow',
-                isCustom: false
-            }));
+
 
             // Hardcoded Holidays 2026 (Copied from dashboard)
             const holidays2026 = [
@@ -82,7 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { title: 'Christmas Day 🎄', date: new Date('2026-12-25T00:00:00'), type: 'holiday' }
             ];
 
-            events = [...parsedCustom, ...parsedFMP, ...holidays2026];
+            events = [...parsedCustom, ...holidays2026];
             renderCalendar();
         } catch (err) {
             console.error('Failed to load events:', err);
@@ -152,11 +141,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 e.date.getFullYear() === cellDate.getFullYear()
             );
 
-            // Sort events: FMP Red > FMP Yellow > Custom Events
+            // Sort events
             dayEvents.sort((a, b) => {
                 const getWeight = (type) => {
-                    if (type === 'fmp-red') return 3;
-                    if (type === 'fmp-yellow') return 2;
                     return 1;
                 };
                 return getWeight(b.type) - getWeight(a.type);
@@ -173,12 +160,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 pill.style.borderLeft = `3px solid ${conf.color}`;
                 
                 // Add title
+                // Add title
                 let displayTitle = e.title;
-                if (!e.isCustom && (e.type === 'fmp-red' || e.type === 'fmp-yellow')) {
-                    // Format FMP time
-                    const timeStr = e.date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-                    displayTitle = `[${timeStr}] ${e.title}`;
-                } else if (e.isCustom && conf.emoji) {
+                if (e.isCustom && conf.emoji) {
                     displayTitle = `${conf.emoji} ${e.title}`;
                 }
 

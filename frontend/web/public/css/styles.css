@@ -1898,15 +1898,9 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     box-shadow: 0 0 8px #ff9100;
 }
 
-.epic-events-list li.event-type-fmp-yellow .epic-event-time::before {
-    background: #ffd600;
-    box-shadow: 0 0 8px #ffd600;
-}
 
-.epic-events-list li.event-type-fmp-red .epic-event-time::before {
-    background: #ff4444;
-    box-shadow: 0 0 8px #ff4444;
-}
+
+
 
 .epic-events-list li.event-type-default .epic-event-time::before {
     background: #66fcf1;
@@ -2054,8 +2048,6 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-cal-dot.dot-holiday { background: #d500f9; box-shadow: 0 0 4px #d500f9; }
 .epic-cal-dot.dot-birthday { background: #00e676; box-shadow: 0 0 4px #00e676; }
 .epic-cal-dot.dot-bill { background: #ff9100; box-shadow: 0 0 4px #ff9100; }
-.epic-cal-dot.dot-fmp-yellow { background: #ffd600; box-shadow: 0 0 4px #ffd600; }
-.epic-cal-dot.dot-fmp-red { background: #ff4444; box-shadow: 0 0 4px #ff4444; }
 .epic-cal-dot.dot-default { background: #66fcf1; box-shadow: 0 0 4px #66fcf1; }
 
 
@@ -2249,8 +2241,6 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .epic-cal-dot.dot-holiday { background: #d500f9; box-shadow: 0 0 4px #d500f9; }
 .epic-cal-dot.dot-birthday { background: #00e676; box-shadow: 0 0 4px #00e676; }
 .epic-cal-dot.dot-bill { background: #ff9100; box-shadow: 0 0 4px #ff9100; }
-.epic-cal-dot.dot-fmp-yellow { background: #ffd600; box-shadow: 0 0 4px #ffd600; }
-.epic-cal-dot.dot-fmp-red { background: #ff4444; box-shadow: 0 0 4px #ff4444; }
 .epic-cal-dot.dot-default { background: #66fcf1; box-shadow: 0 0 4px #66fcf1; }
 
 

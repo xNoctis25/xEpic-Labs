@@ -132,20 +132,6 @@ router.get('/notifications/stream', (req: any, res: any) => {
     });
 });
 
-// ── ECONOMIC EVENTS ───────────────────────────────────────────────────────────
-router.get('/events', authenticateJWT, async (req: any, res: any) => {
-    try { 
-        const result = await pool.query(`
-            SELECT * FROM economic_events 
-            WHERE is_archived = FALSE AND event_date >= NOW() - INTERVAL '1 day'
-            ORDER BY event_date ASC
-        `);
-        res.status(200).json(result.rows);
-    } catch (err) {
-        console.error('[API ERROR] /events GET:', err);
-        res.status(500).json({ error: 'Failed to fetch events' });
-    }
-});
 
 // ── GLOBAL RISK PROFILE ───────────────────────────────────────────────────────
 router.patch('/risk', authenticateJWT, async (req, res) => {
