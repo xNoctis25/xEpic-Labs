@@ -36,9 +36,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const dotenv = __importStar(require("dotenv"));
+dotenv.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const dotenv = __importStar(require("dotenv"));
 const db_1 = __importDefault(require("./db"));
 // Middleware & Security
 const security_1 = require("./middleware/security");
@@ -49,7 +50,6 @@ const trading_routes_1 = __importDefault(require("./routes/trading.routes"));
 const nova_routes_1 = __importDefault(require("./routes/nova.routes"));
 // Services
 const nycommand_1 = require("./services/nycommand");
-dotenv.config();
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
 app.use(express_1.default.json());
@@ -133,6 +133,14 @@ db_1.default.query(`
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS custom_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(255) NOT NULL,
+        event_date TIMESTAMPTZ NOT NULL,
+        event_type VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+
     INSERT INTO prop_firm_metrics (firm_name, account_size, profit_target, max_loss_limit, max_position_size)
     VALUES 
         ('Topstep', 50000, 3000, 2000, 5),
@@ -152,7 +160,5 @@ app.listen(PORT, () => {
     console.log(`╚══════════════════════════════════════════════════════╝`);
     // Boot NYCommand Background Engines
     void (0, nycommand_1.startSsePoller)();
-    void (0, nycommand_1.syncFmpEvents)();
-    (0, nycommand_1.startFmpTickEngine)();
     (0, nycommand_1.startEarlyCloseEngine)();
 });

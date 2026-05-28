@@ -1,6 +1,8 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import * as dotenv from 'dotenv';
 import pool from './db';
 
 // Middleware & Security
@@ -14,9 +16,6 @@ import novaRoutes from './routes/nova.routes';
 
 // Services
 import { startSsePoller, startEarlyCloseEngine } from './services/nycommand';
-
-dotenv.config();
-
 const app = express();
 app.use(cors());
 app.use(express.json());
