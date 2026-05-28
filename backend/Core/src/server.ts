@@ -119,6 +119,19 @@ pool.query(`
         ('Apex', 50000, 3000, 2500, 10),
         ('Apex', 250000, 15000, 6500, 35)
     ON CONFLICT (firm_name, account_size) DO NOTHING;
+
+    CREATE OR REPLACE FUNCTION notify_new_notification()
+    RETURNS trigger AS $$
+    BEGIN
+        PERFORM pg_notify('new_notification', '1');
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS trg_new_notification ON notifications;
+    CREATE TRIGGER trg_new_notification
+    AFTER INSERT ON notifications
+    FOR EACH ROW EXECUTE FUNCTION notify_new_notification();
 `).then(() => console.log('[DB] Schema migrations verified.'))
   .catch((e) => console.error('[DB ERROR] Schema migration failed:', e));
 

@@ -13,28 +13,46 @@ export async function startSsePoller(): Promise<void> {
     try {
         const maxRes = await pool.query('SELECT COALESCE(MAX(created_at), NOW()) AS max_ts FROM notifications');
         lastBroadcastTs = maxRes.rows[0]?.max_ts ?? new Date().toISOString();
-        console.log(`[SSE] Poller started — watching from ${lastBroadcastTs}`);
-    } catch (_) {}
+        console.log(`[SSE] Listener started — watching from ${lastBroadcastTs}`);
 
-    setInterval(async () => {
-        if (sseClients.size === 0) return;  // nothing connected, skip
-        try {
-            const res = await pool.query(
-                `SELECT id, event_type, message, read, created_at
-                   FROM notifications WHERE created_at > $1 ORDER BY created_at ASC`,
-                [lastBroadcastTs]
-            );
-            if (res.rows.length === 0) return;
+        const client = await pool.connect();
+        await client.query('LISTEN new_notification');
 
-            lastBroadcastTs = res.rows[res.rows.length - 1].created_at;
-            const msg = `event: notification\ndata: ${JSON.stringify({ count: res.rows.length })}\n\n`;
+        client.on('notification', async () => {
+            if (sseClients.size === 0) return;
+            try {
+                const res = await pool.query(
+                    `SELECT id, event_type, message, read, created_at
+                       FROM notifications WHERE created_at > $1 ORDER BY created_at ASC`,
+                    [lastBroadcastTs]
+                );
+                if (res.rows.length === 0) return;
 
-            for (const client of sseClients) {
-                try { client.write(msg); }
-                catch (_) { sseClients.delete(client); }
+                lastBroadcastTs = res.rows[res.rows.length - 1].created_at;
+                const msg = `event: notification\ndata: ${JSON.stringify({ count: res.rows.length })}\n\n`;
+
+                for (const c of sseClients) {
+                    try { c.write(msg); }
+                    catch (_) { sseClients.delete(c); }
+                }
+            } catch (err) {
+                console.error('[SSE] Broadcast error:', err);
             }
-        } catch (_) { /* DB error — next tick will retry */ }
-    }, 5_000);
+        });
+
+        client.on('error', (err) => {
+            console.error('[SSE] Listener DB Error:', err);
+            process.exit(1); // Exit to let PM2 restart and reconnect
+        });
+
+        client.on('end', () => {
+            console.error('[SSE] Listener DB Disconnected');
+            process.exit(1);
+        });
+
+    } catch (e) {
+        console.error('[SSE] Failed to start listener:', e);
+    }
 }
 
 
