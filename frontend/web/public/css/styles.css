@@ -2897,38 +2897,36 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border-radius: 8px; padding: 7px 16px; font-size: 0.83rem; font-weight: 700;
     color: rgb(78,205,196); cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
-/* ── Edit Banner ──────────────────────────────────────────────────────── */
+/* ── Edit Banner (single row) ─────────────────────────────────────────── */
 .edit-mode-banner {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
-    border-radius: 12px; padding: 10px 14px; margin-bottom: 18px;
+    border-radius: 12px; padding: 8px 12px; margin-bottom: 18px;
 }
-.edit-banner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-
-/* Left: segmented mode toggle */
-.edit-mode-segs {
-    display: inline-flex; background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.09); border-radius: 20px; overflow: hidden;
+.edit-entry-name {
+    flex: 1; font-size: 0.88rem; font-weight: 700; color: rgba(255,255,255,0.9);
+    text-align: center; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.edit-mode-seg {
-    background: transparent; border: none; cursor: pointer; font-family: inherit;
-    font-size: 0.8rem; font-weight: 600; padding: 5px 14px;
-    color: rgba(255,255,255,0.4); transition: all 0.18s; white-space: nowrap;
+/* Mode pills */
+.edit-mode-pill {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; color: rgba(255,255,255,0.45); font-size: 0.78rem; font-weight: 600;
+    padding: 4px 12px; cursor: pointer; font-family: inherit;
+    transition: all 0.18s cubic-bezier(0.25,1,0.5,1); white-space: nowrap;
 }
-.edit-mode-seg:hover { color: rgba(255,255,255,0.7); }
-.edit-mode-seg.active[data-mode="edit"]   { background: rgba(99,179,237,0.18); color: rgb(99,179,237); }
-.edit-mode-seg.active[data-mode="delete"] { background: rgba(252,100,100,0.18); color: rgb(252,100,100); }
-
-/* Right: scope cycle button */
-.edit-scope-cycle {
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
-    border-radius: 20px; color: rgba(255,255,255,0.55); font-size: 0.8rem; font-weight: 600;
-    padding: 5px 14px; cursor: pointer; font-family: inherit;
-    transition: all 0.2s cubic-bezier(0.25,1,0.5,1); white-space: nowrap;
+.edit-mode-pill:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
+.edit-mode-pill.active[data-mode="edit"]   { background: rgba(99,179,237,0.18); border-color: rgba(99,179,237,0.55); color: rgb(99,179,237); }
+.edit-mode-pill.active[data-mode="delete"] { background: rgba(252,100,100,0.18); border-color: rgba(252,100,100,0.55); color: rgb(252,100,100); }
+/* Scope pills */
+.edit-scope-pill {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; color: rgba(255,255,255,0.45); font-size: 0.78rem; font-weight: 600;
+    padding: 4px 12px; cursor: pointer; font-family: inherit;
+    transition: all 0.18s cubic-bezier(0.25,1,0.5,1); white-space: nowrap;
 }
-.edit-scope-cycle:hover { background: rgba(78,205,196,0.1); border-color: rgba(78,205,196,0.35); color: rgb(78,205,196); }
-.edit-scope-static { font-size: 0.8rem; color: rgba(255,255,255,0.35); padding: 5px 0; }
-
-/* Submit button in delete mode */
+.edit-scope-pill:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
+.edit-scope-pill.active { background: rgba(78,205,196,0.15); border-color: rgba(78,205,196,0.6); color: rgb(78,205,196); }
+/* Submit in delete mode */
 .day-submit-btn.danger-btn {
     background: linear-gradient(135deg, rgba(220,53,69,0.85), rgba(180,30,50,0.9)) !important;
     border-color: rgba(220,53,69,0.5) !important; color: #fff !important;

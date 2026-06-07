@@ -1003,25 +1003,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
         if (submitBtn) { submitBtn.textContent = 'Update Entry'; submitBtn.classList.remove('danger-btn'); }
 
-        // Build banner: [✏️ Editing | 🗑 Delete]  [📍 This Event ›]
+        // Build banner: mode pills | title | scope pills
         const existingBanner = document.getElementById('editModeBanner');
         if (existingBanner) existingBanner.remove();
         const tabAdd = document.getElementById('tabAdd');
         if (tabAdd) {
-            const scopePart = data.groupId
-                ? `<button class="edit-scope-cycle" data-scope-idx="0">${EDIT_SCOPES[0].label} ›</button>`
-                : `<span class="edit-scope-static">📍 This Event</span>`;
+            const scopePills = data.groupId ? `
+                <button class="edit-scope-pill active" data-scope="this">📍 This Event</button>
+                <button class="edit-scope-pill" data-scope="future">⏩ Future Events</button>
+                <button class="edit-scope-pill" data-scope="all">♾️ All Events</button>` : '';
             const banner = document.createElement('div');
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
             banner.innerHTML = `
-                <div class="edit-banner-row">
-                    <div class="edit-mode-segs">
-                        <button class="edit-mode-seg active" data-mode="edit">✏️ Editing</button>
-                        <button class="edit-mode-seg" data-mode="delete">🗑 Delete</button>
-                    </div>
-                    ${scopePart}
-                </div>`;
+                <div class="edit-mode-row">
+                    <button class="edit-mode-pill active" data-mode="edit">✏️ Editing</button>
+                    <button class="edit-mode-pill" data-mode="delete">🗑 Delete</button>
+                </div>
+                <div class="edit-entry-name">${data.title}</div>
+                ${scopeRow}`;
             tabAdd.prepend(banner);
         }
     }
@@ -1030,12 +1030,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabAddEl = document.getElementById('tabAdd');
     if (tabAddEl) {
         tabAddEl.addEventListener('click', ev => {
-            // Mode toggle (Editing / Delete)
-            const modeSeg = ev.target.closest('.edit-mode-seg');
-            if (modeSeg && editingEntry) {
-                document.querySelectorAll('.edit-mode-seg').forEach(b => b.classList.remove('active'));
-                modeSeg.classList.add('active');
-                editingEntry.mode = modeSeg.dataset.mode;
+            // Mode pill toggle (Editing / Delete)
+            const modePill = ev.target.closest('.edit-mode-pill');
+            if (modePill && editingEntry) {
+                document.querySelectorAll('.edit-mode-pill').forEach(b => b.classList.remove('active'));
+                modePill.classList.add('active');
+                editingEntry.mode = modePill.dataset.mode;
                 const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
                 if (submitBtn) {
                     if (editingEntry.mode === 'delete') {
@@ -1048,14 +1048,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 return;
             }
-            // Scope cycle
-            const cycleBtn = ev.target.closest('.edit-scope-cycle');
-            if (cycleBtn && editingEntry) {
-                let idx = parseInt(cycleBtn.dataset.scopeIdx || '0', 10);
-                idx = (idx + 1) % EDIT_SCOPES.length;
-                cycleBtn.dataset.scopeIdx = idx;
-                cycleBtn.textContent = EDIT_SCOPES[idx].label + ' ›';
-                editingEntry.scope = EDIT_SCOPES[idx].scope;
+            // Scope pill selection
+            const scopePill = ev.target.closest('.edit-scope-pill');
+            if (scopePill && editingEntry) {
+                document.querySelectorAll('.edit-scope-pill').forEach(b => b.classList.remove('active'));
+                scopePill.classList.add('active');
+                editingEntry.scope = scopePill.dataset.scope;
                 return;
             }
         });
