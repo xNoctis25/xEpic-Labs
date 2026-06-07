@@ -23,16 +23,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const closeBtn = document.getElementById('closeEventModal');
     const form = document.getElementById('addEventForm');
 
-    // Mappings
+    // Mappings — 4 active categories in display order
     const CATEGORY_MAP = {
-        'income': { color: '#39ff14', emoji: '💵', label: 'Income' },
+        'holiday':  { color: '#aa00ff', emoji: '🎆', label: 'Holiday'  },
         'birthday': { color: '#00e5ff', emoji: '🎂', label: 'Birthday' },
-        'expense': { color: '#1de9b6', emoji: '💳', label: 'Expense' },
-        'trade': { color: '#2979ff', emoji: '📈', label: 'Prop Firm' },
-        'personal': { color: '#f900a6', emoji: '🚩', label: 'Personal' },
-        'rollover': { color: '#ffffff', emoji: '🔄', label: 'Rollover' },
-        'holiday': { color: '#aa00ff', emoji: '🎆', label: 'Holiday' }
+        'income':   { color: '#39ff14', emoji: '💵', label: 'Income'   },
+        'expense':  { color: '#1de9b6', emoji: '💳', label: 'Expense'  }
     };
+
+    // Active filter — 'all' or a category key
+    let activeFilter = 'all';
 
     // ── DATA FETCHING ─────────────────────────────────────────
     async function loadAllEvents() {
@@ -141,7 +141,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             const eventsContainer = document.createElement('div');
             eventsContainer.className = 'day-events';
 
-            dayEvents.forEach(e => {
+            // Filter events by activeFilter before rendering
+            const visibleEvents = activeFilter === 'all'
+                ? dayEvents
+                : dayEvents.filter(e => e.type === activeFilter);
+
+            visibleEvents.forEach(e => {
                 const pill = document.createElement('div');
                 pill.className = `event-pill type-${e.type}`;
                 
@@ -185,6 +190,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderCalendar();
         });
     }
+
+    // ── FILTER BUTTONS ────────────────────────────────────────
+    document.querySelectorAll('.cal-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeFilter = btn.dataset.filter;
+            document.querySelectorAll('.cal-filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderCalendar();
+        });
+    });
 
     // ── UNIFIED MONTH/YEAR PICKER ─────────────────────────────
     const mainCalTrigger        = document.getElementById('mainCalTrigger');
