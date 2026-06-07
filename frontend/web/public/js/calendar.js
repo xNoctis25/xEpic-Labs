@@ -43,17 +43,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── DATA FETCHING ─────────────────────────────────────────
     async function loadAllEvents() {
         try {
-            // Fetch Custom Events
-            const customRes = await fetch('/api/auth/trading/custom-events', { headers: API_HEADERS });
-            if (customRes.status === 401) {
+            // Fetch calendar events (birthdays, reminders)
+            const eventsRes = await fetch('/api/auth/trading/events', { headers: API_HEADERS });
+            if (eventsRes.status === 401) {
                 localStorage.removeItem('jwt_token');
                 sessionStorage.removeItem('jwt_token');
                 window.location.href = '/index.html';
                 return;
             }
-            const customData = customRes.ok ? await customRes.json() : [];
+            const eventsData = eventsRes.ok ? await eventsRes.json() : [];
 
-            const parsedCustom = customData.map(e => ({
+            // Fetch ledger entries (income / expense financial transactions)
+            const ledgerRes = await fetch('/api/auth/trading/ledger', { headers: API_HEADERS });
+            const ledgerData = ledgerRes.ok ? await ledgerRes.json() : [];
+
+            const parsedEvents = eventsData.map(e => ({
                 id: e.id,
                 title: e.title,
                 date: new Date(e.event_date),
@@ -61,7 +65,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 isCustom: true
             }));
 
-
+            const parsedLedger = ledgerData.map(e => ({
+                id: e.id,
+                title: e.account_name || e.notes || 'Transaction',
+                date: new Date(e.transaction_date),
+                type: e.type,
+                amount: e.amount,
+                isLedger: true
+            }));
 
             // Hardcoded Holidays 2026 (Copied from dashboard)
             const holidays2026 = [
@@ -77,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { title: 'Christmas Day 🎄', date: new Date('2026-12-25T00:00:00'), type: 'holiday' }
             ];
 
-            events = [...parsedCustom, ...holidays2026];
+            events = [...parsedEvents, ...parsedLedger, ...holidays2026];
             renderCalendar();
         } catch (err) {
             console.error('Failed to load events:', err);
@@ -166,9 +177,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 pill.style.borderLeft = `3px solid ${conf.color}`;
                 
                 // Add title
-                // Add title
                 let displayTitle = e.title;
-                if (e.isCustom && conf.emoji) {
+                if ((e.isCustom || e.isLedger) && conf.emoji) {
                     displayTitle = `${conf.emoji} ${e.title}`;
                 }
 
@@ -717,13 +727,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     let endPickerYear     = new Date().getFullYear();
     let selectedAccountId = null;      // UUID of chosen financial account
 
-    // ── Financial Accounts ────────────────────────────────────────
-    async function loadFinancialAccounts(type) {
+    // ── Accounts ─────────────────────────────────────────
+    async function loadAccounts(type) {
         const sel = document.getElementById('dayEventAccount');
         if (!sel) return;
         sel.innerHTML = '<option value="">— Loading… —</option>';
         try {
-            const res = await fetch(`/api/auth/trading/financial-accounts?type=${type}`, { headers: API_HEADERS });
+            const res = await fetch(`/api/auth/trading/accounts?type=${type}`, { headers: API_HEADERS });
             if (res.status === 401) {
                 localStorage.removeItem('jwt_token');
                 sessionStorage.removeItem('jwt_token');
@@ -747,12 +757,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             selectedAccountId = null;
         } catch (err) {
             sel.innerHTML = `<option value="">— Error: ${err.message} —</option>`;
-            console.error('loadFinancialAccounts error:', err);
+            console.error('loadAccounts error:', err);
         }
     }
 
-    async function createFinancialAccount(account_name, account_type) {
-        const res = await fetch('/api/auth/trading/financial-accounts', {
+    async function createAccount(account_name, account_type) {
+        const res = await fetch('/api/auth/trading/accounts', {
             method: 'POST',
             headers: API_HEADERS,
             body: JSON.stringify({ account_name, account_type })
@@ -833,7 +843,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const conf = CATEGORY_MAP[e.type] || { color: '#888', emoji: '📅', label: e.type };
             const amtStr = e.amount != null
                 ? ` — $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : (e.event_type === 'income' || e.event_type === 'expense') ? ' · <em style="opacity:.45;font-size:.8em">Reminder</em>' : '';
+                : (e.type === 'income' || e.type === 'expense') ? ' · <em style="opacity:.45;font-size:.8em">Reminder</em>' : '';
             return `
                 <div class="day-event-item">
                     <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
@@ -882,7 +892,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', isBirthday || !isRecurOn);
 
         // Load accounts when type changes to a money type
-        if (typeChanged && isMoney) loadFinancialAccounts(selectedEventType);
+        if (typeChanged && isMoney) loadAccounts(selectedEventType);
     }
 
     document.querySelectorAll('.type-pill').forEach(pill => {
@@ -929,9 +939,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             try {
                 newAcctSave.disabled = true;
                 newAcctSave.textContent = '…';
-                const acct = await createFinancialAccount(name, selectedEventType);
+                const acct = await createAccount(name, selectedEventType);
                 // Reload dropdown and select the new account
-                await loadFinancialAccounts(selectedEventType);
+                await loadAccounts(selectedEventType);
                 const sel = document.getElementById('dayEventAccount');
                 if (sel) { sel.value = acct.id; selectedAccountId = acct.id; }
                 // Close the row
@@ -1114,19 +1124,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             try {
-                await Promise.all(datesToSave.map(d => {
-                    const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
-                    return fetch('/api/auth/trading/custom-events', {
-                        method: 'POST', headers: API_HEADERS,
-                        body: JSON.stringify({
-                            title,
-                            event_date,
-                            event_type: selectedEventType,
-                            ...(amount !== null ? { amount } : {}),
-                            ...(selectedAccountId ? { account_id: selectedAccountId } : {})
-                        })
-                    });
-                }));
+                if (isBirthday) {
+                    // Birthday → save to events table
+                    await Promise.all(datesToSave.map(d => {
+                        const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
+                        return fetch('/api/auth/trading/events', {
+                            method: 'POST', headers: API_HEADERS,
+                            body: JSON.stringify({ title, event_date, event_type: selectedEventType })
+                        });
+                    }));
+                } else {
+                    // Income / Expense → save to ledger table
+                    await Promise.all(datesToSave.map(d => {
+                        const transaction_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
+                        return fetch('/api/auth/trading/ledger', {
+                            method: 'POST', headers: API_HEADERS,
+                            body: JSON.stringify({
+                                account_id: selectedAccountId,
+                                transaction_date,
+                                amount: amount !== null ? amount : 0,
+                                type: selectedEventType,
+                                notes: null
+                            })
+                        });
+                    }));
+                }
                 await loadAllEventsAndSync();
                 closeDayModal();
             } catch (err) { console.error('Error saving event:', err); }

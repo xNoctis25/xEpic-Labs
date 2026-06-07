@@ -147,120 +147,66 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
         res.status(500).json({ message: 'Internal server error.' });
     }
 });
-// ── CUSTOM USER EVENTS (CALENDAR) ─────────────────────────────────────────────
-// Ensure columns exist — silent, never throws
-async function ensureCustomEventsSchema() {
-    const cols = [
-        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS user_id    INTEGER`,
-        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS amount     NUMERIC(12,2)`,
-        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS account_id UUID`,
+// ── TABLE INITIALIZATION ─────────────────────────────────────────────────────
+// Runs once at module load — creates accounts / events / ledger if not present
+(async () => {
+    const ddl: string[] = [
+        // accounts: user-owned financial accounts (Payroll, Webull, TopStep, etc.)
+        `CREATE TABLE IF NOT EXISTS accounts (
+            id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id      UUID NOT NULL,
+            account_name VARCHAR(255) NOT NULL,
+            account_type VARCHAR(50)  NOT NULL CHECK (account_type IN ('income','expense')),
+            created_at   TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, account_name, account_type)
+        )`,
+        // events: calendar events (birthdays, reminders, etc.)
+        `CREATE TABLE IF NOT EXISTS events (
+            id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id    UUID NOT NULL,
+            title      VARCHAR(255) NOT NULL,
+            event_date TIMESTAMPTZ NOT NULL,
+            event_type VARCHAR(50)  NOT NULL DEFAULT 'event',
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )`,
+        // ledger: financial transactions (income / expense entries)
+        `CREATE TABLE IF NOT EXISTS ledger (
+            id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id          UUID NOT NULL,
+            account_id       UUID NOT NULL,
+            transaction_date TIMESTAMPTZ NOT NULL,
+            amount           NUMERIC(12,2) NOT NULL DEFAULT 0,
+            type             VARCHAR(50)  NOT NULL CHECK (type IN ('income','expense')),
+            notes            TEXT,
+            created_at       TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )`,
     ];
-    for (const sql of cols) {
-        try { await pool.query(sql); } catch (_) {}
+    for (const sql of ddl) {
+        try { await pool.query(sql); }
+        catch (err) { console.error('[DB INIT] Table error:', (err as any)?.message); }
     }
-}
+    console.log('[DB] accounts / events / ledger tables ready');
+})();
 
-router.get('/custom-events', authenticateJWT, async (req: any, res) => {
+// ── ACCOUNTS ─────────────────────────────────────────────────────────────────
+router.get('/accounts', authenticateJWT, async (req: any, res) => {
     try {
-        await ensureCustomEventsSchema();
-        const userId = req.user.id;
-        const result = await pool.query(
-            `SELECT * FROM custom_events
-             WHERE user_id = $1
-             ORDER BY event_date ASC`,
-            [userId]
-        );
-        res.status(200).json(result.rows);
-    } catch (err: any) {
-        console.error('[API ERROR] /custom-events GET:', err);
-        res.status(500).json({ error: 'Failed to fetch custom events', detail: err?.message });
-    }
-});
-
-router.post('/custom-events', authenticateJWT, async (req: any, res) => {
-    try {
-        await ensureCustomEventsSchema();
-        const userId = req.user.id;
-        const { title, event_date, event_type, amount, account_id } = req.body;
-        if (!title || !event_date || !event_type) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-        const result = await pool.query(
-            `INSERT INTO custom_events (user_id, title, event_date, event_type, amount, account_id)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [userId, title, event_date, event_type, amount ?? null, account_id ?? null]
-        );
-        res.status(201).json(result.rows[0]);
-    } catch (err) {
-        console.error('[API ERROR] /custom-events POST:', err);
-        res.status(500).json({ error: 'Failed to create custom event' });
-    }
-});
-
-router.delete('/custom-events/:id', authenticateJWT, async (req: any, res) => {
-    try {
-        await ensureCustomEventsSchema();
-        const userId = req.user.id;
-        const { id } = req.params;
-        const result = await pool.query(
-            'DELETE FROM custom_events WHERE id = $1 AND user_id = $2 RETURNING id',
-            [id, userId]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Event not found or not owned by you' });
-        }
-        res.status(200).json({ message: 'Event deleted' });
-    } catch (err) {
-        console.error('[API ERROR] /custom-events DELETE:', err);
-        res.status(500).json({ error: 'Failed to delete custom event' });
-    }
-});
-
-// ── FINANCIAL ACCOUNTS ─────────────────────────────────────────────────────────
-// Ensure the table + columns exist — silent, never throws
-async function ensureFinancialAccountsTable() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS financial_accounts (
-                id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                user_id      INTEGER NOT NULL,
-                account_name VARCHAR(255) NOT NULL,
-                account_type VARCHAR(50)  NOT NULL,
-                created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, account_name, account_type)
-            )
-        `);
-    } catch (_) {}
-    const cols = [
-        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS user_id    INTEGER`,
-        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS amount     NUMERIC(12,2)`,
-        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS account_id UUID`,
-    ];
-    for (const sql of cols) {
-        try { await pool.query(sql); } catch (_) {}
-    }
-}
-
-router.get('/financial-accounts', authenticateJWT, async (req: any, res) => {
-    try {
-        await ensureFinancialAccountsTable();
         const userId = req.user.id;
         const { type } = req.query;
         const query = type
-            ? 'SELECT * FROM financial_accounts WHERE user_id = $1 AND account_type = $2 ORDER BY account_name ASC'
-            : 'SELECT * FROM financial_accounts WHERE user_id = $1 ORDER BY account_type ASC, account_name ASC';
+            ? 'SELECT * FROM accounts WHERE user_id = $1 AND account_type = $2 ORDER BY account_name ASC'
+            : 'SELECT * FROM accounts WHERE user_id = $1 ORDER BY account_type ASC, account_name ASC';
         const params = type ? [userId, type] : [userId];
         const result = await pool.query(query, params);
         res.status(200).json(result.rows);
     } catch (err: any) {
-        console.error('[API ERROR] /financial-accounts GET:', err);
+        console.error('[API ERROR] /accounts GET:', err?.message);
         res.status(500).json({ error: 'Failed to fetch accounts', detail: err?.message });
     }
 });
 
-router.post('/financial-accounts', authenticateJWT, async (req: any, res) => {
+router.post('/accounts', authenticateJWT, async (req: any, res) => {
     try {
-        await ensureFinancialAccountsTable();
         const userId = req.user.id;
         const { account_name, account_type } = req.body;
         if (!account_name || !account_type) {
@@ -270,7 +216,7 @@ router.post('/financial-accounts', authenticateJWT, async (req: any, res) => {
             return res.status(400).json({ error: 'account_type must be income or expense' });
         }
         const result = await pool.query(
-            `INSERT INTO financial_accounts (user_id, account_name, account_type)
+            `INSERT INTO accounts (user_id, account_name, account_type)
              VALUES ($1, $2, $3)
              ON CONFLICT (user_id, account_name, account_type) DO NOTHING
              RETURNING *`,
@@ -280,50 +226,138 @@ router.post('/financial-accounts', authenticateJWT, async (req: any, res) => {
             return res.status(409).json({ error: 'Account already exists' });
         }
         res.status(201).json(result.rows[0]);
-    } catch (err) {
-        console.error('[API ERROR] /financial-accounts POST:', err);
-        res.status(500).json({ error: 'Failed to create account' });
+    } catch (err: any) {
+        console.error('[API ERROR] /accounts POST:', err?.message);
+        res.status(500).json({ error: 'Failed to create account', detail: err?.message });
     }
 });
 
-router.patch('/financial-accounts/:id', authenticateJWT, async (req: any, res) => {
-    try {
-        const userId = req.user.id;
-        const { id } = req.params;
-        const { account_name } = req.body;
-        if (!account_name) {
-            return res.status(400).json({ error: 'account_name is required' });
-        }
-        const result = await pool.query(
-            `UPDATE financial_accounts SET account_name = $1
-             WHERE id = $2 AND user_id = $3 RETURNING *`,
-            [account_name.trim(), id, userId]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).json({ error: 'Account not found or not owned by you' });
-        }
-        res.status(200).json(result.rows[0]);
-    } catch (err) {
-        console.error('[API ERROR] /financial-accounts PATCH:', err);
-        res.status(500).json({ error: 'Failed to update account' });
-    }
-});
-
-router.delete('/financial-accounts/:id', authenticateJWT, async (req: any, res) => {
+router.delete('/accounts/:id', authenticateJWT, async (req: any, res) => {
     try {
         const userId = req.user.id;
         const { id } = req.params;
         const result = await pool.query(
-            'DELETE FROM financial_accounts WHERE id = $1 AND user_id = $2 RETURNING id',
+            'DELETE FROM accounts WHERE id = $1 AND user_id = $2 RETURNING id',
             [id, userId]
         );
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Account not found or not owned by you' });
         }
         res.status(200).json({ message: 'Account deleted' });
-    } catch (err) {
-        console.error('[API ERROR] /financial-accounts DELETE:', err);
-        res.status(500).json({ error: 'Failed to delete account' });
+    } catch (err: any) {
+        console.error('[API ERROR] /accounts DELETE:', err?.message);
+        res.status(500).json({ error: 'Failed to delete account', detail: err?.message });
+    }
+});
+
+// ── EVENTS (calendar events: birthdays, reminders, etc.) ─────────────────────
+router.get('/events', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await pool.query(
+            'SELECT * FROM events WHERE user_id = $1 ORDER BY event_date ASC',
+            [userId]
+        );
+        res.status(200).json(result.rows);
+    } catch (err: any) {
+        console.error('[API ERROR] /events GET:', err?.message);
+        res.status(500).json({ error: 'Failed to fetch events', detail: err?.message });
+    }
+});
+
+router.post('/events', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { title, event_date, event_type } = req.body;
+        if (!title || !event_date || !event_type) {
+            return res.status(400).json({ error: 'title, event_date and event_type are required' });
+        }
+        const result = await pool.query(
+            `INSERT INTO events (user_id, title, event_date, event_type)
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [userId, title, event_date, event_type]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err: any) {
+        console.error('[API ERROR] /events POST:', err?.message);
+        res.status(500).json({ error: 'Failed to create event', detail: err?.message });
+    }
+});
+
+router.delete('/events/:id', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const result = await pool.query(
+            'DELETE FROM events WHERE id = $1 AND user_id = $2 RETURNING id',
+            [id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Event not found or not owned by you' });
+        }
+        res.status(200).json({ message: 'Event deleted' });
+    } catch (err: any) {
+        console.error('[API ERROR] /events DELETE:', err?.message);
+        res.status(500).json({ error: 'Failed to delete event', detail: err?.message });
+    }
+});
+
+// ── LEDGER (financial transactions: income / expense) ─────────────────────────
+router.get('/ledger', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const result = await pool.query(
+            `SELECT l.*, a.account_name
+             FROM ledger l
+             LEFT JOIN accounts a ON a.id = l.account_id
+             WHERE l.user_id = $1
+             ORDER BY l.transaction_date DESC`,
+            [userId]
+        );
+        res.status(200).json(result.rows);
+    } catch (err: any) {
+        console.error('[API ERROR] /ledger GET:', err?.message);
+        res.status(500).json({ error: 'Failed to fetch ledger', detail: err?.message });
+    }
+});
+
+router.post('/ledger', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { account_id, transaction_date, amount, type, notes } = req.body;
+        if (!account_id || !transaction_date || !type) {
+            return res.status(400).json({ error: 'account_id, transaction_date and type are required' });
+        }
+        if (!['income', 'expense'].includes(type)) {
+            return res.status(400).json({ error: 'type must be income or expense' });
+        }
+        const result = await pool.query(
+            `INSERT INTO ledger (user_id, account_id, transaction_date, amount, type, notes)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [userId, account_id, transaction_date, amount || 0, type, notes || null]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err: any) {
+        console.error('[API ERROR] /ledger POST:', err?.message);
+        res.status(500).json({ error: 'Failed to create ledger entry', detail: err?.message });
+    }
+});
+
+router.delete('/ledger/:id', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const result = await pool.query(
+            'DELETE FROM ledger WHERE id = $1 AND user_id = $2 RETURNING id',
+            [id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Ledger entry not found or not owned by you' });
+        }
+        res.status(200).json({ message: 'Ledger entry deleted' });
+    } catch (err: any) {
+        console.error('[API ERROR] /ledger DELETE:', err?.message);
+        res.status(500).json({ error: 'Failed to delete ledger entry', detail: err?.message });
     }
 });
 
