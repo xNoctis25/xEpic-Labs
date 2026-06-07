@@ -988,7 +988,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (isMoney)    document.getElementById('fieldAccount') ?.classList.remove('hidden');
         if (isMoney)    document.getElementById('fieldAmount')  ?.classList.remove('hidden');
 
-        // Hide recurring section (editing a single entry only)
+        // Hide recurring section
         const recurringRow = document.querySelector('.recurring-toggle-row');
         if (recurringRow) recurringRow.style.display = 'none';
         if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
@@ -1009,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
         if (submitBtn) submitBtn.textContent = 'Update Entry';
 
-        // Show edit banner inside the form
+        // Show edit banner + optional scope pills inside the form
         const existingBanner = document.getElementById('editModeBanner');
         if (existingBanner) existingBanner.remove();
         const tabAdd = document.getElementById('tabAdd');
@@ -1017,9 +1017,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             const banner = document.createElement('div');
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
-            banner.innerHTML = `✏️ Editing: <strong>${data.title}</strong>`;
+            // If part of a recurring group, show scope pills inside the banner
+            const scopePills = data.groupId ? `
+                <div class="edit-scope-row">
+                    <button class="edit-scope-pill active" data-scope="this">This Event</button>
+                    <button class="edit-scope-pill" data-scope="future">Future Events</button>
+                    <button class="edit-scope-pill" data-scope="all">All Events</button>
+                </div>` : '';
+            banner.innerHTML = `✏️ Editing: <strong>${data.title}</strong>${scopePills}`;
             tabAdd.prepend(banner);
         }
+    }
+
+    // Delegate scope pill clicks inside the edit banner
+    const tabAddEl = document.getElementById('tabAdd');
+    if (tabAddEl) {
+        tabAddEl.addEventListener('click', ev => {
+            const pill = ev.target.closest('.edit-scope-pill');
+            if (!pill || !editingEntry) return;
+            tabAddEl.querySelectorAll('.edit-scope-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            editingEntry.scope = pill.dataset.scope;
+        });
     }
 
     if (dayEventsList) {
@@ -1032,16 +1051,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 else _openExpand(eid);
                 return;
             }
-            // ─ Edit button
+            // ─ Edit button → always go straight to form (scope is inside the form banner)
             const editBtn = ev.target.closest('.dex-edit-btn');
             if (editBtn) {
                 const e = _eCache[editBtn.dataset.eid];
-                _pendingOp = 'edit';
-                if (e.groupId) {
-                    document.querySelector(`#dex-${e.id} .dex-scope`).style.display = '';
-                } else {
-                    await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: null, scope: 'this', date: e.date.toISOString() });
-                }
+                await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: e.groupId || null, scope: 'this', date: e.date.toISOString() });
                 return;
             }
             // ─ Delete button
@@ -1050,14 +1064,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const e = _eCache[delBtn.dataset.eid];
                 _pendingOp = 'delete';
                 if (e.groupId) {
-                    document.querySelector(`#dex-${e.id} .dex-scope`).style.display = '';
+                    // Show scope options in the expand panel for delete
+                    const scopeEl = document.querySelector(`#dex-${e.id} .dex-scope`);
+                    if (scopeEl) { scopeEl.style.display = ''; _expandedId = e.id; }
                 } else {
                     if (!confirm(`Delete "${e.title}"?`)) return;
                     await _performDelete(e, 'this');
                 }
                 return;
             }
-            // ─ Scope option selection
+            // ─ Scope option selection (delete panel)
             const scopeOpt = ev.target.closest('.dex-scope-opt');
             if (scopeOpt) {
                 const panel = scopeOpt.closest('.day-event-expand');
@@ -1066,17 +1082,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 _selectedScope = scopeOpt.dataset.scope;
                 return;
             }
-            // ─ Scope confirm
+            // ─ Scope confirm (delete)
             const confirmBtn = ev.target.closest('.dex-scope-confirm');
             if (confirmBtn) {
                 const e = _eCache[_expandedId];
                 if (!e) return;
-                if (_pendingOp === 'delete') {
-                    if (!confirm(`Delete ${_selectedScope === 'all' ? 'ALL' : _selectedScope === 'future' ? 'future' : 'this'} event(s)?`)) return;
-                    await _performDelete(e, _selectedScope);
-                } else {
-                    await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: e.groupId, scope: _selectedScope, date: e.date.toISOString() });
-                }
+                if (!confirm(`Delete ${_selectedScope === 'all' ? 'ALL' : _selectedScope === 'future' ? 'future' : 'this'} event(s)?`)) return;
+                await _performDelete(e, _selectedScope);
                 return;
             }
             // ─ Cancel

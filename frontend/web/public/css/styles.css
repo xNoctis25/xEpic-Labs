@@ -2897,7 +2897,20 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border-radius: 8px; padding: 7px 16px; font-size: 0.83rem; font-weight: 700;
     color: rgb(78,205,196); cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
-.dex-scope-confirm:hover { background: rgba(78,205,196,0.22); border-color: rgba(78,205,196,0.5); }
+.edit-mode-banner {
+    background: rgba(99, 179, 237, 0.1); border: 1px solid rgba(99, 179, 237, 0.22);
+    border-radius: 12px; padding: 12px 16px; margin-bottom: 18px;
+    font-size: 0.87rem; color: rgba(99, 179, 237, 0.85);
+}
+.edit-mode-banner strong { color: #fff; }
+.edit-scope-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(99,179,237,0.15); }
+.edit-scope-pill {
+    background: transparent; border: 1px solid rgba(99,179,237,0.2);
+    border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; font-weight: 600;
+    color: rgba(99,179,237,0.5); cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.edit-scope-pill:hover { border-color: rgba(99,179,237,0.5); color: rgba(99,179,237,0.85); }
+.edit-scope-pill.active { background: rgba(99,179,237,0.18); border-color: rgba(99,179,237,0.5); color: rgb(99,179,237); }
 
 
 
