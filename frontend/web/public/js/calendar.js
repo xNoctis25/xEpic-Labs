@@ -849,6 +849,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Restore recurring row
         const recurringRow = document.querySelector('.recurring-toggle-row');
         if (recurringRow) recurringRow.style.display = '';
+        // Reset submit button to default
+        const sb = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
+        if (sb) { sb.textContent = 'Add Entry'; sb.classList.remove('danger-btn'); }
         setTimeout(() => dayModalOverlay.classList.add('hidden'), 320);
     }
 
@@ -939,7 +942,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Edit + Delete handlers (delegated on dayEventsList) ──────────────────
     let editingEntry = null;
 
+    // Scope cycle labels
+    const EDIT_SCOPES = [
+        { scope: 'this',   label: '📍 This Event' },
+        { scope: 'future', label: '⏩ Future Events' },
+        { scope: 'all',    label: '♾️ All Events' },
+    ];
+
     async function startEditEntry(data) {
+        data.mode  = 'edit';
+        data.scope = 'this';
         editingEntry = data;
         switchDayTab('add');
 
@@ -987,61 +999,64 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (amtEl && data.amount !== '') amtEl.value = parseFloat(data.amount).toFixed(2);
         }
 
-        // Update submit button label
+        // Update submit button
         const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
-        if (submitBtn) submitBtn.textContent = 'Update Entry';
+        if (submitBtn) { submitBtn.textContent = 'Update Entry'; submitBtn.classList.remove('danger-btn'); }
 
-        // Show edit banner + optional scope pills inside the form
+        // Build banner: [✏️ Editing | 🗑 Delete]  [📍 This Event ›]
         const existingBanner = document.getElementById('editModeBanner');
         if (existingBanner) existingBanner.remove();
         const tabAdd = document.getElementById('tabAdd');
         if (tabAdd) {
+            const scopePart = data.groupId
+                ? `<button class="edit-scope-cycle" data-scope-idx="0">${EDIT_SCOPES[0].label} ›</button>`
+                : `<span class="edit-scope-static">📍 This Event</span>`;
             const banner = document.createElement('div');
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
-            const scopePills = data.groupId ? `
-                <div class="edit-scope-row">
-                    <button class="edit-scope-pill active" data-scope="this">📍 This Event</button>
-                    <button class="edit-scope-pill" data-scope="future">⏩ Future Events</button>
-                    <button class="edit-scope-pill" data-scope="all">♾️ All Events</button>
-                </div>` : '';
             banner.innerHTML = `
-                <div class="edit-banner-header">
-                    <span>✏️ Editing: <strong>${data.title}</strong></span>
-                    <button class="edit-banner-del" title="Delete entry">🗑</button>
-                </div>${scopePills}`;
+                <div class="edit-banner-row">
+                    <div class="edit-mode-segs">
+                        <button class="edit-mode-seg active" data-mode="edit">✏️ Editing</button>
+                        <button class="edit-mode-seg" data-mode="delete">🗑 Delete</button>
+                    </div>
+                    ${scopePart}
+                </div>`;
             tabAdd.prepend(banner);
         }
     }
 
-    // Delegate scope pill clicks + banner delete button inside the edit form
+    // Delegate banner interactions inside the edit form
     const tabAddEl = document.getElementById('tabAdd');
     if (tabAddEl) {
-        tabAddEl.addEventListener('click', async ev => {
-            // Scope pill selection
-            const pill = ev.target.closest('.edit-scope-pill');
-            if (pill && editingEntry) {
-                tabAddEl.querySelectorAll('.edit-scope-pill').forEach(p => p.classList.remove('active'));
-                pill.classList.add('active');
-                editingEntry.scope = pill.dataset.scope;
+        tabAddEl.addEventListener('click', ev => {
+            // Mode toggle (Editing / Delete)
+            const modeSeg = ev.target.closest('.edit-mode-seg');
+            if (modeSeg && editingEntry) {
+                document.querySelectorAll('.edit-mode-seg').forEach(b => b.classList.remove('active'));
+                modeSeg.classList.add('active');
+                editingEntry.mode = modeSeg.dataset.mode;
+                const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
+                if (submitBtn) {
+                    if (editingEntry.mode === 'delete') {
+                        submitBtn.textContent = '🗑 Delete Entry';
+                        submitBtn.classList.add('danger-btn');
+                    } else {
+                        submitBtn.textContent = 'Update Entry';
+                        submitBtn.classList.remove('danger-btn');
+                    }
+                }
                 return;
             }
-            // Banner delete button
-            const delBtn = ev.target.closest('.edit-banner-del');
-            if (delBtn && editingEntry) {
-                const { id, src, groupId, scope, date } = editingEntry;
-                const scopeLabel = scope === 'all' ? 'ALL' : scope === 'future' ? 'future' : 'this';
-                if (!confirm(`Delete ${scopeLabel} event(s)?`)) return;
-                const dateStr = date ? new Date(date).toISOString().split('T')[0] : null;
-                let url;
-                if (scope === 'all' && groupId)               url = `/api/auth/trading/${src}/group/${groupId}`;
-                else if (scope === 'future' && groupId && dateStr) url = `/api/auth/trading/${src}/group/${groupId}/from/${dateStr}`;
-                else                                           url = `/api/auth/trading/${src}/${id}`;
-                try {
-                    const res = await fetch(url, { method: 'DELETE', headers: API_HEADERS });
-                    if (res.ok) { editingEntry = null; await loadAllEventsAndSync(); closeDayModal(); }
-                    else { alert('Delete failed.'); }
-                } catch (err) { console.error('Delete error:', err); }
+            // Scope cycle
+            const cycleBtn = ev.target.closest('.edit-scope-cycle');
+            if (cycleBtn && editingEntry) {
+                let idx = parseInt(cycleBtn.dataset.scopeIdx || '0', 10);
+                idx = (idx + 1) % EDIT_SCOPES.length;
+                cycleBtn.dataset.scopeIdx = idx;
+                cycleBtn.textContent = EDIT_SCOPES[idx].label + ' ›';
+                editingEntry.scope = EDIT_SCOPES[idx].scope;
+                return;
             }
         });
     }
@@ -1297,7 +1312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Amount — only for non-recurring money events (Option C)
             const isRecurringOn = dayEventRecurring && dayEventRecurring.checked;
             let amount = null;
-            if (isMoney && !isRecurringOn) {
+            if (isMoney) {
                 const amtEl = document.getElementById('dayEventAmount');
                 amount = amtEl ? (parseFloat(amtEl.value) || null) : null;
             }
@@ -1336,18 +1351,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             try {
                 if (editingEntry) {
-                    // ── EDIT MODE: PATCH with correct scope
-                    const { id, src, groupId, scope, date } = editingEntry;
+                    const { id, src, groupId, scope, date, mode } = editingEntry;
                     const dateStr = date ? new Date(date).toISOString().split('T')[0] : null;
-                    let patchUrl;
-                    if (scope === 'all' && groupId)              patchUrl = `/api/auth/trading/${src}/group/${groupId}`;
-                    else if (scope === 'future' && groupId && dateStr) patchUrl = `/api/auth/trading/${src}/group/${groupId}/from/${dateStr}`;
-                    else                                          patchUrl = `/api/auth/trading/${src}/${id}`;
-                    const patchBody = src === 'ledger'
-                        ? JSON.stringify({ account_id: selectedAccountId, amount: amount !== null ? amount : 0, type: selectedEventType })
-                        : JSON.stringify({ title, event_type: selectedEventType });
-                    const patchRes = await fetch(patchUrl, { method: 'PATCH', headers: API_HEADERS, body: patchBody });
-                    if (!patchRes.ok) throw new Error('Update failed');
+                    let url;
+                    if (scope === 'all' && groupId)               url = `/api/auth/trading/${src}/group/${groupId}`;
+                    else if (scope === 'future' && groupId && dateStr) url = `/api/auth/trading/${src}/group/${groupId}/from/${dateStr}`;
+                    else                                           url = `/api/auth/trading/${src}/${id}`;
+
+                    if (mode === 'delete') {
+                        // ── DELETE MODE
+                        const scopeLabel = scope === 'all' ? 'ALL' : scope === 'future' ? 'future' : 'this';
+                        if (!confirm(`Delete ${scopeLabel} event(s)?`)) return;
+                        const res = await fetch(url, { method: 'DELETE', headers: API_HEADERS });
+                        if (!res.ok) throw new Error('Delete failed');
+                    } else {
+                        // ── EDIT MODE: PATCH with scope
+                        const patchBody = src === 'ledger'
+                            ? JSON.stringify({ account_id: selectedAccountId, amount: amount !== null ? amount : 0, type: selectedEventType })
+                            : JSON.stringify({ title, event_type: selectedEventType });
+                        const patchRes = await fetch(url, { method: 'PATCH', headers: API_HEADERS, body: patchBody });
+                        if (!patchRes.ok) throw new Error('Update failed');
+                    }
                     editingEntry = null;
                     await loadAllEventsAndSync();
                     closeDayModal();
