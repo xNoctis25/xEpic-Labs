@@ -721,10 +721,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
         document.querySelectorAll('.freq-pill[data-freq]').forEach(p => p.classList.toggle('active', p.dataset.freq === 'monthly'));
         document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.toggle('active', p.dataset.ends === 'never'));
-        if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
-        // Always restore recurring row visibility on open (may have been hidden for birthday)
+        // Reset all type-specific fields to hidden; syncFormFields will show correct ones once type is picked
+        selectedEventType = null;
+        ['fieldName','fieldAccount','fieldAmount'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('hidden');
+        });
         const recurringRow = document.querySelector('.recurring-toggle-row');
         if (recurringRow) recurringRow.style.display = '';
+        if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
         const epg = document.getElementById('endDatePickerGroup');
         if (epg) epg.classList.add('hidden');
         if (dayEndDropdown)  dayEndDropdown.classList.add('hidden');
@@ -774,31 +779,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (dayModalCloseBtn) dayModalCloseBtn.addEventListener('click', closeDayModal);
     if (dayModalOverlay)  dayModalOverlay.addEventListener('click', e => { if (e.target === dayModalOverlay) closeDayModal(); });
 
+    // Helper: sync field visibility based on current type + recurring state
+    function syncFormFields() {
+        const isBirthday   = selectedEventType === 'birthday';
+        const isMoney      = selectedEventType === 'income' || selectedEventType === 'expense';
+        const isRecurOn    = dayEventRecurring && dayEventRecurring.checked;
+        const recurringRow = document.querySelector('.recurring-toggle-row');
+
+        // Name: birthday only
+        const fName = document.getElementById('fieldName');
+        if (fName) fName.classList.toggle('hidden', !isBirthday);
+
+        // Account: income/expense only
+        const fAcct = document.getElementById('fieldAccount');
+        if (fAcct) fAcct.classList.toggle('hidden', !isMoney);
+
+        // Amount: income/expense AND NOT recurring (Option C — recurring = reminder only)
+        const fAmt = document.getElementById('fieldAmount');
+        if (fAmt) fAmt.classList.toggle('hidden', !isMoney || isRecurOn);
+
+        // Recurring row: hidden for birthday
+        if (recurringRow) recurringRow.style.display = isBirthday ? 'none' : '';
+
+        // Recurrence options panel
+        if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', isBirthday || !isRecurOn);
+    }
+
     document.querySelectorAll('.type-pill').forEach(pill => {
         pill.addEventListener('click', () => {
             document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             selectedEventType = pill.dataset.type;
-
-            const recurringRow = document.querySelector('.recurring-toggle-row');
-            const isBirthday = selectedEventType === 'birthday';
-
-            if (isBirthday) {
-                // Birthdays are always yearly — hide recurring controls entirely
-                if (recurringRow) recurringRow.style.display = 'none';
-                if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
-            } else {
-                // Restore recurring row for income / expense
-                if (recurringRow) recurringRow.style.display = '';
-                if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', !(dayEventRecurring && dayEventRecurring.checked));
-            }
+            syncFormFields();
         });
     });
 
     if (dayEventRecurring) {
-        dayEventRecurring.addEventListener('change', () => {
-            if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', !dayEventRecurring.checked);
-        });
+        dayEventRecurring.addEventListener('change', syncFormFields);
     }
 
     // Frequency pills (data-freq only — separate from Ends pills)
@@ -909,16 +926,35 @@ document.addEventListener('DOMContentLoaded', async () => {
         dayAddForm.addEventListener('submit', async e => {
             e.preventDefault();
             if (!selectedEventType) { alert('Please select an event type.'); return; }
-            const title = dayEventTitleInp.value.trim();
-            if (!title) { alert('Please enter a title.'); return; }
+
+            const isBirthday = selectedEventType === 'birthday';
+            const isMoney    = selectedEventType === 'income' || selectedEventType === 'expense';
+
+            // Get title/account value based on type
+            let title;
+            if (isBirthday) {
+                title = dayEventTitleInp ? dayEventTitleInp.value.trim() : '';
+                if (!title) { alert('Please enter a name.'); return; }
+            } else {
+                const acctEl = document.getElementById('dayEventAccount');
+                title = acctEl ? acctEl.value.trim() : '';
+                if (!title) { alert('Please enter an account name.'); return; }
+            }
+
+            // Amount — only for non-recurring money events (Option C)
+            const isRecurringOn = dayEventRecurring && dayEventRecurring.checked;
+            let amount = null;
+            if (isMoney && !isRecurringOn) {
+                const amtEl = document.getElementById('dayEventAmount');
+                amount = amtEl ? (parseFloat(amtEl.value) || null) : null;
+            }
 
             // Birthdays auto-expand as yearly/never — no user input needed
-            const isBirthday  = selectedEventType === 'birthday';
-            const isRecurring = isBirthday || (dayEventRecurring && dayEventRecurring.checked);
+            const isRecurring   = isBirthday || isRecurringOn;
             const effectiveFreq = isBirthday ? 'yearly' : selectedFrequency;
             const effectiveEnds = isBirthday ? 'never'  : endsMode;
-            const startD      = selectedModalDate;
-            const datesToSave = [new Date(startD)];
+            const startD        = selectedModalDate;
+            const datesToSave   = [new Date(startD)];
 
             if (isRecurring) {
                 let curr = new Date(startD);
@@ -950,7 +986,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                     return fetch('/api/auth/trading/custom-events', {
                         method: 'POST', headers: API_HEADERS,
-                        body: JSON.stringify({ title, event_date, event_type: selectedEventType })
+                        body: JSON.stringify({ title, event_date, event_type: selectedEventType, ...(amount !== null ? { amount } : {}) })
                     });
                 }));
                 await loadAllEventsAndSync();

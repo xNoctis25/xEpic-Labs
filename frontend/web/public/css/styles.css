@@ -2957,3 +2957,17 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 }
 .day-end-dropdown.hidden { display: none; }
 
+/* ── Amount input ── */
+.amount-input-wrap { position: relative; display: flex; align-items: center; }
+.amount-prefix {
+    position: absolute; left: 14px;
+    color: rgba(255,255,255,0.45); font-size: 1rem; font-weight: 700;
+    pointer-events: none; z-index: 1;
+}
+.amount-input { padding-left: 26px !important; }
+/* Remove number spinner arrows */
+.amount-input::-webkit-outer-spin-button,
+.amount-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.amount-input[type=number] { -moz-appearance: textfield; }
+
+

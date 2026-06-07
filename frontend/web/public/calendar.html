@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xEpic Labs &mdash; Calendar Manager</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/styles.css?v=3.2">
+    <link rel="stylesheet" href="/css/styles.css?v=3.3">
 </head>
 <body class="dashboard-body">
 
@@ -239,9 +239,23 @@
                                 <button type="button" class="type-pill" data-type="expense">&nbsp;&#128179; Expense</button>
                             </div>
                         </div>
-                        <div class="day-form-group">
-                            <label class="day-form-label">Title</label>
-                            <input class="day-form-input" type="text" id="dayEventTitle" placeholder="e.g. Netflix subscription..." />
+                        <!-- Name: Birthday only -->
+                        <div class="day-form-group" id="fieldName">
+                            <label class="day-form-label" id="labelName">Name</label>
+                            <input class="day-form-input" type="text" id="dayEventTitle" placeholder="e.g. Aiko..." />
+                        </div>
+                        <!-- Account: Income / Expense only -->
+                        <div class="day-form-group hidden" id="fieldAccount">
+                            <label class="day-form-label">Account</label>
+                            <input class="day-form-input" type="text" id="dayEventAccount" placeholder="e.g. Chase Checking..." />
+                        </div>
+                        <!-- Amount: Income / Expense + non-recurring only -->
+                        <div class="day-form-group hidden" id="fieldAmount">
+                            <label class="day-form-label">Amount</label>
+                            <div class="amount-input-wrap">
+                                <span class="amount-prefix">$</span>
+                                <input class="day-form-input amount-input" type="number" id="dayEventAmount" placeholder="0.00" min="0" step="0.01" />
+                            </div>
                         </div>
                         <div class="day-form-group recurring-toggle-row">
                             <label class="day-form-label" style="margin:0;">Recurring</label>
@@ -293,7 +307,7 @@
         </div>
     </div>
 
-    <script src="/js/calendar.js?v=3.2"></script>
+    <script src="/js/calendar.js?v=3.3"></script>
 
 </body>
 </html>
