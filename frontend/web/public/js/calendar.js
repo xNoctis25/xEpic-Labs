@@ -942,11 +942,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Edit + Delete handlers (delegated on dayEventsList) ──────────────────
     let editingEntry = null;
 
-    // Scope cycle labels
+    // Scope cycle config — icon on the RIGHT
     const EDIT_SCOPES = [
-        { scope: 'this',   label: '📍 This Event' },
-        { scope: 'future', label: '⏩ Future Events' },
-        { scope: 'all',    label: '♾️ All Events' },
+        { scope: 'this',   label: 'This Event 📍' },
+        { scope: 'future', label: 'Future Events ⏩' },
+        { scope: 'all',    label: 'All Events ♾️' },
     ];
 
     async function startEditEntry(data) {
@@ -1015,8 +1015,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
             banner.innerHTML = `
-                <button class="edit-mode-pill active" data-mode="edit">✏️ Editing</button>
-                <button class="edit-mode-pill" data-mode="delete">🗑 Delete</button>
+                <button class="edit-mode-pill active" data-mode="edit">Editing ✏️</button>
+                <button class="edit-mode-pill" data-mode="delete">Delete 🗑</button>
                 <span class="edit-entry-name">${data.title}</span>
                 ${scopePart}`;
             tabAdd.prepend(banner);
