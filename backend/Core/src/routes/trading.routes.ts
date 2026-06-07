@@ -284,6 +284,29 @@ router.post('/events', authenticateJWT, async (req: any, res) => {
     }
 });
 
+router.patch('/events/:id', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const { title, event_type } = req.body;
+        const result = await pool.query(
+            `UPDATE events
+             SET title      = COALESCE($1, title),
+                 event_type = COALESCE($2, event_type)
+             WHERE id = $3 AND user_id = $4
+             RETURNING *`,
+            [title || null, event_type || null, id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Event not found or not owned by you' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err: any) {
+        console.error('[API ERROR] /events PATCH:', err?.message);
+        res.status(500).json({ error: 'Failed to update event', detail: err?.message });
+    }
+});
+
 router.delete('/events/:id', authenticateJWT, async (req: any, res) => {
     try {
         const userId = req.user.id;
@@ -340,6 +363,31 @@ router.post('/ledger', authenticateJWT, async (req: any, res) => {
     } catch (err: any) {
         console.error('[API ERROR] /ledger POST:', err?.message);
         res.status(500).json({ error: 'Failed to create ledger entry', detail: err?.message });
+    }
+});
+
+router.patch('/ledger/:id', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const { account_id, amount, type, notes } = req.body;
+        const result = await pool.query(
+            `UPDATE ledger
+             SET account_id = COALESCE($1, account_id),
+                 amount     = COALESCE($2, amount),
+                 type       = COALESCE($3, type),
+                 notes      = COALESCE($4, notes)
+             WHERE id = $5 AND user_id = $6
+             RETURNING *`,
+            [account_id || null, amount != null ? amount : null, type || null, notes !== undefined ? notes : null, id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Ledger entry not found or not owned by you' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err: any) {
+        console.error('[API ERROR] /ledger PATCH:', err?.message);
+        res.status(500).json({ error: 'Failed to update ledger entry', detail: err?.message });
     }
 });
 

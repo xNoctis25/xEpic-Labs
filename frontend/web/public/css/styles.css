@@ -2862,6 +2862,22 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .day-event-item:hover .day-event-del { opacity: 0.55; }
 .day-event-del:hover  { opacity: 1 !important; background: rgba(255, 60, 60, 0.18); }
 .day-event-del:disabled { opacity: 0.25 !important; cursor: not-allowed; }
+.day-event-edit {
+    background: transparent; border: none; cursor: pointer;
+    font-size: 1.05rem; opacity: 0; padding: 6px 8px; border-radius: 8px;
+    flex-shrink: 0; transition: opacity 0.18s, background 0.18s;
+    line-height: 1;
+}
+.day-event-item:hover .day-event-edit { opacity: 0.55; }
+.day-event-edit:hover { opacity: 1 !important; background: rgba(99, 179, 237, 0.15); }
+.day-event-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.edit-mode-banner {
+    background: rgba(99, 179, 237, 0.12); border: 1px solid rgba(99, 179, 237, 0.25);
+    border-radius: 10px; padding: 10px 14px; margin-bottom: 18px;
+    font-size: 0.85rem; color: rgba(99, 179, 237, 0.9);
+}
+.edit-mode-banner strong { color: #fff; }
+
 
 
 /* ── Add Event form ── */

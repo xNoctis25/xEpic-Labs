@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 date: new Date(e.transaction_date),
                 type: e.type,
                 amount: e.amount,
+                accountId: e.account_id,
+                accountName: e.account_name,
                 isLedger: true
             }));
 
@@ -183,7 +185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 let displayAmount = '';
                 if (e.isLedger && e.amount != null && parseFloat(e.amount) > 0) {
-                    displayAmount = ` — $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                    displayAmount = ` | $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 }
 
                 pill.innerHTML = `<span>${displayTitle}${displayAmount}</span>`;
@@ -830,6 +832,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function closeDayModal() {
         dayModalOverlay.classList.remove('active');
+        // Reset edit state
+        editingEntry = null;
+        const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
+        if (submitBtn) submitBtn.textContent = 'Save Event';
+        const editBanner = document.getElementById('editModeBanner');
+        if (editBanner) editBanner.remove();
         setTimeout(() => dayModalOverlay.classList.add('hidden'), 320);
     }
 
@@ -846,10 +854,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         dayEventsList.innerHTML = dayEvents.map(e => {
             const conf = CATEGORY_MAP[e.type] || { color: '#888', emoji: '📅', label: e.type };
             const amtStr = e.amount != null
-                ? ` — $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                ? ` | $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : (e.type === 'income' || e.type === 'expense') ? ' · <em style="opacity:.45;font-size:.8em">Reminder</em>' : '';
-            const canDelete = (e.isCustom || e.isLedger) && e.id;
-            const src      = e.isLedger ? 'ledger' : 'events';
+            const canAct = (e.isCustom || e.isLedger) && e.id;
+            const src    = e.isLedger ? 'ledger' : 'events';
+            const amt    = e.amount   != null ? e.amount   : '';
+            const acctId = e.accountId != null ? e.accountId : '';
             return `
                 <div class="day-event-item">
                     <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
@@ -857,7 +867,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="day-event-name">${conf.emoji} ${e.title}${amtStr}</div>
                         <div class="day-event-cat">${conf.label}</div>
                     </div>
-                    ${canDelete ? `<button class="day-event-del" data-id="${e.id}" data-src="${src}" title="Delete">🗑</button>` : ''}
+                    ${canAct ? `
+                    <div class="day-event-actions">
+                        <button class="day-event-edit"
+                            data-id="${e.id}" data-src="${src}" data-type="${e.type}"
+                            data-title="${(e.title||'').replace(/"/g,'&quot;')}"
+                            data-amount="${amt}" data-acct-id="${acctId}"
+                            title="Edit">✏️</button>
+                        <button class="day-event-del" data-id="${e.id}" data-src="${src}" title="Delete">🗑</button>
+                    </div>` : ''}
                 </div>`;
         }).join('');
     }
@@ -873,23 +891,92 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (dayModalCloseBtn) dayModalCloseBtn.addEventListener('click', closeDayModal);
     if (dayModalOverlay)  dayModalOverlay.addEventListener('click', e => { if (e.target === dayModalOverlay) closeDayModal(); });
 
-    // ── Delete event (delegated) ─────────────────────────────────────
+    // ── Edit + Delete handlers (delegated on dayEventsList) ──────────────────
+    let editingEntry = null;
+
+    async function startEditEntry(data) {
+        editingEntry = data;
+        switchDayTab('add');
+
+        // Reset form cleanly
+        if (dayAddForm) dayAddForm.reset();
+        document.querySelectorAll('.freq-pill[data-freq]').forEach(p => p.classList.toggle('active', p.dataset.freq === 'monthly'));
+        document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.toggle('active', p.dataset.ends === 'never'));
+        selectedFrequency = 'monthly'; endsMode = 'never';
+
+        // Activate correct type pill
+        document.querySelectorAll('.type-pill').forEach(p => p.classList.toggle('active', p.dataset.type === data.type));
+        selectedEventType = data.type;
+
+        const isBirthday = data.type === 'birthday';
+        const isMoney    = data.type === 'income' || data.type === 'expense';
+
+        // Show / hide correct field groups
+        ['fieldName','fieldAccount','fieldAmount'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.classList.add('hidden');
+        });
+        if (isBirthday) document.getElementById('fieldName')   ?.classList.remove('hidden');
+        if (isMoney)    document.getElementById('fieldAccount') ?.classList.remove('hidden');
+        if (isMoney)    document.getElementById('fieldAmount')  ?.classList.remove('hidden');
+
+        // Hide recurring section (editing a single entry only)
+        const recurringRow = document.querySelector('.recurring-toggle-row');
+        if (recurringRow) recurringRow.style.display = 'none';
+        if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
+
+        // Pre-fill values
+        if (isBirthday && dayEventTitleInp) {
+            dayEventTitleInp.value = data.title || '';
+        }
+        if (isMoney) {
+            await loadAccounts(data.type);
+            const sel = document.getElementById('dayEventAccount');
+            if (sel && data.acctId) { sel.value = data.acctId; selectedAccountId = data.acctId; }
+            const amtEl = document.getElementById('dayEventAmount');
+            if (amtEl && data.amount !== '') amtEl.value = parseFloat(data.amount).toFixed(2);
+        }
+
+        // Update submit button label
+        const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
+        if (submitBtn) submitBtn.textContent = 'Update Entry';
+
+        // Show edit banner inside the form
+        const existingBanner = document.getElementById('editModeBanner');
+        if (existingBanner) existingBanner.remove();
+        const tabAdd = document.getElementById('tabAdd');
+        if (tabAdd) {
+            const banner = document.createElement('div');
+            banner.id = 'editModeBanner';
+            banner.className = 'edit-mode-banner';
+            banner.innerHTML = `✏️ Editing: <strong>${data.title}</strong>`;
+            tabAdd.prepend(banner);
+        }
+    }
+
     if (dayEventsList) {
         dayEventsList.addEventListener('click', async ev => {
-            const btn = ev.target.closest('.day-event-del');
-            if (!btn) return;
+            // ─ EDIT
+            const editBtn = ev.target.closest('.day-event-edit');
+            if (editBtn) {
+                const { id, src, type, title, amount } = editBtn.dataset;
+                const acctId = editBtn.dataset.acctId || '';
+                await startEditEntry({ id, src, type, title, amount, acctId });
+                return;
+            }
+            // ─ DELETE
+            const delBtn = ev.target.closest('.day-event-del');
+            if (!delBtn) return;
             if (!confirm('Delete this event?')) return;
-            const { id, src } = btn.dataset;
-            const origText = btn.textContent;
-            btn.textContent = '…';
-            btn.disabled = true;
+            const { id, src } = delBtn.dataset;
+            const origText = delBtn.textContent;
+            delBtn.textContent = '…';
+            delBtn.disabled = true;
             try {
                 const res = await fetch(`/api/auth/trading/${src}/${id}`, {
                     method: 'DELETE', headers: API_HEADERS
                 });
                 if (res.ok) {
                     await loadAllEventsAndSync();
-                    // Re-render the events list inside the open modal
                     const updated = events.filter(e =>
                         e.date.getDate()     === selectedModalDate.getDate()  &&
                         e.date.getMonth()    === selectedModalDate.getMonth() &&
@@ -898,13 +985,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     renderDayEventsList(updated);
                 } else {
                     alert('Failed to delete event.');
-                    btn.textContent = origText;
-                    btn.disabled = false;
+                    delBtn.textContent = origText;
+                    delBtn.disabled = false;
                 }
             } catch (err) {
                 console.error('Delete error:', err);
-                btn.textContent = origText;
-                btn.disabled = false;
+                delBtn.textContent = origText;
+                delBtn.disabled = false;
             }
         });
     }
@@ -1167,8 +1254,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             try {
-                if (isBirthday) {
-                    // Birthday → save to events table
+                if (editingEntry) {
+                    // ── EDIT MODE: PATCH the single entry
+                    let patchRes;
+                    if (editingEntry.src === 'ledger') {
+                        patchRes = await fetch(`/api/auth/trading/ledger/${editingEntry.id}`, {
+                            method: 'PATCH', headers: API_HEADERS,
+                            body: JSON.stringify({ account_id: selectedAccountId, amount: amount !== null ? amount : 0, type: selectedEventType })
+                        });
+                    } else {
+                        patchRes = await fetch(`/api/auth/trading/events/${editingEntry.id}`, {
+                            method: 'PATCH', headers: API_HEADERS,
+                            body: JSON.stringify({ title, event_type: selectedEventType })
+                        });
+                    }
+                    if (!patchRes.ok) throw new Error('Update failed');
+                    editingEntry = null;
+                    await loadAllEventsAndSync();
+                    closeDayModal();
+                } else if (isBirthday) {
+                    // ── CREATE: Birthday → events table
                     await Promise.all(datesToSave.map(d => {
                         const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                         return fetch('/api/auth/trading/events', {
@@ -1176,8 +1281,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             body: JSON.stringify({ title, event_date, event_type: selectedEventType })
                         });
                     }));
+                    await loadAllEventsAndSync();
+                    closeDayModal();
                 } else {
-                    // Income / Expense → save to ledger table
+                    // ── CREATE: Income / Expense → ledger table
                     await Promise.all(datesToSave.map(d => {
                         const transaction_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                         return fetch('/api/auth/trading/ledger', {
@@ -1191,10 +1298,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                             })
                         });
                     }));
+                    await loadAllEventsAndSync();
+                    closeDayModal();
                 }
-                await loadAllEventsAndSync();
-                closeDayModal();
-            } catch (err) { console.error('Error saving event:', err); }
+            } catch (err) { console.error('Error saving/updating event:', err); }
         });
     }
 });
