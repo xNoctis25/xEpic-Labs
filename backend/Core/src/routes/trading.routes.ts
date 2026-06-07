@@ -185,6 +185,15 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
         try { await pool.query(sql); }
         catch (err) { console.error('[DB INIT] Table error:', (err as any)?.message); }
     }
+    // Add group_id column if missing (non-destructive migration)
+    const migrations = [
+        `ALTER TABLE events ADD COLUMN IF NOT EXISTS group_id UUID`,
+        `ALTER TABLE ledger ADD COLUMN IF NOT EXISTS group_id UUID`,
+    ];
+    for (const sql of migrations) {
+        try { await pool.query(sql); }
+        catch (err) { console.error('[DB MIGRATION]', (err as any)?.message); }
+    }
     console.log('[DB] accounts / events / ledger tables ready');
 })();
 
@@ -268,20 +277,70 @@ router.get('/events', authenticateJWT, async (req: any, res) => {
 router.post('/events', authenticateJWT, async (req: any, res) => {
     try {
         const userId = req.user.id;
-        const { title, event_date, event_type } = req.body;
+        const { title, event_date, event_type, group_id } = req.body;
         if (!title || !event_date || !event_type) {
             return res.status(400).json({ error: 'title, event_date and event_type are required' });
         }
         const result = await pool.query(
-            `INSERT INTO events (user_id, title, event_date, event_type)
-             VALUES ($1, $2, $3, $4) RETURNING *`,
-            [userId, title, event_date, event_type]
+            `INSERT INTO events (user_id, title, event_date, event_type, group_id)
+             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            [userId, title, event_date, event_type, group_id || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err: any) {
         console.error('[API ERROR] /events POST:', err?.message);
         res.status(500).json({ error: 'Failed to create event', detail: err?.message });
     }
+});
+
+// ── GROUP OPERATIONS (events) — must come BEFORE /:id routes ──────────────────
+router.patch('/events/group/:groupId', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId } = req.params;
+        const { title, event_type } = req.body;
+        await pool.query(
+            `UPDATE events SET title = COALESCE($1, title), event_type = COALESCE($2, event_type)
+             WHERE group_id = $3 AND user_id = $4`,
+            [title || null, event_type || null, groupId, userId]
+        );
+        res.status(200).json({ message: 'Group updated' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
+});
+
+router.patch('/events/group/:groupId/from/:fromDate', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId, fromDate } = req.params;
+        const { title, event_type } = req.body;
+        await pool.query(
+            `UPDATE events SET title = COALESCE($1, title), event_type = COALESCE($2, event_type)
+             WHERE group_id = $3 AND user_id = $4 AND event_date >= $5`,
+            [title || null, event_type || null, groupId, userId, fromDate]
+        );
+        res.status(200).json({ message: 'Future events updated' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
+});
+
+router.delete('/events/group/:groupId', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId } = req.params;
+        await pool.query('DELETE FROM events WHERE group_id = $1 AND user_id = $2', [groupId, userId]);
+        res.status(200).json({ message: 'Group deleted' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
+});
+
+router.delete('/events/group/:groupId/from/:fromDate', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId, fromDate } = req.params;
+        await pool.query(
+            'DELETE FROM events WHERE group_id = $1 AND user_id = $2 AND event_date >= $3',
+            [groupId, userId, fromDate]
+        );
+        res.status(200).json({ message: 'Future events deleted' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
 });
 
 router.patch('/events/:id', authenticateJWT, async (req: any, res) => {
@@ -347,7 +406,7 @@ router.get('/ledger', authenticateJWT, async (req: any, res) => {
 router.post('/ledger', authenticateJWT, async (req: any, res) => {
     try {
         const userId = req.user.id;
-        const { account_id, transaction_date, amount, type, notes } = req.body;
+        const { account_id, transaction_date, amount, type, notes, group_id } = req.body;
         if (!account_id || !transaction_date || !type) {
             return res.status(400).json({ error: 'account_id, transaction_date and type are required' });
         }
@@ -355,15 +414,65 @@ router.post('/ledger', authenticateJWT, async (req: any, res) => {
             return res.status(400).json({ error: 'type must be income or expense' });
         }
         const result = await pool.query(
-            `INSERT INTO ledger (user_id, account_id, transaction_date, amount, type, notes)
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [userId, account_id, transaction_date, amount || 0, type, notes || null]
+            `INSERT INTO ledger (user_id, account_id, transaction_date, amount, type, notes, group_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+            [userId, account_id, transaction_date, amount || 0, type, notes || null, group_id || null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err: any) {
         console.error('[API ERROR] /ledger POST:', err?.message);
         res.status(500).json({ error: 'Failed to create ledger entry', detail: err?.message });
     }
+});
+
+// ── GROUP OPERATIONS (ledger) — must come BEFORE /:id routes ─────────────────
+router.patch('/ledger/group/:groupId', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId } = req.params;
+        const { account_id, amount, type } = req.body;
+        await pool.query(
+            `UPDATE ledger SET account_id = COALESCE($1, account_id), amount = COALESCE($2, amount), type = COALESCE($3, type)
+             WHERE group_id = $4 AND user_id = $5`,
+            [account_id || null, amount != null ? amount : null, type || null, groupId, userId]
+        );
+        res.status(200).json({ message: 'Group updated' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
+});
+
+router.patch('/ledger/group/:groupId/from/:fromDate', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId, fromDate } = req.params;
+        const { account_id, amount, type } = req.body;
+        await pool.query(
+            `UPDATE ledger SET account_id = COALESCE($1, account_id), amount = COALESCE($2, amount), type = COALESCE($3, type)
+             WHERE group_id = $4 AND user_id = $5 AND transaction_date >= $6`,
+            [account_id || null, amount != null ? amount : null, type || null, groupId, userId, fromDate]
+        );
+        res.status(200).json({ message: 'Future ledger entries updated' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
+});
+
+router.delete('/ledger/group/:groupId', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId } = req.params;
+        await pool.query('DELETE FROM ledger WHERE group_id = $1 AND user_id = $2', [groupId, userId]);
+        res.status(200).json({ message: 'Group deleted' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
+});
+
+router.delete('/ledger/group/:groupId/from/:fromDate', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { groupId, fromDate } = req.params;
+        await pool.query(
+            'DELETE FROM ledger WHERE group_id = $1 AND user_id = $2 AND transaction_date >= $3',
+            [groupId, userId, fromDate]
+        );
+        res.status(200).json({ message: 'Future ledger entries deleted' });
+    } catch (err: any) { res.status(500).json({ error: 'Failed', detail: err?.message }); }
 });
 
 router.patch('/ledger/:id', authenticateJWT, async (req: any, res) => {

@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 title: e.title,
                 date: new Date(e.event_date),
                 type: e.event_type,
+                groupId: e.group_id || null,
                 isCustom: true
             }));
 
@@ -73,6 +74,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 amount: e.amount,
                 accountId: e.account_id,
                 accountName: e.account_name,
+                groupId: e.group_id || null,
                 isLedger: true
             }));
 
@@ -850,8 +852,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         setTimeout(() => dayModalOverlay.classList.add('hidden'), 320);
     }
 
+    // ── Event cache + expand state ────────────────────────────────────
+    const _eCache = {};
+    let _expandedId   = null;
+    let _pendingOp    = null;    // 'edit' | 'delete'
+    let _selectedScope = 'this'; // 'this' | 'all' | 'future'
+
+    function _collapseAll() {
+        if (!_expandedId) return;
+        const row   = dayEventsList.querySelector(`.day-event-clickable[data-eid="${_expandedId}"]`);
+        const panel = document.getElementById(`dex-${_expandedId}`);
+        if (row)   row.classList.remove('dex-expanded');
+        if (panel) panel.classList.remove('dex-open');
+        _expandedId = null; _pendingOp = null; _selectedScope = 'this';
+    }
+
+    function _openExpand(eid) {
+        _collapseAll();
+        _expandedId = eid; _selectedScope = 'this'; _pendingOp = null;
+        const row   = dayEventsList.querySelector(`.day-event-clickable[data-eid="${eid}"]`);
+        const panel = document.getElementById(`dex-${eid}`);
+        if (row)   row.classList.add('dex-expanded');
+        if (panel) {
+            panel.classList.add('dex-open');
+            const scopeEl = panel.querySelector('.dex-scope');
+            if (scopeEl) scopeEl.style.display = 'none';
+            panel.querySelectorAll('.dex-scope-opt').forEach(b => b.classList.toggle('active', b.dataset.scope === 'this'));
+        }
+    }
+
     function renderDayEventsList(dayEvents) {
         if (!dayEventsList) return;
+        // Clear cache + expand state on each re-render
+        Object.keys(_eCache).forEach(k => delete _eCache[k]);
+        _expandedId = null; _pendingOp = null; _selectedScope = 'this';
+
         if (!dayEvents || dayEvents.length === 0) {
             dayEventsList.innerHTML = `
                 <div class="day-no-events">
@@ -861,30 +896,49 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         dayEventsList.innerHTML = dayEvents.map(e => {
-            const conf = CATEGORY_MAP[e.type] || { color: '#888', emoji: '📅', label: e.type };
+            const conf   = CATEGORY_MAP[e.type] || { color: '#888', emoji: '📅', label: e.type };
             const amtStr = e.amount != null
                 ? ` | $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : (e.type === 'income' || e.type === 'expense') ? ' · <em style="opacity:.45;font-size:.8em">Reminder</em>' : '';
             const canAct = (e.isCustom || e.isLedger) && e.id;
-            const src    = e.isLedger ? 'ledger' : 'events';
-            const amt    = e.amount   != null ? e.amount   : '';
-            const acctId = e.accountId != null ? e.accountId : '';
-            return `
-                <div class="day-event-item">
+
+            if (!canAct) {
+                return `<div class="day-event-item">
                     <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
                     <div class="day-event-info">
                         <div class="day-event-name">${conf.emoji} ${e.title}${amtStr}</div>
                         <div class="day-event-cat">${conf.label}</div>
                     </div>
-                    ${canAct ? `
-                    <div class="day-event-actions">
-                        <button class="day-event-edit"
-                            data-id="${e.id}" data-src="${src}" data-type="${e.type}"
-                            data-title="${(e.title||'').replace(/"/g,'&quot;')}"
-                            data-amount="${amt}" data-acct-id="${acctId}"
-                            title="Edit">✏️</button>
-                        <button class="day-event-del" data-id="${e.id}" data-src="${src}" title="Delete">🗑</button>
-                    </div>` : ''}
+                </div>`;
+            }
+
+            _eCache[e.id] = e;
+            const hasGroup = !!e.groupId;
+            return `
+                <div class="day-event-item day-event-clickable" data-eid="${e.id}">
+                    <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
+                    <div class="day-event-info">
+                        <div class="day-event-name">${conf.emoji} ${e.title}${amtStr}</div>
+                        <div class="day-event-cat">${conf.label}</div>
+                    </div>
+                    <span class="dex-chevron">›</span>
+                </div>
+                <div class="day-event-expand" id="dex-${e.id}">
+                    <div class="dex-actions">
+                        <button class="dex-btn dex-edit-btn" data-eid="${e.id}">✏️ Edit</button>
+                        <button class="dex-btn dex-del-btn"  data-eid="${e.id}">🗑 Delete</button>
+                        <button class="dex-btn dex-cancel-btn" data-eid="${e.id}">Cancel</button>
+                    </div>
+                    <div class="dex-scope" style="display:none">
+                        <div class="dex-scope-label">Apply to:</div>
+                        <div class="dex-scope-opts">
+                            <button class="dex-scope-opt active" data-scope="this">Just this event</button>
+                            ${hasGroup ? `
+                            <button class="dex-scope-opt" data-scope="future">Future events only</button>
+                            <button class="dex-scope-opt" data-scope="all">All events (incl. past)</button>` : ''}
+                        </div>
+                        <button class="dex-scope-confirm">Continue →</button>
+                    </div>
                 </div>`;
         }).join('');
     }
@@ -970,45 +1024,86 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (dayEventsList) {
         dayEventsList.addEventListener('click', async ev => {
-            // ─ EDIT
-            const editBtn = ev.target.closest('.day-event-edit');
-            if (editBtn) {
-                const { id, src, type, title, amount } = editBtn.dataset;
-                const acctId = editBtn.dataset.acctId || '';
-                await startEditEntry({ id, src, type, title, amount, acctId });
+            // ─ Row click → toggle expand panel
+            const row = ev.target.closest('.day-event-clickable');
+            if (row && !ev.target.closest('.day-event-expand')) {
+                const eid = row.dataset.eid;
+                if (_expandedId === eid) _collapseAll();
+                else _openExpand(eid);
                 return;
             }
-            // ─ DELETE
-            const delBtn = ev.target.closest('.day-event-del');
-            if (!delBtn) return;
-            if (!confirm('Delete this event?')) return;
-            const { id, src } = delBtn.dataset;
-            const origText = delBtn.textContent;
-            delBtn.textContent = '…';
-            delBtn.disabled = true;
-            try {
-                const res = await fetch(`/api/auth/trading/${src}/${id}`, {
-                    method: 'DELETE', headers: API_HEADERS
-                });
-                if (res.ok) {
-                    await loadAllEventsAndSync();
-                    const updated = events.filter(e =>
-                        e.date.getDate()     === selectedModalDate.getDate()  &&
-                        e.date.getMonth()    === selectedModalDate.getMonth() &&
-                        e.date.getFullYear() === selectedModalDate.getFullYear()
-                    );
-                    renderDayEventsList(updated);
+            // ─ Edit button
+            const editBtn = ev.target.closest('.dex-edit-btn');
+            if (editBtn) {
+                const e = _eCache[editBtn.dataset.eid];
+                _pendingOp = 'edit';
+                if (e.groupId) {
+                    document.querySelector(`#dex-${e.id} .dex-scope`).style.display = '';
                 } else {
-                    alert('Failed to delete event.');
-                    delBtn.textContent = origText;
-                    delBtn.disabled = false;
+                    await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: null, scope: 'this', date: e.date.toISOString() });
                 }
-            } catch (err) {
-                console.error('Delete error:', err);
-                delBtn.textContent = origText;
-                delBtn.disabled = false;
+                return;
             }
+            // ─ Delete button
+            const delBtn = ev.target.closest('.dex-del-btn');
+            if (delBtn) {
+                const e = _eCache[delBtn.dataset.eid];
+                _pendingOp = 'delete';
+                if (e.groupId) {
+                    document.querySelector(`#dex-${e.id} .dex-scope`).style.display = '';
+                } else {
+                    if (!confirm(`Delete "${e.title}"?`)) return;
+                    await _performDelete(e, 'this');
+                }
+                return;
+            }
+            // ─ Scope option selection
+            const scopeOpt = ev.target.closest('.dex-scope-opt');
+            if (scopeOpt) {
+                const panel = scopeOpt.closest('.day-event-expand');
+                panel.querySelectorAll('.dex-scope-opt').forEach(b => b.classList.remove('active'));
+                scopeOpt.classList.add('active');
+                _selectedScope = scopeOpt.dataset.scope;
+                return;
+            }
+            // ─ Scope confirm
+            const confirmBtn = ev.target.closest('.dex-scope-confirm');
+            if (confirmBtn) {
+                const e = _eCache[_expandedId];
+                if (!e) return;
+                if (_pendingOp === 'delete') {
+                    if (!confirm(`Delete ${_selectedScope === 'all' ? 'ALL' : _selectedScope === 'future' ? 'future' : 'this'} event(s)?`)) return;
+                    await _performDelete(e, _selectedScope);
+                } else {
+                    await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: e.groupId, scope: _selectedScope, date: e.date.toISOString() });
+                }
+                return;
+            }
+            // ─ Cancel
+            if (ev.target.closest('.dex-cancel-btn')) { _collapseAll(); }
         });
+    }
+
+    async function _performDelete(e, scope) {
+        const src = e.isLedger ? 'ledger' : 'events';
+        const dateStr = e.date.toISOString().split('T')[0];
+        let url;
+        if (scope === 'all' && e.groupId)    url = `/api/auth/trading/${src}/group/${e.groupId}`;
+        else if (scope === 'future' && e.groupId) url = `/api/auth/trading/${src}/group/${e.groupId}/from/${dateStr}`;
+        else                                  url = `/api/auth/trading/${src}/${e.id}`;
+        try {
+            const res = await fetch(url, { method: 'DELETE', headers: API_HEADERS });
+            if (res.ok) {
+                _collapseAll();
+                await loadAllEventsAndSync();
+                const updated = events.filter(ev =>
+                    ev.date.getDate()     === selectedModalDate.getDate()  &&
+                    ev.date.getMonth()    === selectedModalDate.getMonth() &&
+                    ev.date.getFullYear() === selectedModalDate.getFullYear()
+                );
+                renderDayEventsList(updated);
+            } else { alert('Failed to delete.'); }
+        } catch (err) { console.error('Delete error:', err); }
     }
 
     // Helper: sync field visibility based on current type + recurring state
@@ -1270,36 +1365,36 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             try {
                 if (editingEntry) {
-                    // ── EDIT MODE: PATCH the single entry
-                    let patchRes;
-                    if (editingEntry.src === 'ledger') {
-                        patchRes = await fetch(`/api/auth/trading/ledger/${editingEntry.id}`, {
-                            method: 'PATCH', headers: API_HEADERS,
-                            body: JSON.stringify({ account_id: selectedAccountId, amount: amount !== null ? amount : 0, type: selectedEventType })
-                        });
-                    } else {
-                        patchRes = await fetch(`/api/auth/trading/events/${editingEntry.id}`, {
-                            method: 'PATCH', headers: API_HEADERS,
-                            body: JSON.stringify({ title, event_type: selectedEventType })
-                        });
-                    }
+                    // ── EDIT MODE: PATCH with correct scope
+                    const { id, src, groupId, scope, date } = editingEntry;
+                    const dateStr = date ? new Date(date).toISOString().split('T')[0] : null;
+                    let patchUrl;
+                    if (scope === 'all' && groupId)              patchUrl = `/api/auth/trading/${src}/group/${groupId}`;
+                    else if (scope === 'future' && groupId && dateStr) patchUrl = `/api/auth/trading/${src}/group/${groupId}/from/${dateStr}`;
+                    else                                          patchUrl = `/api/auth/trading/${src}/${id}`;
+                    const patchBody = src === 'ledger'
+                        ? JSON.stringify({ account_id: selectedAccountId, amount: amount !== null ? amount : 0, type: selectedEventType })
+                        : JSON.stringify({ title, event_type: selectedEventType });
+                    const patchRes = await fetch(patchUrl, { method: 'PATCH', headers: API_HEADERS, body: patchBody });
                     if (!patchRes.ok) throw new Error('Update failed');
                     editingEntry = null;
                     await loadAllEventsAndSync();
                     closeDayModal();
                 } else if (isBirthday) {
-                    // ── CREATE: Birthday → events table
+                    // ── CREATE: Birthday → events table (with group_id for recurring)
+                    const groupId = datesToSave.length > 1 ? crypto.randomUUID() : null;
                     await Promise.all(datesToSave.map(d => {
                         const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                         return fetch('/api/auth/trading/events', {
                             method: 'POST', headers: API_HEADERS,
-                            body: JSON.stringify({ title, event_date, event_type: selectedEventType })
+                            body: JSON.stringify({ title, event_date, event_type: selectedEventType, group_id: groupId })
                         });
                     }));
                     await loadAllEventsAndSync();
                     closeDayModal();
                 } else {
-                    // ── CREATE: Income / Expense → ledger table
+                    // ── CREATE: Income / Expense → ledger table (with group_id for recurring)
+                    const groupId = datesToSave.length > 1 ? crypto.randomUUID() : null;
                     await Promise.all(datesToSave.map(d => {
                         const transaction_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                         return fetch('/api/auth/trading/ledger', {
@@ -1309,7 +1404,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 transaction_date,
                                 amount: amount !== null ? amount : 0,
                                 type: selectedEventType,
-                                notes: null
+                                notes: null,
+                                group_id: groupId
                             })
                         });
                     }));

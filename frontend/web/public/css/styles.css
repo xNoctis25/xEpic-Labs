@@ -2853,31 +2853,51 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .day-no-events  { text-align: center; padding: 52px 24px; color: rgba(255,255,255,0.28); }
 .day-no-events-icon { font-size: 2.8rem; margin-bottom: 14px; }
 .day-no-events-text { font-size: 0.92rem; line-height: 1.5; }
-.day-event-del {
-    background: transparent; border: none; cursor: pointer;
-    font-size: 1.05rem; opacity: 0.65; padding: 6px 8px; border-radius: 8px;
-    flex-shrink: 0; transition: opacity 0.18s, background 0.18s;
-    line-height: 1;
-    filter: invert(27%) sepia(99%) saturate(3000%) hue-rotate(340deg) brightness(95%);
+/* \u2500\u2500 Click-to-expand event design \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+.day-event-clickable { cursor: pointer; transition: background 0.15s; user-select: none; }
+.day-event-clickable:hover { background: rgba(255,255,255,0.06); }
+.day-event-clickable.dex-expanded { background: rgba(255,255,255,0.07); border-bottom-left-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.dex-chevron { font-size: 1.1rem; color: rgba(255,255,255,0.22); transition: transform 0.22s, color 0.22s; margin-left: 8px; flex-shrink: 0; line-height: 1; }
+.dex-expanded .dex-chevron { transform: rotate(90deg); color: rgba(255,255,255,0.5); }
+
+.day-event-expand {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1), padding 0.28s;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07); border-top: none;
+    border-radius: 0 0 12px 12px; padding: 0 14px; margin-bottom: 8px;
 }
-.day-event-item:hover .day-event-del { opacity: 0.85; }
-.day-event-del:hover  { opacity: 1 !important; background: rgba(255, 60, 60, 0.18); }
-.day-event-del:disabled { opacity: 0.25 !important; cursor: not-allowed; }
-.day-event-edit {
-    background: transparent; border: none; cursor: pointer;
-    font-size: 1.05rem; opacity: 0; padding: 6px 8px; border-radius: 8px;
-    flex-shrink: 0; transition: opacity 0.18s, background 0.18s;
-    line-height: 1;
+.day-event-expand.dex-open { max-height: 260px; padding: 12px 14px; }
+
+.dex-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.dex-btn {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; padding: 7px 14px; font-size: 0.82rem; font-weight: 600;
+    color: rgba(255,255,255,0.65); cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
 }
-.day-event-item:hover .day-event-edit { opacity: 0.55; }
-.day-event-edit:hover { opacity: 1 !important; background: rgba(99, 179, 237, 0.15); }
-.day-event-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.edit-mode-banner {
-    background: rgba(99, 179, 237, 0.12); border: 1px solid rgba(99, 179, 237, 0.25);
-    border-radius: 10px; padding: 10px 14px; margin-bottom: 18px;
-    font-size: 0.85rem; color: rgba(99, 179, 237, 0.9);
+.dex-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.dex-edit-btn:hover { border-color: rgba(99,179,237,0.45); color: rgb(99,179,237); }
+.dex-del-btn:hover  { border-color: rgba(252,100,100,0.45); color: rgb(252,100,100); }
+.dex-cancel-btn { margin-left: auto; color: rgba(255,255,255,0.28); font-weight: 400; font-size: 0.78rem; }
+.dex-cancel-btn:hover { color: rgba(255,255,255,0.6); background: transparent; border-color: transparent; }
+
+.dex-scope { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.07); }
+.dex-scope-label { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.32); text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 8px; }
+.dex-scope-opts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.dex-scope-opt {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px; padding: 6px 12px; font-size: 0.78rem;
+    color: rgba(255,255,255,0.45); cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
-.edit-mode-banner strong { color: #fff; }
+.dex-scope-opt:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.dex-scope-opt.active { background: rgba(78,205,196,0.14); border-color: rgba(78,205,196,0.38); color: rgb(78,205,196); }
+.dex-scope-confirm {
+    background: rgba(78,205,196,0.1); border: 1px solid rgba(78,205,196,0.3);
+    border-radius: 8px; padding: 7px 16px; font-size: 0.83rem; font-weight: 700;
+    color: rgb(78,205,196); cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.dex-scope-confirm:hover { background: rgba(78,205,196,0.22); border-color: rgba(78,205,196,0.5); }
 
 
 
