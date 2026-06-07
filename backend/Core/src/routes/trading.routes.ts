@@ -151,12 +151,11 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
 router.get('/custom-events', authenticateJWT, async (req: any, res) => {
     try {
         const userId = req.user.id;
+        // Simple query — no JOIN so it never crashes if financial_accounts is missing
         const result = await pool.query(
-            `SELECT ce.*, fa.account_name
-             FROM custom_events ce
-             LEFT JOIN financial_accounts fa ON fa.id = ce.account_id
-             WHERE ce.user_id = $1
-             ORDER BY ce.event_date ASC`,
+            `SELECT * FROM custom_events
+             WHERE user_id = $1
+             ORDER BY event_date ASC`,
             [userId]
         );
         res.status(200).json(result.rows);
@@ -204,8 +203,27 @@ router.delete('/custom-events/:id', authenticateJWT, async (req: any, res) => {
 });
 
 // ── FINANCIAL ACCOUNTS ─────────────────────────────────────────────────────────
+// Ensure the table exists regardless of migration state
+async function ensureFinancialAccountsTable() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS financial_accounts (
+            id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id      INTEGER NOT NULL,
+            account_name VARCHAR(255) NOT NULL,
+            account_type VARCHAR(50)  NOT NULL,
+            created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, account_name, account_type)
+        );
+        ALTER TABLE custom_events
+            ADD COLUMN IF NOT EXISTS user_id     INTEGER,
+            ADD COLUMN IF NOT EXISTS amount      NUMERIC(12,2),
+            ADD COLUMN IF NOT EXISTS account_id  UUID;
+    `);
+}
+
 router.get('/financial-accounts', authenticateJWT, async (req: any, res) => {
     try {
+        await ensureFinancialAccountsTable();
         const userId = req.user.id;
         const { type } = req.query;
         const query = type
@@ -222,6 +240,7 @@ router.get('/financial-accounts', authenticateJWT, async (req: any, res) => {
 
 router.post('/financial-accounts', authenticateJWT, async (req: any, res) => {
     try {
+        await ensureFinancialAccountsTable();
         const userId = req.user.id;
         const { account_name, account_type } = req.body;
         if (!account_name || !account_type) {
