@@ -689,9 +689,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dayEndYearGrid  = document.getElementById('dayEndYearGrid');
     const dayEndTodayBtn  = document.getElementById('dayEndTodayBtn');
 
-    const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const DOW_NAMES   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     let selectedModalDate = null;
     let selectedEventType = null;
