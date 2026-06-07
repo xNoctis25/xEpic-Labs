@@ -17,11 +17,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const grid      = document.getElementById('fullCalendarGrid');
     const todayBtn  = document.getElementById('calTodayFullBtn');
     
-    // Modal Elements
-    const addEventBtn = document.getElementById('addEventBtn');
-    const modal = document.getElementById('addEventModal');
-    const closeBtn = document.getElementById('closeEventModal');
-    const form = document.getElementById('addEventForm');
 
     // Mappings — 4 active categories in display order
     const CATEGORY_MAP = {
@@ -162,18 +157,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 pill.innerHTML = `<span>${displayTitle}</span>`;
 
-                if (e.isCustom) {
-                    const delBtn = document.createElement('button');
-                    delBtn.className = 'del-event-btn';
-                    delBtn.innerHTML = '&times;';
-                    delBtn.onclick = async (evt) => {
-                        evt.stopPropagation();
-                        if(confirm('Delete this event?')) {
-                            await deleteEvent(e.id);
-                        }
-                    };
-                    pill.appendChild(delBtn);
-                }
 
                 eventsContainer.appendChild(pill);
             });
@@ -302,57 +285,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             closePicker();
         }
     });
-
-    // ── MODAL & FORMS ─────────────────────────────────────────
-    addEventBtn.addEventListener('click', () => {
-        modal.classList.remove('hidden');
-    });
-
-    closeBtn.addEventListener('click', () => {
-        modal.classList.add('hidden');
-    });
-
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const title = document.getElementById('eventTitle').value;
-        const dateVal = document.getElementById('eventDate').value;
-        const type = document.getElementById('eventType').value;
-
-        // Force time to 12:00 PM UTC to avoid timezone shifting issues
-        const event_date = new Date(`${dateVal}T12:00:00Z`).toISOString();
-
-        try {
-            const res = await fetch('/api/auth/trading/custom-events', {
-                method: 'POST',
-                headers: API_HEADERS,
-                body: JSON.stringify({ title, event_date, event_type: type })
-            });
-
-            if (res.ok) {
-                modal.classList.add('hidden');
-                form.reset();
-                await loadAllEvents();
-            } else {
-                alert('Failed to save event');
-            }
-        } catch (err) {
-            console.error('Error creating event:', err);
-        }
-    });
-
-    async function deleteEvent(id) {
-        try {
-            const res = await fetch(`/api/auth/trading/custom-events/${id}`, {
-                method: 'DELETE',
-                headers: API_HEADERS
-            });
-            if (res.ok) {
-                await loadAllEvents();
-            }
-        } catch (err) {
-            console.error('Error deleting event:', err);
-        }
-    }
 
     // ── LIVE MARKET SESSION STATUS ────────────────────────────
     function updateMarketClock() {
