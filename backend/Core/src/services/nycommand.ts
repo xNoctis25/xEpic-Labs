@@ -60,9 +60,9 @@ export async function startSsePoller(): Promise<void> {
 // ── EARLY CLOSE ENGINE ─────────────────────────────────────────────────────────
 
 const EARLY_CLOSES_2026 = [
-    { date: '2026-07-03', name: 'Independence Day (Observed)', closeTimeEt: '13:15:00' },
-    { date: '2026-11-27', name: 'Black Friday', closeTimeEt: '13:15:00' },
-    { date: '2026-12-24', name: 'Christmas Eve', closeTimeEt: '13:15:00' }
+    { date: '2026-07-03', name: 'Independence Day (Observed)', closeTimeEt: '13:00:00' },
+    { date: '2026-11-27', name: 'Black Friday', closeTimeEt: '13:00:00' },
+    { date: '2026-12-24', name: 'Christmas Eve', closeTimeEt: '13:00:00' }
 ];
 
 const dispatchedEarlyCloses = new Set<string>();

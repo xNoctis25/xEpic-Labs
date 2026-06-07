@@ -10,7 +10,6 @@ import { ipBlacklistMiddleware } from './middleware/security';
 
 // Routes
 import authRoutes from './routes/auth.routes';
-import propRoutes from './routes/prop.routes';
 import tradingRoutes from './routes/trading.routes';
 import novaRoutes from './routes/nova.routes';
 
@@ -28,7 +27,6 @@ app.use(ipBlacklistMiddleware);
 // but the code is now securely decoupled into Modular Monolith sub-routers.
 app.use('/api/auth', authRoutes);
 app.use('/api/auth', novaRoutes);
-app.use('/api/auth/trading/prop-accounts', propRoutes);
 app.use('/api/auth/trading', tradingRoutes);
 
 // ── HEALTH CHECK ─────────────────────────────────────────────────────────────
@@ -49,34 +47,8 @@ pool.query(`
     ADD COLUMN IF NOT EXISTS failed_credential_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
 
-    CREATE TABLE IF NOT EXISTS prop_firm_metrics (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        firm_name VARCHAR(50) NOT NULL,
-        account_size NUMERIC(10,2) NOT NULL,
-        profit_target NUMERIC(10,2) NOT NULL,
-        max_loss_limit NUMERIC(10,2) NOT NULL,
-        max_position_size INT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(firm_name, account_size)
-    );
-
-    CREATE TABLE IF NOT EXISTS prop_accounts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        account_name VARCHAR(255) NOT NULL,
-        firm VARCHAR(50) NOT NULL,
-        phase VARCHAR(20) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-        risk_profile VARCHAR(20) NOT NULL,
-        account_size NUMERIC(10,2) NOT NULL,
-        profit_target NUMERIC(10,2) NOT NULL,
-        max_loss_limit NUMERIC(10,2) NOT NULL,
-        max_position_size INT NOT NULL,
-        current_pnl NUMERIC(10,2) DEFAULT 0,
-        account_balance NUMERIC(10,2),
-        best_day_pnl NUMERIC(10,2) DEFAULT 0,
-        days_traded INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    DROP TABLE IF EXISTS prop_firm_metrics CASCADE;
+    DROP TABLE IF EXISTS prop_accounts CASCADE;
 
     CREATE TABLE IF NOT EXISTS notifications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -111,14 +83,7 @@ pool.query(`
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
-    INSERT INTO prop_firm_metrics (firm_name, account_size, profit_target, max_loss_limit, max_position_size)
-    VALUES 
-        ('Topstep', 50000, 3000, 2000, 5),
-        ('Topstep', 100000, 6000, 3000, 10),
-        ('Topstep', 150000, 9000, 4500, 15),
-        ('Apex', 50000, 3000, 2500, 10),
-        ('Apex', 250000, 15000, 6500, 35)
-    ON CONFLICT (firm_name, account_size) DO NOTHING;
+
 
     CREATE OR REPLACE FUNCTION notify_new_notification()
     RETURNS trigger AS $$

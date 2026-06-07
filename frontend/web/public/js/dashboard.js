@@ -435,7 +435,7 @@ window.switchView = function (viewName) {
 
 if (navs.home)     navs.home.addEventListener('click',     (e) => { e.preventDefault(); window.switchView('home'); });
 if (navs.nova)     navs.nova.addEventListener('click',     (e) => { e.preventDefault(); window.switchView('nova'); });
-if (navs.trading)  navs.trading.addEventListener('click',  (e) => { e.preventDefault(); window.switchView('trading'); loadPropAccounts(); });
+if (navs.trading)  navs.trading.addEventListener('click',  (e) => { e.preventDefault(); window.switchView('trading'); });
 if (navs.settings) navs.settings.addEventListener('click', (e) => { e.preventDefault(); window.switchView('settings'); });
 
 // ── CHANGE PASSWORD ───────────────────────────────────────────────────────────
@@ -498,97 +498,58 @@ function updateMarketClock() {
     const day          = now.getDay();
     const totalMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // 1. CME Holiday Calendar 2026–2027
-    const cmeHolidays = [
+    // 1. NYSE Holiday Calendar 2026–2027
+    const nyseHolidays = [
         '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25',
         '2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
         '2027-01-01','2027-01-18','2027-02-15','2027-03-26','2027-05-31',
         '2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24'
     ];
-    if (cmeHolidays.includes(dateStr)) {
+    if (nyseHolidays.includes(dateStr)) {
         uiSessionLabel.textContent  = 'Closed: Holiday';
         uiSessionDot.className      = 'dot red';
         return;
     }
 
-    // 2. Weekend gate (Fri 17:00 → Sun 18:00 ET)
-    if (day === 6 || (day === 5 && totalMinutes >= 1020) || (day === 0 && totalMinutes < 1080)) {
+    // 2. Weekend gate (Sat & Sun)
+    if (day === 0 || day === 6) {
         uiSessionLabel.textContent  = 'Closed: Weekend';
         uiSessionDot.className      = 'dot red';
         return;
     }
 
-    // 3. CME Daily Maintenance (Mon-Thu 17:00–18:00 ET)
-    if (totalMinutes >= 1020 && totalMinutes < 1080) {
-        uiSessionLabel.textContent  = 'Closed: CME';
+    // 3. Intraday Equities Hours (09:30 - 16:00 ET)
+    if (totalMinutes < 570 || totalMinutes >= 960) {
+        uiSessionLabel.textContent  = 'Session: Closed';
         uiSessionDot.className      = 'dot red';
+        uiSessionLabel.style.opacity = '1';
         return;
     }
 
-    // 4. Classify active session & killzone
-    // CME Futures Sessions (ET):
-    //   Tokyo:    18:00–04:00 (1080–240)
-    //   London:   02:00–11:00 (120–660)
-    //   New York: 08:00–17:00 (480–1020)
-    // Overlaps:
-    //   Tokyo + London:    02:00–04:00 (120–240)
-    //   London + New York: 08:00–11:00 (480–660)
-    let sessionColor = 'green';
+    // 4. Professional ICT Session Phases
+    let sessionText = '';
+    let dotClass = '';
 
-    const isTokyo  = totalMinutes >= 1080 || totalMinutes < 240;   // 18:00–04:00
-    const isLondon = totalMinutes >= 120  && totalMinutes < 660;   // 02:00–11:00
-    const isNY     = totalMinutes >= 480  && totalMinutes < 1020;  // 08:00–17:00
-
-    const activeSessions = [];
-    if (isTokyo)  activeSessions.push('Tokyo');
-    if (isLondon) activeSessions.push('London');
-    if (isNY)     activeSessions.push('New York');
-
-    const isOverlap = activeSessions.length > 1;
-
-    if (activeSessions.length === 0) {
-        uiSessionLabel.textContent = 'Session: Closed';
-        sessionColor = 'red';
-        _stopSessionOverlap();
-    } else if (!isOverlap) {
-        uiSessionLabel.textContent = 'Session: ' + activeSessions[0];
-        _stopSessionOverlap();
-    } else {
-        _startSessionOverlap(activeSessions, uiSessionLabel);
+    if (totalMinutes >= 570 && totalMinutes < 600) {        // 09:30 - 10:00 ET
+        sessionText = 'Session: Judas Swing';
+        dotClass = 'dot yellow';
+    } else if (totalMinutes >= 600 && totalMinutes < 690) { // 10:00 - 11:30 ET
+        sessionText = 'Session: AM Kill Zone';
+        dotClass = 'dot pulse-green';
+    } else if (totalMinutes >= 690 && totalMinutes < 810) { // 11:30 - 13:30 ET
+        sessionText = 'Session: Lunch Chop';
+        dotClass = 'dot yellow';
+    } else if (totalMinutes >= 810 && totalMinutes < 930) { // 13:30 - 15:30 ET
+        sessionText = 'Session: PM Kill Zone';
+        dotClass = 'dot pulse-green';
+    } else if (totalMinutes >= 930 && totalMinutes < 960) { // 15:30 - 16:00 ET
+        sessionText = 'Session: Power Hour';
+        dotClass = 'dot orange';
     }
 
-    uiSessionDot.className = 'dot ' + (isOverlap ? 'pulse-green' : sessionColor);
-}
-
-// ── SESSION OVERLAP CROSSFADE ─────────────────────────────────────────────────
-var _overlapTimer = null;
-var _overlapSessions = [];
-var _overlapIdx = 0;
-
-function _startSessionOverlap(sessions, label) {
-    // If already cycling these exact sessions, skip
-    if (_overlapTimer && JSON.stringify(_overlapSessions) === JSON.stringify(sessions)) return;
-    _stopSessionOverlap();
-    _overlapSessions = sessions;
-    _overlapIdx = 0;
-
-    function cycle() {
-        label.style.opacity = '0';
-        setTimeout(function() {
-            label.textContent = 'Session: ' + _overlapSessions[_overlapIdx];
-            label.style.opacity = '1';
-            _overlapIdx = (_overlapIdx + 1) % _overlapSessions.length;
-        }, 400);
-    }
-
-    label.textContent = 'Session: ' + sessions[0];
-    _overlapIdx = 1;
-    _overlapTimer = setInterval(cycle, 3000);
-}
-
-function _stopSessionOverlap() {
-    if (_overlapTimer) { clearInterval(_overlapTimer); _overlapTimer = null; }
-    _overlapSessions = [];
+    uiSessionLabel.textContent = sessionText;
+    uiSessionLabel.style.opacity = '1';
+    uiSessionDot.className = dotClass;
 }
 
 updateMarketClock();
@@ -766,7 +727,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.switchView(savedView);
     // ── Auto-load data for the restored view ──────────────────────────────────
     if (savedView === 'trading') {
-        loadPropAccounts();
+        // Options Dashboard Phase 2 initialization will go here
     }
     if (savedView === 'nova') {
         // Layout engine needs view to be visible — wait for render
