@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>xEpic Labs &mdash; Calendar Manager</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Cdefs%3E%3ClinearGradient id='m' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='40%25' stop-color='%23d1d8e0'/%3E%3Cstop offset='100%25' stop-color='%237a8594'/%3E%3C/linearGradient%3E%3Cfilter id='g'%3E%3CfeGaussianBlur stdDeviation='3' result='b'/%3E%3CfeMerge%3E%3CfeMergeNode in='b'/%3E%3CfeMergeNode in='SourceGraphic'/%3E%3C/feMerge%3E%3C/filter%3E%3C/defs%3E%3Cg%3E%3Cpath d='M25 20h20v80H25z' fill='url(%23m)'/%3E%3Cpath d='M45 20h55l-15 18H45z' fill='url(%23m)'/%3E%3Cpath d='M45 100h55l-15-18H45z' fill='url(%23m)'/%3E%3Cpath d='M65 42q0 18-23 18 23 0 23 18 0-18 23-18-23 0-23-18z' fill='%23ffffff' filter='url(%23g)'/%3E%3C/g%3E%3C/svg%3E">
-    <link rel="stylesheet" href="/css/styles.css?v=3.0">
+    <link rel="stylesheet" href="/css/styles.css?v=3.1">
 </head>
 <body class="dashboard-body">
 
@@ -206,7 +206,73 @@
         </div>
     </div>
 
-    <script src="/js/calendar.js?v=2.8"></script>
+    <!-- Day Detail Modal -->
+    <div id="dayModal" class="day-modal-overlay hidden">
+        <div class="day-modal">
+            <div class="day-modal-header">
+                <div>
+                    <p class="day-modal-dow" id="dayModalDow">Saturday</p>
+                    <h2 class="day-modal-date-text" id="dayModalDate">June 7, 2026</h2>
+                </div>
+                <button id="dayModalClose" class="day-modal-close">&times;</button>
+            </div>
+
+            <div class="day-modal-tabs">
+                <button class="day-tab-btn active" data-tab="events">Events</button>
+                <button class="day-tab-btn" data-tab="add">+ Add Event</button>
+            </div>
+
+            <div class="day-tab-body">
+                <!-- Events Panel -->
+                <div class="day-tab-panel active" id="tabEvents">
+                    <div id="dayEventsList" class="day-events-list"></div>
+                </div>
+
+                <!-- Add Event Panel -->
+                <div class="day-tab-panel" id="tabAdd">
+                    <form id="dayAddEventForm" autocomplete="off">
+                        <div class="day-form-group">
+                            <label class="day-form-label">Event Type</label>
+                            <div class="type-pill-row">
+                                <button type="button" class="type-pill" data-type="birthday">&nbsp;&#127874; Birthday</button>
+                                <button type="button" class="type-pill" data-type="income">&nbsp;&#128181; Income</button>
+                                <button type="button" class="type-pill" data-type="expense">&nbsp;&#128179; Expense</button>
+                            </div>
+                        </div>
+                        <div class="day-form-group">
+                            <label class="day-form-label">Title</label>
+                            <input class="day-form-input" type="text" id="dayEventTitle" placeholder="e.g. Netflix subscription..." />
+                        </div>
+                        <div class="day-form-group recurring-toggle-row">
+                            <label class="day-form-label" style="margin:0;">Recurring</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="dayEventRecurring">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="recurrence-options hidden" id="recurrenceOptions">
+                            <div class="day-form-group">
+                                <label class="day-form-label">Frequency</label>
+                                <div class="freq-pill-row">
+                                    <button type="button" class="freq-pill" data-freq="weekly">Weekly</button>
+                                    <button type="button" class="freq-pill" data-freq="biweekly">Bi-weekly</button>
+                                    <button type="button" class="freq-pill active" data-freq="monthly">Monthly</button>
+                                    <button type="button" class="freq-pill" data-freq="yearly">Yearly</button>
+                                </div>
+                            </div>
+                            <div class="day-form-group">
+                                <label class="day-form-label">Ends On</label>
+                                <input class="day-form-input" type="date" id="dayEventEndDate" />
+                            </div>
+                        </div>
+                        <button type="submit" class="day-submit-btn">Save Event</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/calendar.js?v=2.9"></script>
 
 </body>
 </html>

@@ -162,6 +162,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
 
             cell.appendChild(eventsContainer);
+
+            // Click → open day detail modal (use unfiltered dayEvents)
+            cell.style.cursor = 'pointer';
+            cell.addEventListener('click', () => openDayModal(cellDate, dayEvents));
+
             grid.appendChild(cell);
         }
     }
@@ -663,5 +668,164 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // Override the init call at the bottom to use the synced version
     loadAllEventsAndSync();
+
+    // ── DAY DETAIL MODAL ENGINE ─────────────────────────────────
+    const dayModalOverlay   = document.getElementById('dayModal');
+    const dayModalCloseBtn  = document.getElementById('dayModalClose');
+    const dayModalDow       = document.getElementById('dayModalDow');
+    const dayModalDateTxt   = document.getElementById('dayModalDate');
+    const dayEventsList     = document.getElementById('dayEventsList');
+    const dayAddForm        = document.getElementById('dayAddEventForm');
+    const dayEventTitleInp  = document.getElementById('dayEventTitle');
+    const dayEventRecurring = document.getElementById('dayEventRecurring');
+    const recurrenceOptions = document.getElementById('recurrenceOptions');
+
+    const DOW_NAMES   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    let selectedModalDate = null;
+    let selectedEventType = null;
+    let selectedFrequency = 'monthly';
+
+    function openDayModal(cellDate, dayEvents) {
+        selectedModalDate = new Date(cellDate);
+        selectedEventType = null;
+        selectedFrequency = 'monthly';
+
+        // Header
+        dayModalDow.textContent = DOW_NAMES[cellDate.getDay()];
+        dayModalDateTxt.textContent = `${MONTH_NAMES[cellDate.getMonth()]} ${cellDate.getDate()}, ${cellDate.getFullYear()}`;
+
+        // Events tab
+        switchDayTab('events');
+        renderDayEventsList(dayEvents);
+
+        // Reset Add form
+        if (dayAddForm) dayAddForm.reset();
+        document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.freq-pill').forEach(p => {
+            p.classList.remove('active');
+            if (p.dataset.freq === 'monthly') p.classList.add('active');
+        });
+        if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
+
+        // Animate open
+        dayModalOverlay.classList.remove('hidden');
+        requestAnimationFrame(() => dayModalOverlay.classList.add('active'));
+    }
+
+    function closeDayModal() {
+        dayModalOverlay.classList.remove('active');
+        setTimeout(() => dayModalOverlay.classList.add('hidden'), 320);
+    }
+
+    function renderDayEventsList(dayEvents) {
+        if (!dayEventsList) return;
+        if (!dayEvents || dayEvents.length === 0) {
+            dayEventsList.innerHTML = `
+                <div class="day-no-events">
+                    <div class="day-no-events-icon">💭</div>
+                    <div class="day-no-events-text">No events scheduled for this day</div>
+                </div>`;
+            return;
+        }
+        dayEventsList.innerHTML = dayEvents.map(e => {
+            const conf = CATEGORY_MAP[e.type] || { color: '#888', emoji: '📅', label: e.type };
+            return `
+                <div class="day-event-item">
+                    <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
+                    <div class="day-event-info">
+                        <div class="day-event-name">${conf.emoji} ${e.title}</div>
+                        <div class="day-event-cat">${conf.label}</div>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    function switchDayTab(tab) {
+        document.querySelectorAll('.day-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.getElementById('tabEvents').classList.toggle('active', tab === 'events');
+        document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
+    }
+
+    // Tab clicks
+    document.querySelectorAll('.day-tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchDayTab(btn.dataset.tab));
+    });
+
+    // Close
+    if (dayModalCloseBtn) dayModalCloseBtn.addEventListener('click', closeDayModal);
+    if (dayModalOverlay)  dayModalOverlay.addEventListener('click', e => { if (e.target === dayModalOverlay) closeDayModal(); });
+
+    // Type pills
+    document.querySelectorAll('.type-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            selectedEventType = pill.dataset.type;
+        });
+    });
+
+    // Recurring toggle
+    if (dayEventRecurring) {
+        dayEventRecurring.addEventListener('change', () => {
+            recurrenceOptions.classList.toggle('hidden', !dayEventRecurring.checked);
+        });
+    }
+
+    // Frequency pills
+    document.querySelectorAll('.freq-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            document.querySelectorAll('.freq-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            selectedFrequency = pill.dataset.freq;
+        });
+    });
+
+    // Form submit
+    if (dayAddForm) {
+        dayAddForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            if (!selectedEventType) { alert('Please select an event type.'); return; }
+            const title = dayEventTitleInp.value.trim();
+            if (!title) { alert('Please enter a title.'); return; }
+
+            const isRecurring = dayEventRecurring && dayEventRecurring.checked;
+            const endDateEl   = document.getElementById('dayEventEndDate');
+            const endDateVal  = endDateEl ? endDateEl.value : '';
+
+            // Build list of dates to save
+            const startD = selectedModalDate;
+            const datesToSave = [new Date(startD)];
+
+            if (isRecurring && endDateVal) {
+                const endD = new Date(endDateVal + 'T12:00:00');
+                let curr   = new Date(startD);
+                while (datesToSave.length < 60) {
+                    if      (selectedFrequency === 'weekly')    curr.setDate(curr.getDate() + 7);
+                    else if (selectedFrequency === 'biweekly')  curr.setDate(curr.getDate() + 14);
+                    else if (selectedFrequency === 'monthly')   curr.setMonth(curr.getMonth() + 1);
+                    else if (selectedFrequency === 'yearly')    curr.setFullYear(curr.getFullYear() + 1);
+                    if (curr > endD) break;
+                    datesToSave.push(new Date(curr));
+                }
+            }
+
+            try {
+                await Promise.all(datesToSave.map(d => {
+                    const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
+                    return fetch('/api/auth/trading/custom-events', {
+                        method: 'POST',
+                        headers: API_HEADERS,
+                        body: JSON.stringify({ title, event_date, event_type: selectedEventType })
+                    });
+                }));
+                await loadAllEventsAndSync();
+                closeDayModal();
+            } catch (err) {
+                console.error('Error saving event:', err);
+            }
+        });
+    }
 });
 
