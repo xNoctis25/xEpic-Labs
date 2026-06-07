@@ -722,6 +722,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.freq-pill[data-freq]').forEach(p => p.classList.toggle('active', p.dataset.freq === 'monthly'));
         document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.toggle('active', p.dataset.ends === 'never'));
         if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
+        // Always restore recurring row visibility on open (may have been hidden for birthday)
+        const recurringRow = document.querySelector('.recurring-toggle-row');
+        if (recurringRow) recurringRow.style.display = '';
         const epg = document.getElementById('endDatePickerGroup');
         if (epg) epg.classList.add('hidden');
         if (dayEndDropdown)  dayEndDropdown.classList.add('hidden');
@@ -776,6 +779,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             selectedEventType = pill.dataset.type;
+
+            const recurringRow = document.querySelector('.recurring-toggle-row');
+            const isBirthday = selectedEventType === 'birthday';
+
+            if (isBirthday) {
+                // Birthdays are always yearly — hide recurring controls entirely
+                if (recurringRow) recurringRow.style.display = 'none';
+                if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
+            } else {
+                // Restore recurring row for income / expense
+                if (recurringRow) recurringRow.style.display = '';
+                if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', !(dayEventRecurring && dayEventRecurring.checked));
+            }
         });
     });
 
@@ -896,30 +912,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             const title = dayEventTitleInp.value.trim();
             if (!title) { alert('Please enter a title.'); return; }
 
-            const isRecurring = dayEventRecurring && dayEventRecurring.checked;
+            // Birthdays auto-expand as yearly/never — no user input needed
+            const isBirthday  = selectedEventType === 'birthday';
+            const isRecurring = isBirthday || (dayEventRecurring && dayEventRecurring.checked);
+            const effectiveFreq = isBirthday ? 'yearly' : selectedFrequency;
+            const effectiveEnds = isBirthday ? 'never'  : endsMode;
             const startD      = selectedModalDate;
             const datesToSave = [new Date(startD)];
 
             if (isRecurring) {
                 let curr = new Date(startD);
-                if (endsMode === 'on-date' && selectedEndDate) {
+                if (effectiveEnds === 'on-date' && selectedEndDate) {
                     const endD = new Date(selectedEndDate.getFullYear(), selectedEndDate.getMonth() + 1, 0);
                     while (datesToSave.length < 60) {
-                        if      (selectedFrequency === 'weekly')   curr.setDate(curr.getDate() + 7);
-                        else if (selectedFrequency === 'biweekly') curr.setDate(curr.getDate() + 14);
-                        else if (selectedFrequency === 'monthly')  curr.setMonth(curr.getMonth() + 1);
-                        else if (selectedFrequency === 'yearly')   curr.setFullYear(curr.getFullYear() + 1);
+                        if      (effectiveFreq === 'weekly')   curr.setDate(curr.getDate() + 7);
+                        else if (effectiveFreq === 'biweekly') curr.setDate(curr.getDate() + 14);
+                        else if (effectiveFreq === 'monthly')  curr.setMonth(curr.getMonth() + 1);
+                        else if (effectiveFreq === 'yearly')   curr.setFullYear(curr.getFullYear() + 1);
                         if (curr > endD) break;
                         datesToSave.push(new Date(curr));
                     }
                 } else {
                     // Never — frequency-based cap
-                    const cap = NEVER_CAPS[selectedFrequency] || 10;
+                    const cap = NEVER_CAPS[effectiveFreq] || 10;
                     while (datesToSave.length <= cap) {
-                        if      (selectedFrequency === 'weekly')   curr.setDate(curr.getDate() + 7);
-                        else if (selectedFrequency === 'biweekly') curr.setDate(curr.getDate() + 14);
-                        else if (selectedFrequency === 'monthly')  curr.setMonth(curr.getMonth() + 1);
-                        else if (selectedFrequency === 'yearly')   curr.setFullYear(curr.getFullYear() + 1);
+                        if      (effectiveFreq === 'weekly')   curr.setDate(curr.getDate() + 7);
+                        else if (effectiveFreq === 'biweekly') curr.setDate(curr.getDate() + 14);
+                        else if (effectiveFreq === 'monthly')  curr.setMonth(curr.getMonth() + 1);
+                        else if (effectiveFreq === 'yearly')   curr.setFullYear(curr.getFullYear() + 1);
                         datesToSave.push(new Date(curr));
                     }
                 }
