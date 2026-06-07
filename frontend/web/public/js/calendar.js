@@ -680,36 +680,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dayEventRecurring = document.getElementById('dayEventRecurring');
     const recurrenceOptions = document.getElementById('recurrenceOptions');
 
-    const DOW_NAMES   = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    // End-date picker elements
+    const dayEndTrigger   = document.getElementById('dayEndTrigger');
+    const dayEndTriggerTx = document.getElementById('dayEndTriggerText');
+    const dayEndDropdown  = document.getElementById('dayEndDropdown');
+    const dayEndHeader    = document.getElementById('dayEndHeader');
+    const dayEndMonthGrid = document.getElementById('dayEndMonthGrid');
+    const dayEndYearGrid  = document.getElementById('dayEndYearGrid');
+    const dayEndTodayBtn  = document.getElementById('dayEndTodayBtn');
+
+    const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     let selectedModalDate = null;
     let selectedEventType = null;
     let selectedFrequency = 'monthly';
+    let endsMode          = 'never';   // 'never' | 'on-date'
+    let selectedEndDate   = null;      // Date object (1st of selected month)
+    let endPickerYear     = new Date().getFullYear();
+    let endPickerMode     = 'closed';  // 'closed' | 'months' | 'years'
+
+    // Never caps per frequency
+    const NEVER_CAPS = { weekly: 26, biweekly: 26, monthly: 36, yearly: 10 };
 
     function openDayModal(cellDate, dayEvents) {
         selectedModalDate = new Date(cellDate);
         selectedEventType = null;
         selectedFrequency = 'monthly';
+        endsMode          = 'never';
+        selectedEndDate   = null;
+        endPickerMode     = 'closed';
 
-        // Header
-        dayModalDow.textContent = DOW_NAMES[cellDate.getDay()];
+        dayModalDow.textContent     = DOW_NAMES[cellDate.getDay()];
         dayModalDateTxt.textContent = `${MONTH_NAMES[cellDate.getMonth()]} ${cellDate.getDate()}, ${cellDate.getFullYear()}`;
 
-        // Events tab
         switchDayTab('events');
         renderDayEventsList(dayEvents);
 
-        // Reset Add form
         if (dayAddForm) dayAddForm.reset();
         document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
-        document.querySelectorAll('.freq-pill').forEach(p => {
-            p.classList.remove('active');
-            if (p.dataset.freq === 'monthly') p.classList.add('active');
-        });
+        document.querySelectorAll('.freq-pill[data-freq]').forEach(p => p.classList.toggle('active', p.dataset.freq === 'monthly'));
+        document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.toggle('active', p.dataset.ends === 'never'));
         if (recurrenceOptions) recurrenceOptions.classList.add('hidden');
+        const epg = document.getElementById('endDatePickerGroup');
+        if (epg) epg.classList.add('hidden');
+        if (dayEndDropdown)  dayEndDropdown.classList.add('hidden');
+        if (dayEndTrigger)   dayEndTrigger.classList.remove('open','has-value');
+        if (dayEndTriggerTx) dayEndTriggerTx.textContent = 'Select month';
 
-        // Animate open
         dayModalOverlay.classList.remove('hidden');
         requestAnimationFrame(() => dayModalOverlay.classList.add('active'));
     }
@@ -745,19 +764,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     function switchDayTab(tab) {
         document.querySelectorAll('.day-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
         document.getElementById('tabEvents').classList.toggle('active', tab === 'events');
-        document.getElementById('tabAdd').classList.toggle('active', tab === 'add');
+        document.getElementById('tabAdd').classList.toggle('active',   tab === 'add');
     }
 
-    // Tab clicks
-    document.querySelectorAll('.day-tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchDayTab(btn.dataset.tab));
-    });
+    document.querySelectorAll('.day-tab-btn').forEach(btn => btn.addEventListener('click', () => switchDayTab(btn.dataset.tab)));
 
-    // Close
     if (dayModalCloseBtn) dayModalCloseBtn.addEventListener('click', closeDayModal);
     if (dayModalOverlay)  dayModalOverlay.addEventListener('click', e => { if (e.target === dayModalOverlay) closeDayModal(); });
 
-    // Type pills
     document.querySelectorAll('.type-pill').forEach(pill => {
         pill.addEventListener('click', () => {
             document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
@@ -766,23 +780,116 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
 
-    // Recurring toggle
     if (dayEventRecurring) {
         dayEventRecurring.addEventListener('change', () => {
-            recurrenceOptions.classList.toggle('hidden', !dayEventRecurring.checked);
+            if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', !dayEventRecurring.checked);
         });
     }
 
-    // Frequency pills
-    document.querySelectorAll('.freq-pill').forEach(pill => {
+    // Frequency pills (data-freq only — separate from Ends pills)
+    document.querySelectorAll('.freq-pill[data-freq]').forEach(pill => {
         pill.addEventListener('click', () => {
-            document.querySelectorAll('.freq-pill').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.freq-pill[data-freq]').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             selectedFrequency = pill.dataset.freq;
         });
     });
 
-    // Form submit
+    // Ends pills — Never / On Date
+    document.querySelectorAll('.freq-pill[data-ends]').forEach(pill => {
+        pill.addEventListener('click', () => {
+            document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            endsMode = pill.dataset.ends;
+            const epg = document.getElementById('endDatePickerGroup');
+            if (epg) epg.classList.toggle('hidden', endsMode !== 'on-date');
+        });
+    });
+
+    // ── End-month inline picker (same logic as main-cal-picker) ──
+    function renderEndPicker() {
+        if (endPickerMode === 'months') {
+            if (dayEndYearGrid)  dayEndYearGrid.classList.add('hidden');
+            if (dayEndMonthGrid) dayEndMonthGrid.classList.remove('hidden');
+            if (dayEndHeader)    dayEndHeader.textContent = endPickerYear;
+            if (!dayEndMonthGrid) return;
+            dayEndMonthGrid.innerHTML = '';
+            SHORT_MONTHS.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.type = 'button'; btn.className = 'main-cal-btn';
+                if (selectedEndDate && endPickerYear === selectedEndDate.getFullYear() && i === selectedEndDate.getMonth()) btn.classList.add('selected');
+                btn.textContent = m;
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    selectedEndDate = new Date(endPickerYear, i, 1);
+                    if (dayEndTriggerTx) dayEndTriggerTx.textContent = `${MONTH_NAMES[i]} ${endPickerYear}`;
+                    if (dayEndTrigger)   dayEndTrigger.classList.add('has-value');
+                    closeEndPicker();
+                });
+                dayEndMonthGrid.appendChild(btn);
+            });
+        } else if (endPickerMode === 'years') {
+            if (dayEndMonthGrid) dayEndMonthGrid.classList.add('hidden');
+            if (dayEndYearGrid)  dayEndYearGrid.classList.remove('hidden');
+            if (dayEndHeader)    dayEndHeader.textContent = 'Year';
+            if (!dayEndYearGrid) return;
+            const dStart = Math.floor(endPickerYear / 10) * 10;
+            dayEndYearGrid.innerHTML = '';
+            for (let i = 0; i < 12; i++) {
+                const y = dStart + i;
+                const btn = document.createElement('button');
+                btn.type = 'button'; btn.className = 'main-cal-btn';
+                if (selectedEndDate && y === selectedEndDate.getFullYear()) btn.classList.add('selected');
+                btn.textContent = y;
+                btn.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    endPickerYear = y; endPickerMode = 'months'; renderEndPicker();
+                });
+                dayEndYearGrid.appendChild(btn);
+            }
+        }
+    }
+
+    function closeEndPicker() {
+        endPickerMode = 'closed';
+        if (dayEndDropdown) dayEndDropdown.classList.add('hidden');
+        if (dayEndTrigger)  dayEndTrigger.classList.remove('open');
+    }
+
+    if (dayEndTrigger) {
+        dayEndTrigger.addEventListener('click', e => {
+            e.stopPropagation();
+            if (endPickerMode === 'closed') {
+                endPickerMode = 'months';
+                endPickerYear = selectedEndDate ? selectedEndDate.getFullYear() : new Date().getFullYear();
+                renderEndPicker();
+                if (dayEndDropdown) dayEndDropdown.classList.remove('hidden');
+                dayEndTrigger.classList.add('open');
+            } else { closeEndPicker(); }
+        });
+    }
+    if (dayEndHeader) {
+        dayEndHeader.addEventListener('click', e => {
+            e.stopPropagation();
+            if (endPickerMode === 'months') { endPickerMode = 'years'; renderEndPicker(); }
+        });
+    }
+    if (dayEndTodayBtn) {
+        dayEndTodayBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            const now = new Date();
+            selectedEndDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            if (dayEndTriggerTx) dayEndTriggerTx.textContent = `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+            if (dayEndTrigger)   dayEndTrigger.classList.add('has-value');
+            closeEndPicker();
+        });
+    }
+    document.addEventListener('click', e => {
+        const pk = document.getElementById('dayEndPicker');
+        if (endPickerMode !== 'closed' && pk && !pk.contains(e.target)) closeEndPicker();
+    });
+
+    // ── Form submit ────────────────────────────────────────────
     if (dayAddForm) {
         dayAddForm.addEventListener('submit', async e => {
             e.preventDefault();
@@ -791,23 +898,31 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!title) { alert('Please enter a title.'); return; }
 
             const isRecurring = dayEventRecurring && dayEventRecurring.checked;
-            const endDateEl   = document.getElementById('dayEventEndDate');
-            const endDateVal  = endDateEl ? endDateEl.value : '';
-
-            // Build list of dates to save
-            const startD = selectedModalDate;
+            const startD      = selectedModalDate;
             const datesToSave = [new Date(startD)];
 
-            if (isRecurring && endDateVal) {
-                const endD = new Date(endDateVal + 'T12:00:00');
-                let curr   = new Date(startD);
-                while (datesToSave.length < 60) {
-                    if      (selectedFrequency === 'weekly')    curr.setDate(curr.getDate() + 7);
-                    else if (selectedFrequency === 'biweekly')  curr.setDate(curr.getDate() + 14);
-                    else if (selectedFrequency === 'monthly')   curr.setMonth(curr.getMonth() + 1);
-                    else if (selectedFrequency === 'yearly')    curr.setFullYear(curr.getFullYear() + 1);
-                    if (curr > endD) break;
-                    datesToSave.push(new Date(curr));
+            if (isRecurring) {
+                let curr = new Date(startD);
+                if (endsMode === 'on-date' && selectedEndDate) {
+                    const endD = new Date(selectedEndDate.getFullYear(), selectedEndDate.getMonth() + 1, 0);
+                    while (datesToSave.length < 60) {
+                        if      (selectedFrequency === 'weekly')   curr.setDate(curr.getDate() + 7);
+                        else if (selectedFrequency === 'biweekly') curr.setDate(curr.getDate() + 14);
+                        else if (selectedFrequency === 'monthly')  curr.setMonth(curr.getMonth() + 1);
+                        else if (selectedFrequency === 'yearly')   curr.setFullYear(curr.getFullYear() + 1);
+                        if (curr > endD) break;
+                        datesToSave.push(new Date(curr));
+                    }
+                } else {
+                    // Never — frequency-based cap
+                    const cap = NEVER_CAPS[selectedFrequency] || 10;
+                    while (datesToSave.length <= cap) {
+                        if      (selectedFrequency === 'weekly')   curr.setDate(curr.getDate() + 7);
+                        else if (selectedFrequency === 'biweekly') curr.setDate(curr.getDate() + 14);
+                        else if (selectedFrequency === 'monthly')  curr.setMonth(curr.getMonth() + 1);
+                        else if (selectedFrequency === 'yearly')   curr.setFullYear(curr.getFullYear() + 1);
+                        datesToSave.push(new Date(curr));
+                    }
                 }
             }
 
@@ -815,17 +930,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await Promise.all(datesToSave.map(d => {
                     const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                     return fetch('/api/auth/trading/custom-events', {
-                        method: 'POST',
-                        headers: API_HEADERS,
+                        method: 'POST', headers: API_HEADERS,
                         body: JSON.stringify({ title, event_date, event_type: selectedEventType })
                     });
                 }));
                 await loadAllEventsAndSync();
                 closeDayModal();
-            } catch (err) {
-                console.error('Error saving event:', err);
-            }
+            } catch (err) { console.error('Error saving event:', err); }
         });
     }
 });
-

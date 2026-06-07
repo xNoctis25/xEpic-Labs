@@ -2935,3 +2935,25 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     box-shadow: 0 8px 24px rgba(52,211,153,0.2);
 }
 .day-submit-btn:active { transform: translateY(0); }
+
+/* ── End date inline picker ── */
+.day-end-picker { position: relative; }
+.day-end-trigger {
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 12px 14px;
+    color: rgba(255,255,255,0.45); font-size: 0.95rem;
+    cursor: pointer; transition: all 0.2s cubic-bezier(0.25,1,0.5,1);
+    user-select: none;
+}
+.day-end-trigger:hover { border-color: rgba(255,255,255,0.22); }
+.day-end-trigger.has-value { color: #fff; }
+.day-end-chevron { font-size: 1.25rem; color: rgba(255,255,255,0.3); transition: transform 0.2s cubic-bezier(0.25,1,0.5,1); line-height: 1; }
+.day-end-trigger.open .day-end-chevron { transform: rotate(90deg); }
+.day-end-dropdown {
+    margin-top: 8px; padding: 12px;
+    background: rgba(22,23,26,0.98); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+}
+.day-end-dropdown.hidden { display: none; }
+
