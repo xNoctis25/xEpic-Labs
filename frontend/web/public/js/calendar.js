@@ -1008,10 +1008,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (existingBanner) existingBanner.remove();
         const tabAdd = document.getElementById('tabAdd');
         if (tabAdd) {
-            const scopePills = data.groupId ? `
-                <button class="edit-scope-pill active" data-scope="this">📍 This Event</button>
-                <button class="edit-scope-pill" data-scope="future">⏩ Future Events</button>
-                <button class="edit-scope-pill" data-scope="all">♾️ All Events</button>` : '';
+            const scopePart = data.groupId
+                ? `<button class="edit-scope-cycle" data-scope-idx="0">${EDIT_SCOPES[0].label} ›</button>`
+                : `<span class="edit-scope-static">📍 This Event</span>`;
             const banner = document.createElement('div');
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
@@ -1019,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <button class="edit-mode-pill active" data-mode="edit">✏️ Editing</button>
                 <button class="edit-mode-pill" data-mode="delete">🗑 Delete</button>
                 <span class="edit-entry-name">${data.title}</span>
-                ${scopePills}`;
+                ${scopePart}`;
             tabAdd.prepend(banner);
         }
     }
@@ -1046,12 +1045,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
                 return;
             }
-            // Scope pill selection
-            const scopePill = ev.target.closest('.edit-scope-pill');
-            if (scopePill && editingEntry) {
-                document.querySelectorAll('.edit-scope-pill').forEach(b => b.classList.remove('active'));
-                scopePill.classList.add('active');
-                editingEntry.scope = scopePill.dataset.scope;
+            // Scope cycle button — steps through This → Future → All → This
+            const cycleBtn = ev.target.closest('.edit-scope-cycle');
+            if (cycleBtn && editingEntry) {
+                let idx = parseInt(cycleBtn.dataset.scopeIdx || '0', 10);
+                idx = (idx + 1) % EDIT_SCOPES.length;
+                cycleBtn.dataset.scopeIdx = idx;
+                cycleBtn.textContent = EDIT_SCOPES[idx].label + ' ›';
+                editingEntry.scope = EDIT_SCOPES[idx].scope;
                 return;
             }
         });

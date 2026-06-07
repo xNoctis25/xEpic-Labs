@@ -2920,15 +2920,15 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .edit-mode-pill:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
 .edit-mode-pill.active[data-mode="edit"]   { background: rgba(99,179,237,0.18); border-color: rgba(99,179,237,0.55); color: rgb(99,179,237); }
 .edit-mode-pill.active[data-mode="delete"] { background: rgba(252,100,100,0.18); border-color: rgba(252,100,100,0.55); color: rgb(252,100,100); }
-/* Scope pills */
-.edit-scope-pill {
+/* Scope cycle button */
+.edit-scope-cycle {
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px; color: rgba(255,255,255,0.45); font-size: 0.78rem; font-weight: 600;
+    border-radius: 20px; color: rgba(255,255,255,0.55); font-size: 0.78rem; font-weight: 600;
     padding: 4px 12px; cursor: pointer; font-family: inherit;
     transition: all 0.18s cubic-bezier(0.25,1,0.5,1); white-space: nowrap; flex-shrink: 0;
 }
-.edit-scope-pill:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
-.edit-scope-pill.active { background: rgba(78,205,196,0.15); border-color: rgba(78,205,196,0.6); color: rgb(78,205,196); }
+.edit-scope-cycle:hover { background: rgba(78,205,196,0.12); border-color: rgba(78,205,196,0.45); color: rgb(78,205,196); }
+.edit-scope-static { font-size: 0.78rem; color: rgba(255,255,255,0.3); white-space: nowrap; flex-shrink: 0; }
 /* Submit in delete mode */
 .day-submit-btn.danger-btn {
     background: linear-gradient(135deg, rgba(220,53,69,0.85), rgba(180,30,50,0.9)) !important;
