@@ -148,10 +148,20 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
     }
 });
 // ── CUSTOM USER EVENTS (CALENDAR) ─────────────────────────────────────────────
+// Ensure columns exist regardless of migration state
+async function ensureCustomEventsSchema() {
+    await pool.query(`
+        ALTER TABLE custom_events
+            ADD COLUMN IF NOT EXISTS user_id    INTEGER,
+            ADD COLUMN IF NOT EXISTS amount     NUMERIC(12,2),
+            ADD COLUMN IF NOT EXISTS account_id UUID;
+    `);
+}
+
 router.get('/custom-events', authenticateJWT, async (req: any, res) => {
     try {
+        await ensureCustomEventsSchema();
         const userId = req.user.id;
-        // Simple query — no JOIN so it never crashes if financial_accounts is missing
         const result = await pool.query(
             `SELECT * FROM custom_events
              WHERE user_id = $1
@@ -167,6 +177,7 @@ router.get('/custom-events', authenticateJWT, async (req: any, res) => {
 
 router.post('/custom-events', authenticateJWT, async (req: any, res) => {
     try {
+        await ensureCustomEventsSchema();
         const userId = req.user.id;
         const { title, event_date, event_type, amount, account_id } = req.body;
         if (!title || !event_date || !event_type) {
@@ -186,6 +197,7 @@ router.post('/custom-events', authenticateJWT, async (req: any, res) => {
 
 router.delete('/custom-events/:id', authenticateJWT, async (req: any, res) => {
     try {
+        await ensureCustomEventsSchema();
         const userId = req.user.id;
         const { id } = req.params;
         const result = await pool.query(
