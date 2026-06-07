@@ -2855,12 +2855,13 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
 .day-no-events-text { font-size: 0.92rem; line-height: 1.5; }
 .day-event-del {
     background: transparent; border: none; cursor: pointer;
-    font-size: 1.05rem; opacity: 0; padding: 6px 8px; border-radius: 8px;
+    font-size: 1.05rem; opacity: 0.65; padding: 6px 8px; border-radius: 8px;
     flex-shrink: 0; transition: opacity 0.18s, background 0.18s;
     line-height: 1;
+    filter: invert(27%) sepia(99%) saturate(3000%) hue-rotate(340deg) brightness(95%);
 }
-.day-event-item:hover .day-event-del { opacity: 0.75; filter: invert(27%) sepia(99%) saturate(3000%) hue-rotate(340deg) brightness(95%); }
-.day-event-del:hover  { opacity: 1 !important; background: rgba(255, 60, 60, 0.18); filter: invert(27%) sepia(99%) saturate(3000%) hue-rotate(340deg) brightness(95%); }
+.day-event-item:hover .day-event-del { opacity: 0.85; }
+.day-event-del:hover  { opacity: 1 !important; background: rgba(255, 60, 60, 0.18); }
 .day-event-del:disabled { opacity: 0.25 !important; cursor: not-allowed; }
 .day-event-edit {
     background: transparent; border: none; cursor: pointer;
