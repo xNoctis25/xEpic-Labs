@@ -14,14 +14,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let events = [];
 
     // DOM Elements
-    const grid = document.getElementById('fullCalendarGrid');
-    const monthTrigger = document.getElementById('monthDropdownTrigger');
-    const monthMenu = document.getElementById('monthDropdownMenu');
-    const yearTrigger = document.getElementById('yearDropdownTrigger');
-    const yearMenu = document.getElementById('yearDropdownMenu');
-    const monthDropdown = document.getElementById('monthDropdown');
-    const yearDropdown = document.getElementById('yearDropdown');
-    const todayBtn = document.getElementById('calTodayFullBtn');
+    const grid      = document.getElementById('fullCalendarGrid');
+    const todayBtn  = document.getElementById('calTodayFullBtn');
     
     // Modal Elements
     const addEventBtn = document.getElementById('addEventBtn');
@@ -85,17 +79,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const month = currentDate.getMonth();
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-        // Short names match the grid dropdown items
-        const shortMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        monthTrigger.textContent = shortMonthNames[month];
-        yearTrigger.textContent = year;
-
-        // Highlight selected items
-        document.querySelectorAll('.dropdown-item').forEach(el => el.classList.remove('selected'));
-        const mItem = document.querySelector(`.dropdown-item[data-type="month"][data-value="${month}"]`);
-        if (mItem) mItem.classList.add('selected');
-        const yItem = document.querySelector(`.dropdown-item[data-type="year"][data-value="${year}"]`);
-        if (yItem) yItem.classList.add('selected');
+        // Update unified picker trigger
+        const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const trigger = document.getElementById('mainCalTrigger');
+        if (trigger) trigger.textContent = `${SHORT[month]} ${year}`;
 
         const firstDayIndex = new Date(year, month, 1).getDay();
         const lastDate = new Date(year, month + 1, 0).getDate();
@@ -199,24 +186,95 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Dropdown Handlers
-    function closeDropdowns(e) {
-        if (!monthDropdown.contains(e.target)) monthDropdown.classList.remove('active');
-        if (!yearDropdown.contains(e.target)) yearDropdown.classList.remove('active');
+    // ── UNIFIED MONTH/YEAR PICKER ─────────────────────────────
+    const mainCalTrigger        = document.getElementById('mainCalTrigger');
+    const mainCalOverlay        = document.getElementById('mainCalOverlay');
+    const mainCalOverlayHeader  = document.getElementById('mainCalOverlayHeader');
+    const mainCalMonthGrid      = document.getElementById('mainCalMonthGrid');
+    const mainCalYearGrid       = document.getElementById('mainCalYearGrid');
+
+    const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let pickerYear = currentDate.getFullYear();
+    let pickerMode = 'closed'; // 'closed' | 'months' | 'years'
+
+    function renderPicker() {
+        if (pickerMode === 'months') {
+            mainCalYearGrid.classList.add('hidden');
+            mainCalMonthGrid.classList.remove('hidden');
+            mainCalOverlayHeader.textContent = pickerYear;
+            mainCalMonthGrid.innerHTML = '';
+            SHORT_MONTHS.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'main-cal-btn';
+                if (pickerYear === currentDate.getFullYear() && i === currentDate.getMonth()) btn.classList.add('selected');
+                btn.textContent = m;
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    currentDate.setFullYear(pickerYear, i, 1);
+                    renderCalendar();
+                    closePicker();
+                });
+                mainCalMonthGrid.appendChild(btn);
+            });
+        } else if (pickerMode === 'years') {
+            mainCalMonthGrid.classList.add('hidden');
+            mainCalYearGrid.classList.remove('hidden');
+            mainCalOverlayHeader.textContent = '← Back';
+            const decadeStart = Math.floor(pickerYear / 10) * 10;
+            mainCalYearGrid.innerHTML = '';
+            for (let i = 0; i < 12; i++) {
+                const y = decadeStart + i;
+                const btn = document.createElement('button');
+                btn.className = 'main-cal-btn';
+                if (y === currentDate.getFullYear()) btn.classList.add('selected');
+                btn.textContent = y;
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    pickerYear = y;
+                    pickerMode = 'months';
+                    renderPicker();
+                });
+                mainCalYearGrid.appendChild(btn);
+            }
+        }
     }
-    
-    document.addEventListener('click', closeDropdowns);
 
-    monthTrigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        yearDropdown.classList.remove('active');
-        monthDropdown.classList.toggle('active');
-    });
+    function closePicker() {
+        pickerMode = 'closed';
+        if (mainCalOverlay) mainCalOverlay.classList.remove('active');
+    }
 
-    yearTrigger.addEventListener('click', (e) => {
-        e.stopPropagation();
-        monthDropdown.classList.remove('active');
-        yearDropdown.classList.toggle('active');
+    if (mainCalTrigger) {
+        mainCalTrigger.addEventListener('click', e => {
+            e.stopPropagation();
+            if (pickerMode === 'closed') {
+                pickerMode = 'months';
+                pickerYear = currentDate.getFullYear();
+                renderPicker();
+                mainCalOverlay.classList.add('active');
+            } else {
+                closePicker();
+            }
+        });
+    }
+
+    if (mainCalOverlayHeader) {
+        mainCalOverlayHeader.addEventListener('click', e => {
+            e.stopPropagation();
+            if (pickerMode === 'months') {
+                pickerMode = 'years';
+                renderPicker();
+            } else if (pickerMode === 'years') {
+                pickerMode = 'months';
+                renderPicker();
+            }
+        });
+    }
+
+    document.addEventListener('click', e => {
+        if (pickerMode !== 'closed' && mainCalOverlay && !mainCalOverlay.contains(e.target) && e.target !== mainCalTrigger) {
+            closePicker();
+        }
     });
 
     // ── MODAL & FORMS ─────────────────────────────────────────
@@ -407,38 +465,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     setInterval(updateRealtimeClock, 1000);
-
-    // Initialize Custom Dropdowns — 3-column grid style
-    const monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    monthsList.forEach((m, i) => {
-        const div = document.createElement('div');
-        div.className = 'dropdown-item';
-        div.dataset.type = 'month';
-        div.dataset.value = i;
-        div.textContent = m;
-        div.addEventListener('click', () => {
-            currentDate.setMonth(i);
-            renderCalendar();
-            monthDropdown.classList.remove('active');
-        });
-        monthMenu.appendChild(div);
-    });
-
-    // Exactly 12 years → clean 4×3 grid (currYear-4 to currYear+7)
-    const currYear = new Date().getFullYear();
-    for (let y = currYear - 4; y <= currYear + 7; y++) {
-        const div = document.createElement('div');
-        div.className = 'dropdown-item';
-        div.dataset.type = 'year';
-        div.dataset.value = y;
-        div.textContent = y;
-        div.addEventListener('click', () => {
-            currentDate.setFullYear(y);
-            renderCalendar();
-            yearDropdown.classList.remove('active');
-        });
-        yearMenu.appendChild(div);
-    }
 
     // Init
     loadAllEvents();
