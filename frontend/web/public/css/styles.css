@@ -2910,23 +2910,19 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     border-right: 1px solid rgba(255,255,255,0.12); margin: 0 2px;
     white-space: nowrap;
 }
-/* Mode pills */
-.edit-mode-pill {
+/* Mode + Scope cycle buttons — same base style */
+.edit-mode-cycle, .edit-scope-cycle {
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px; color: rgba(255,255,255,0.45); font-size: 0.78rem; font-weight: 600;
+    border-radius: 20px; font-size: 0.78rem; font-weight: 600;
     padding: 4px 12px; cursor: pointer; font-family: inherit;
     transition: all 0.18s cubic-bezier(0.25,1,0.5,1); white-space: nowrap; flex-shrink: 0;
 }
-.edit-mode-pill:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
-.edit-mode-pill.active[data-mode="edit"]   { background: rgba(99,179,237,0.18); border-color: rgba(99,179,237,0.55); color: rgb(99,179,237); }
-.edit-mode-pill.active[data-mode="delete"] { background: rgba(252,100,100,0.18); border-color: rgba(252,100,100,0.55); color: rgb(252,100,100); }
-/* Scope cycle button */
-.edit-scope-cycle {
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px; color: rgba(255,255,255,0.55); font-size: 0.78rem; font-weight: 600;
-    padding: 4px 12px; cursor: pointer; font-family: inherit;
-    transition: all 0.18s cubic-bezier(0.25,1,0.5,1); white-space: nowrap; flex-shrink: 0;
-}
+/* Mode: Editing (default = blue) */
+.edit-mode-cycle { background: rgba(99,179,237,0.18); border-color: rgba(99,179,237,0.55); color: rgb(99,179,237); }
+/* Mode: Delete (idx=1 = red) */
+.edit-mode-cycle[data-mode-idx="1"] { background: rgba(252,100,100,0.18); border-color: rgba(252,100,100,0.55); color: rgb(252,100,100); }
+/* Scope cycle */
+.edit-scope-cycle { color: rgba(255,255,255,0.55); }
 .edit-scope-cycle:hover { background: rgba(78,205,196,0.12); border-color: rgba(78,205,196,0.45); color: rgb(78,205,196); }
 .edit-scope-static { font-size: 0.78rem; color: rgba(255,255,255,0.3); white-space: nowrap; flex-shrink: 0; }
 /* Submit in delete mode */

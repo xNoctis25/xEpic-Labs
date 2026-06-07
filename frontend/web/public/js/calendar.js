@@ -942,7 +942,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ── Edit + Delete handlers (delegated on dayEventsList) ──────────────────
     let editingEntry = null;
 
-    // Scope cycle config — icon on the RIGHT
+    // Cycle configs — icons on the RIGHT, no › indicator
+    const EDIT_MODES  = [
+        { mode: 'edit',   label: 'Editing ✏️' },
+        { mode: 'delete', label: 'Delete 🗑' },
+    ];
     const EDIT_SCOPES = [
         { scope: 'this',   label: 'This Event 📍' },
         { scope: 'future', label: 'Future Events ⏩' },
@@ -1009,14 +1013,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tabAdd = document.getElementById('tabAdd');
         if (tabAdd) {
             const scopePart = data.groupId
-                ? `<button class="edit-scope-cycle" data-scope-idx="0">${EDIT_SCOPES[0].label} ›</button>`
-                : `<span class="edit-scope-static">📍 This Event</span>`;
+                ? `<button class="edit-scope-cycle" data-scope-idx="0">${EDIT_SCOPES[0].label}</button>`
+                : `<span class="edit-scope-static">This Event 📍</span>`;
             const banner = document.createElement('div');
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
             banner.innerHTML = `
-                <button class="edit-mode-pill active" data-mode="edit">Editing ✏️</button>
-                <button class="edit-mode-pill" data-mode="delete">Delete 🗑</button>
+                <button class="edit-mode-cycle" data-mode-idx="0">${EDIT_MODES[0].label}</button>
                 <span class="edit-entry-name">${data.title}</span>
                 ${scopePart}`;
             tabAdd.prepend(banner);
@@ -1027,16 +1030,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const tabAddEl = document.getElementById('tabAdd');
     if (tabAddEl) {
         tabAddEl.addEventListener('click', ev => {
-            // Mode pill toggle (Editing / Delete)
-            const modePill = ev.target.closest('.edit-mode-pill');
-            if (modePill && editingEntry) {
-                document.querySelectorAll('.edit-mode-pill').forEach(b => b.classList.remove('active'));
-                modePill.classList.add('active');
-                editingEntry.mode = modePill.dataset.mode;
+            // Mode cycle button — toggles Editing ↔ Delete
+            const modeBtn = ev.target.closest('.edit-mode-cycle');
+            if (modeBtn && editingEntry) {
+                let idx = parseInt(modeBtn.dataset.modeIdx || '0', 10);
+                idx = (idx + 1) % EDIT_MODES.length;
+                modeBtn.dataset.modeIdx = idx;
+                modeBtn.textContent = EDIT_MODES[idx].label;
+                editingEntry.mode = EDIT_MODES[idx].mode;
                 const submitBtn = dayAddForm ? dayAddForm.querySelector('.day-submit-btn') : null;
                 if (submitBtn) {
                     if (editingEntry.mode === 'delete') {
-                        submitBtn.textContent = '🗑 Delete Entry';
+                        submitBtn.textContent = 'Delete Entry 🗑';
                         submitBtn.classList.add('danger-btn');
                     } else {
                         submitBtn.textContent = 'Update Entry';
@@ -1051,7 +1056,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 let idx = parseInt(cycleBtn.dataset.scopeIdx || '0', 10);
                 idx = (idx + 1) % EDIT_SCOPES.length;
                 cycleBtn.dataset.scopeIdx = idx;
-                cycleBtn.textContent = EDIT_SCOPES[idx].label + ' ›';
+                cycleBtn.textContent = EDIT_SCOPES[idx].label;
                 editingEntry.scope = EDIT_SCOPES[idx].scope;
                 return;
             }
