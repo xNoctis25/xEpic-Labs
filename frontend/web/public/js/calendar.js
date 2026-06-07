@@ -698,6 +698,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     let endsMode          = 'never';   // 'never' | 'on-date'
     let selectedEndDate   = null;      // Date object (1st of selected month)
     let endPickerYear     = new Date().getFullYear();
+    let selectedAccountId = null;      // UUID of chosen financial account
+
+    // ── Financial Accounts ────────────────────────────────────────
+    async function loadFinancialAccounts(type) {
+        const sel = document.getElementById('dayEventAccount');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— Loading… —</option>';
+        try {
+            const res = await fetch(`/api/auth/trading/financial-accounts?type=${type}`, { headers: API_HEADERS });
+            const accounts = await res.json();
+            sel.innerHTML = '<option value="">— Select account —</option>';
+            accounts.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a.id;
+                opt.textContent = a.account_name;
+                sel.appendChild(opt);
+            });
+            selectedAccountId = null;
+        } catch (err) {
+            sel.innerHTML = '<option value="">— Failed to load —</option>';
+            console.error('loadFinancialAccounts error:', err);
+        }
+    }
+
+    async function createFinancialAccount(account_name, account_type) {
+        const res = await fetch('/api/auth/trading/financial-accounts', {
+            method: 'POST',
+            headers: API_HEADERS,
+            body: JSON.stringify({ account_name, account_type })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Failed to create account');
+        }
+        return res.json();
+    }
+
     let endPickerMode     = 'closed';  // 'closed' | 'months' | 'years'
 
     // Never caps per frequency
@@ -723,6 +760,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.toggle('active', p.dataset.ends === 'never'));
         // Reset all type-specific fields to hidden; syncFormFields will show correct ones once type is picked
         selectedEventType = null;
+        selectedAccountId = null;
         ['fieldName','fieldAccount','fieldAmount'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.classList.add('hidden');
@@ -735,6 +773,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (dayEndDropdown)  dayEndDropdown.classList.add('hidden');
         if (dayEndTrigger)   dayEndTrigger.classList.remove('open','has-value');
         if (dayEndTriggerTx) dayEndTriggerTx.textContent = 'Select month';
+        // Reset new-account UI
+        const nRow = document.getElementById('newAccountRow');
+        const nTog = document.getElementById('addAccountToggle');
+        const nInp = document.getElementById('newAccountName');
+        if (nRow) nRow.classList.add('hidden');
+        if (nTog) nTog.textContent = '+ New account';
+        if (nInp) nInp.value = '';
 
         dayModalOverlay.classList.remove('hidden');
         requestAnimationFrame(() => dayModalOverlay.classList.add('active'));
@@ -757,11 +802,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         dayEventsList.innerHTML = dayEvents.map(e => {
             const conf = CATEGORY_MAP[e.type] || { color: '#888', emoji: '📅', label: e.type };
+            const amtStr = e.amount != null
+                ? ` — $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : (e.event_type === 'income' || e.event_type === 'expense') ? ' · <em style="opacity:.45;font-size:.8em">Reminder</em>' : '';
             return `
                 <div class="day-event-item">
                     <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
                     <div class="day-event-info">
-                        <div class="day-event-name">${conf.emoji} ${e.title}</div>
+                        <div class="day-event-name">${conf.emoji} ${e.title}${amtStr}</div>
                         <div class="day-event-cat">${conf.label}</div>
                     </div>
                 </div>`;
@@ -780,7 +828,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (dayModalOverlay)  dayModalOverlay.addEventListener('click', e => { if (e.target === dayModalOverlay) closeDayModal(); });
 
     // Helper: sync field visibility based on current type + recurring state
-    function syncFormFields() {
+    function syncFormFields(typeChanged = false) {
         const isBirthday   = selectedEventType === 'birthday';
         const isMoney      = selectedEventType === 'income' || selectedEventType === 'expense';
         const isRecurOn    = dayEventRecurring && dayEventRecurring.checked;
@@ -803,6 +851,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Recurrence options panel
         if (recurrenceOptions) recurrenceOptions.classList.toggle('hidden', isBirthday || !isRecurOn);
+
+        // Load accounts when type changes to a money type
+        if (typeChanged && isMoney) loadFinancialAccounts(selectedEventType);
     }
 
     document.querySelectorAll('.type-pill').forEach(pill => {
@@ -810,12 +861,60 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
             selectedEventType = pill.dataset.type;
-            syncFormFields();
+            syncFormFields(true);  // true = type just changed
         });
     });
 
     if (dayEventRecurring) {
-        dayEventRecurring.addEventListener('change', syncFormFields);
+        dayEventRecurring.addEventListener('change', () => syncFormFields(false));
+    }
+
+    // Track selected account_id
+    const acctSelect = document.getElementById('dayEventAccount');
+    if (acctSelect) {
+        acctSelect.addEventListener('change', () => {
+            selectedAccountId = acctSelect.value || null;
+        });
+    }
+
+    // + New account inline toggle
+    const addToggle   = document.getElementById('addAccountToggle');
+    const newAcctRow  = document.getElementById('newAccountRow');
+    const newAcctName = document.getElementById('newAccountName');
+    const newAcctSave = document.getElementById('newAccountSaveBtn');
+
+    if (addToggle) {
+        addToggle.addEventListener('click', () => {
+            const isOpen = !newAcctRow.classList.contains('hidden');
+            newAcctRow.classList.toggle('hidden', isOpen);
+            addToggle.textContent = isOpen ? '+ New account' : '− Cancel';
+            if (!isOpen && newAcctName) newAcctName.focus();
+        });
+    }
+
+    if (newAcctSave) {
+        newAcctSave.addEventListener('click', async () => {
+            const name = newAcctName ? newAcctName.value.trim() : '';
+            if (!name) { newAcctName && newAcctName.focus(); return; }
+            if (!selectedEventType || !['income','expense'].includes(selectedEventType)) return;
+            try {
+                newAcctSave.disabled = true;
+                newAcctSave.textContent = '…';
+                const acct = await createFinancialAccount(name, selectedEventType);
+                // Reload dropdown and select the new account
+                await loadFinancialAccounts(selectedEventType);
+                const sel = document.getElementById('dayEventAccount');
+                if (sel) { sel.value = acct.id; selectedAccountId = acct.id; }
+                // Close the row
+                if (newAcctRow) newAcctRow.classList.add('hidden');
+                if (addToggle)  addToggle.textContent = '+ New account';
+                if (newAcctName) newAcctName.value = '';
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                if (newAcctSave) { newAcctSave.disabled = false; newAcctSave.textContent = 'Add'; }
+            }
+        });
     }
 
     // Frequency pills (data-freq only — separate from Ends pills)
@@ -936,9 +1035,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 title = dayEventTitleInp ? dayEventTitleInp.value.trim() : '';
                 if (!title) { alert('Please enter a name.'); return; }
             } else {
+                // For income/expense: use selected account
                 const acctEl = document.getElementById('dayEventAccount');
-                title = acctEl ? acctEl.value.trim() : '';
-                if (!title) { alert('Please enter an account name.'); return; }
+                const acctId = acctEl ? acctEl.value : '';
+                if (!acctId) { alert('Please select an account.'); return; }
+                selectedAccountId = acctId;
+                // Get the account name from the selected option text
+                title = acctEl.options[acctEl.selectedIndex]?.text || acctId;
             }
 
             // Amount — only for non-recurring money events (Option C)
@@ -986,7 +1089,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const event_date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)).toISOString();
                     return fetch('/api/auth/trading/custom-events', {
                         method: 'POST', headers: API_HEADERS,
-                        body: JSON.stringify({ title, event_date, event_type: selectedEventType, ...(amount !== null ? { amount } : {}) })
+                        body: JSON.stringify({
+                            title,
+                            event_date,
+                            event_type: selectedEventType,
+                            ...(amount !== null ? { amount } : {}),
+                            ...(selectedAccountId ? { account_id: selectedAccountId } : {})
+                        })
                     });
                 }));
                 await loadAllEventsAndSync();

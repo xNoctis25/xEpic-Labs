@@ -77,13 +77,44 @@ pool.query(`
 
     CREATE TABLE IF NOT EXISTS custom_events (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      INTEGER,
         title VARCHAR(255) NOT NULL,
         event_date TIMESTAMPTZ NOT NULL,
         event_type VARCHAR(50) NOT NULL,
+        amount       NUMERIC(12,2),
+        account_id   UUID,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS financial_accounts (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      INTEGER NOT NULL,
+        account_name VARCHAR(255) NOT NULL,
+        account_type VARCHAR(50)  NOT NULL,
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, account_name, account_type)
+    );
 
+    -- Backfill: add columns to existing custom_events if table already existed
+    ALTER TABLE custom_events
+        ADD COLUMN IF NOT EXISTS user_id     INTEGER,
+        ADD COLUMN IF NOT EXISTS amount      NUMERIC(12,2),
+        ADD COLUMN IF NOT EXISTS account_id  UUID;
+
+    -- FK: account_id -> financial_accounts (add only if not already present)
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'custom_events_account_id_fkey'
+        ) THEN
+            ALTER TABLE custom_events
+                ADD CONSTRAINT custom_events_account_id_fkey
+                FOREIGN KEY (account_id)
+                REFERENCES financial_accounts(id)
+                ON DELETE SET NULL;
+        END IF;
+    END $$;
 
     CREATE OR REPLACE FUNCTION notify_new_notification()
     RETURNS trigger AS $$

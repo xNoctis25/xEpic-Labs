@@ -45,7 +45,6 @@ const db_1 = __importDefault(require("./db"));
 const security_1 = require("./middleware/security");
 // Routes
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
-const prop_routes_1 = __importDefault(require("./routes/prop.routes"));
 const trading_routes_1 = __importDefault(require("./routes/trading.routes"));
 const nova_routes_1 = __importDefault(require("./routes/nova.routes"));
 // Services
@@ -60,7 +59,6 @@ app.use(security_1.ipBlacklistMiddleware);
 // but the code is now securely decoupled into Modular Monolith sub-routers.
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/auth', nova_routes_1.default);
-app.use('/api/auth/trading/prop-accounts', prop_routes_1.default);
 app.use('/api/auth/trading', trading_routes_1.default);
 // ── HEALTH CHECK ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
@@ -79,34 +77,8 @@ db_1.default.query(`
     ADD COLUMN IF NOT EXISTS failed_credential_attempts INT DEFAULT 0,
     ADD COLUMN IF NOT EXISTS is_flagged BOOLEAN DEFAULT FALSE;
 
-    CREATE TABLE IF NOT EXISTS prop_firm_metrics (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        firm_name VARCHAR(50) NOT NULL,
-        account_size NUMERIC(10,2) NOT NULL,
-        profit_target NUMERIC(10,2) NOT NULL,
-        max_loss_limit NUMERIC(10,2) NOT NULL,
-        max_position_size INT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(firm_name, account_size)
-    );
-
-    CREATE TABLE IF NOT EXISTS prop_accounts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        account_name VARCHAR(255) NOT NULL,
-        firm VARCHAR(50) NOT NULL,
-        phase VARCHAR(20) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
-        risk_profile VARCHAR(20) NOT NULL,
-        account_size NUMERIC(10,2) NOT NULL,
-        profit_target NUMERIC(10,2) NOT NULL,
-        max_loss_limit NUMERIC(10,2) NOT NULL,
-        max_position_size INT NOT NULL,
-        current_pnl NUMERIC(10,2) DEFAULT 0,
-        account_balance NUMERIC(10,2),
-        best_day_pnl NUMERIC(10,2) DEFAULT 0,
-        days_traded INT DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+    DROP TABLE IF EXISTS prop_firm_metrics CASCADE;
+    DROP TABLE IF EXISTS prop_accounts CASCADE;
 
     CREATE TABLE IF NOT EXISTS notifications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -135,20 +107,57 @@ db_1.default.query(`
 
     CREATE TABLE IF NOT EXISTS custom_events (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      INTEGER,
         title VARCHAR(255) NOT NULL,
         event_date TIMESTAMPTZ NOT NULL,
         event_type VARCHAR(50) NOT NULL,
+        amount       NUMERIC(12,2),
+        account_id   UUID,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
 
-    INSERT INTO prop_firm_metrics (firm_name, account_size, profit_target, max_loss_limit, max_position_size)
-    VALUES 
-        ('Topstep', 50000, 3000, 2000, 5),
-        ('Topstep', 100000, 6000, 3000, 10),
-        ('Topstep', 150000, 9000, 4500, 15),
-        ('Apex', 50000, 3000, 2500, 10),
-        ('Apex', 250000, 15000, 6500, 35)
-    ON CONFLICT (firm_name, account_size) DO NOTHING;
+    CREATE TABLE IF NOT EXISTS financial_accounts (
+        id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id      INTEGER NOT NULL,
+        account_name VARCHAR(255) NOT NULL,
+        account_type VARCHAR(50)  NOT NULL,
+        created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, account_name, account_type)
+    );
+
+    -- Backfill: add columns to existing custom_events if table already existed
+    ALTER TABLE custom_events
+        ADD COLUMN IF NOT EXISTS user_id     INTEGER,
+        ADD COLUMN IF NOT EXISTS amount      NUMERIC(12,2),
+        ADD COLUMN IF NOT EXISTS account_id  UUID;
+
+    -- FK: account_id -> financial_accounts (add only if not already present)
+    DO $$
+    BEGIN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints
+            WHERE constraint_name = 'custom_events_account_id_fkey'
+        ) THEN
+            ALTER TABLE custom_events
+                ADD CONSTRAINT custom_events_account_id_fkey
+                FOREIGN KEY (account_id)
+                REFERENCES financial_accounts(id)
+                ON DELETE SET NULL;
+        END IF;
+    END $$;
+
+    CREATE OR REPLACE FUNCTION notify_new_notification()
+    RETURNS trigger AS $$
+    BEGIN
+        PERFORM pg_notify('new_notification', '1');
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS trg_new_notification ON notifications;
+    CREATE TRIGGER trg_new_notification
+    AFTER INSERT ON notifications
+    FOR EACH ROW EXECUTE FUNCTION notify_new_notification();
 `).then(() => console.log('[DB] Schema migrations verified.'))
     .catch((e) => console.error('[DB ERROR] Schema migration failed:', e));
 const PORT = process.env.PORT || 4000;

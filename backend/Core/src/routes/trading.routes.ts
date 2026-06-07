@@ -148,9 +148,17 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
     }
 });
 // ── CUSTOM USER EVENTS (CALENDAR) ─────────────────────────────────────────────
-router.get('/custom-events', authenticateJWT, async (req, res) => {
+router.get('/custom-events', authenticateJWT, async (req: any, res) => {
     try {
-        const result = await pool.query('SELECT * FROM custom_events ORDER BY event_date ASC');
+        const userId = req.user.id;
+        const result = await pool.query(
+            `SELECT ce.*, fa.account_name
+             FROM custom_events ce
+             LEFT JOIN financial_accounts fa ON fa.id = ce.account_id
+             WHERE ce.user_id = $1
+             ORDER BY ce.event_date ASC`,
+            [userId]
+        );
         res.status(200).json(result.rows);
     } catch (err) {
         console.error('[API ERROR] /custom-events GET:', err);
@@ -158,14 +166,17 @@ router.get('/custom-events', authenticateJWT, async (req, res) => {
     }
 });
 
-router.post('/custom-events', authenticateJWT, async (req, res) => {
+router.post('/custom-events', authenticateJWT, async (req: any, res) => {
     try {
-        const { title, event_date, event_type } = req.body;
-        if (!title || !event_date || !event_type) return res.status(400).json({ error: 'Missing required fields' });
-        
+        const userId = req.user.id;
+        const { title, event_date, event_type, amount, account_id } = req.body;
+        if (!title || !event_date || !event_type) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
         const result = await pool.query(
-            'INSERT INTO custom_events (title, event_date, event_type) VALUES ($1, $2, $3) RETURNING *',
-            [title, event_date, event_type]
+            `INSERT INTO custom_events (user_id, title, event_date, event_type, amount, account_id)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [userId, title, event_date, event_type, amount ?? null, account_id ?? null]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -174,14 +185,106 @@ router.post('/custom-events', authenticateJWT, async (req, res) => {
     }
 });
 
-router.delete('/custom-events/:id', authenticateJWT, async (req, res) => {
+router.delete('/custom-events/:id', authenticateJWT, async (req: any, res) => {
     try {
+        const userId = req.user.id;
         const { id } = req.params;
-        await pool.query('DELETE FROM custom_events WHERE id = $1', [id]);
+        const result = await pool.query(
+            'DELETE FROM custom_events WHERE id = $1 AND user_id = $2 RETURNING id',
+            [id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Event not found or not owned by you' });
+        }
         res.status(200).json({ message: 'Event deleted' });
     } catch (err) {
         console.error('[API ERROR] /custom-events DELETE:', err);
         res.status(500).json({ error: 'Failed to delete custom event' });
+    }
+});
+
+// ── FINANCIAL ACCOUNTS ─────────────────────────────────────────────────────────
+router.get('/financial-accounts', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { type } = req.query;
+        const query = type
+            ? 'SELECT * FROM financial_accounts WHERE user_id = $1 AND account_type = $2 ORDER BY account_name ASC'
+            : 'SELECT * FROM financial_accounts WHERE user_id = $1 ORDER BY account_type ASC, account_name ASC';
+        const params = type ? [userId, type] : [userId];
+        const result = await pool.query(query, params);
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error('[API ERROR] /financial-accounts GET:', err);
+        res.status(500).json({ error: 'Failed to fetch accounts' });
+    }
+});
+
+router.post('/financial-accounts', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { account_name, account_type } = req.body;
+        if (!account_name || !account_type) {
+            return res.status(400).json({ error: 'account_name and account_type are required' });
+        }
+        if (!['income', 'expense'].includes(account_type)) {
+            return res.status(400).json({ error: 'account_type must be income or expense' });
+        }
+        const result = await pool.query(
+            `INSERT INTO financial_accounts (user_id, account_name, account_type)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (user_id, account_name, account_type) DO NOTHING
+             RETURNING *`,
+            [userId, account_name.trim(), account_type]
+        );
+        if (result.rowCount === 0) {
+            return res.status(409).json({ error: 'Account already exists' });
+        }
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        console.error('[API ERROR] /financial-accounts POST:', err);
+        res.status(500).json({ error: 'Failed to create account' });
+    }
+});
+
+router.patch('/financial-accounts/:id', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const { account_name } = req.body;
+        if (!account_name) {
+            return res.status(400).json({ error: 'account_name is required' });
+        }
+        const result = await pool.query(
+            `UPDATE financial_accounts SET account_name = $1
+             WHERE id = $2 AND user_id = $3 RETURNING *`,
+            [account_name.trim(), id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Account not found or not owned by you' });
+        }
+        res.status(200).json(result.rows[0]);
+    } catch (err) {
+        console.error('[API ERROR] /financial-accounts PATCH:', err);
+        res.status(500).json({ error: 'Failed to update account' });
+    }
+});
+
+router.delete('/financial-accounts/:id', authenticateJWT, async (req: any, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const result = await pool.query(
+            'DELETE FROM financial_accounts WHERE id = $1 AND user_id = $2 RETURNING id',
+            [id, userId]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Account not found or not owned by you' });
+        }
+        res.status(200).json({ message: 'Account deleted' });
+    } catch (err) {
+        console.error('[API ERROR] /financial-accounts DELETE:', err);
+        res.status(500).json({ error: 'Failed to delete account' });
     }
 });
 
