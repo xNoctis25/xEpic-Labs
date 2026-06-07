@@ -439,4 +439,237 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Init
     loadAllEvents();
+
+    // ── HEADER MINI CALENDAR WIDGET ENGINE ────────────────────
+    // Mirrors the dashboard mini calendar so the header widget
+    // works identically on the calendar page.
+    const calMonthYear   = document.getElementById('calMonthYear');
+    const calendarGrid   = document.getElementById('calendarGrid');
+    const calTodayBtn    = document.getElementById('calTodayBtn');
+
+    let currentCalDate = new Date();
+
+    function renderMiniCalendar(dateToRender) {
+        if (!calendarGrid || !calMonthYear) return;
+        calendarGrid.innerHTML = '';
+
+        const year  = dateToRender.getFullYear();
+        const month = dateToRender.getMonth();
+        const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        calMonthYear.textContent = `${monthNames[month]} ${year}`;
+
+        const today = new Date();
+        if (calTodayBtn) {
+            if (year === today.getFullYear() && month === today.getMonth()) {
+                calTodayBtn.classList.add('hidden');
+            } else {
+                calTodayBtn.classList.remove('hidden');
+            }
+        }
+
+        const firstDayIndex  = new Date(year, month, 1).getDay();
+        const totalDays      = new Date(year, month + 1, 0).getDate();
+        const prevMonthDays  = new Date(year, month, 0).getDate();
+        const isCurrentMonth = today.getMonth() === month && today.getFullYear() === year;
+        const currentDay     = today.getDate();
+
+        // Prev month filler
+        for (let x = firstDayIndex; x > 0; x--) {
+            const cell = document.createElement('div');
+            cell.className = 'epic-cal-day faded';
+            const idx = (firstDayIndex - x) % 7;
+            if (idx === 0 || idx === 6) cell.classList.add('weekend');
+            cell.textContent = prevMonthDays - x + 1;
+            calendarGrid.appendChild(cell);
+        }
+
+        // Current month days
+        for (let day = 1; day <= totalDays; day++) {
+            const cell = document.createElement('div');
+            cell.className = 'epic-cal-day';
+            const dayIdx = new Date(year, month, day).getDay();
+            if (dayIdx === 0 || dayIdx === 6) cell.classList.add('weekend');
+            cell.textContent = day;
+
+            // Event dots from the main events array
+            const cellDate = new Date(year, month, day);
+            const nextDay  = new Date(year, month, day + 1);
+            const dayEvts  = events.filter(e => e.date >= cellDate && e.date < nextDay);
+            if (dayEvts.length > 0) {
+                const uniqueTypes = [...new Set(dayEvts.map(e => e.type || 'default'))];
+                const typeColors = {
+                    'holiday':'#aa00ff','birthday':'#00e5ff','expense':'#1de9b6',
+                    'income':'#39ff14','trade':'#2979ff','personal':'#f900a6',
+                    'rollover':'#ffffff','default':'#f4b41a'
+                };
+                const colors = uniqueTypes.map(t => typeColors[t] || typeColors['default']);
+                const indicators = document.createElement('div');
+                indicators.className = 'epic-cal-indicators';
+                const dot = document.createElement('div');
+                dot.className = 'epic-cal-dot';
+                dot.style.background  = colors[0];
+                dot.style.boxShadow   = `0 0 4px ${colors[0]}`;
+                indicators.appendChild(dot);
+                if (!(isCurrentMonth && day === currentDay)) cell.appendChild(indicators);
+            }
+
+            if (isCurrentMonth && day === currentDay) cell.classList.add('today');
+            calendarGrid.appendChild(cell);
+        }
+
+        // Next month filler (to fill 42 cells)
+        const filled = firstDayIndex + totalDays;
+        for (let j = 1; j <= 42 - filled; j++) {
+            const cell = document.createElement('div');
+            cell.className = 'epic-cal-day faded';
+            const idx = new Date(year, month + 1, j).getDay();
+            if (idx === 0 || idx === 6) cell.classList.add('weekend');
+            cell.textContent = j;
+            calendarGrid.appendChild(cell);
+        }
+    }
+
+    // Overlay month/year picker (click on "June 2026" text in mini widget)
+    const calMonthPickerOverlay = document.getElementById('calMonthPickerOverlay');
+    const calMainBody           = document.getElementById('calMainBody');
+    const calMonthGrid          = document.getElementById('calMonthGrid');
+    const calYearGrid           = document.getElementById('calYearGrid');
+
+    const shortMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let overlayYear = currentCalDate.getFullYear();
+    let overlayMode = 'closed';
+
+    function renderOverlay() {
+        if (!calMonthYear) return;
+        if (calTodayBtn) calTodayBtn.classList.remove('hidden');
+
+        if (overlayMode === 'months') {
+            if (calYearGrid)  calYearGrid.classList.add('hidden');
+            if (calMonthGrid) calMonthGrid.classList.remove('hidden');
+            calMonthYear.textContent = overlayYear;
+            calMonthGrid.innerHTML   = '';
+            shortMonths.forEach((m, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'epic-cal-month-btn';
+                if (overlayYear === currentCalDate.getFullYear() && i === currentCalDate.getMonth()) btn.classList.add('selected');
+                btn.textContent = m;
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    currentCalDate.setFullYear(overlayYear, i, 1);
+                    renderMiniCalendar(currentCalDate);
+                    closeOverlay();
+                });
+                calMonthGrid.appendChild(btn);
+            });
+        } else if (overlayMode === 'years') {
+            if (calMonthGrid) calMonthGrid.classList.add('hidden');
+            if (calYearGrid)  calYearGrid.classList.remove('hidden');
+            const decadeStart = Math.floor(overlayYear / 10) * 10;
+            calMonthYear.textContent = 'Year';
+            calYearGrid.innerHTML    = '';
+            for (let i = 0; i < 12; i++) {
+                const y   = decadeStart + i;
+                const btn = document.createElement('button');
+                btn.className = 'epic-cal-month-btn';
+                if (y === currentCalDate.getFullYear()) btn.classList.add('selected');
+                btn.textContent = y;
+                btn.addEventListener('click', e => {
+                    e.stopPropagation();
+                    overlayYear = y;
+                    overlayMode = 'months';
+                    renderOverlay();
+                });
+                calYearGrid.appendChild(btn);
+            }
+        }
+    }
+
+    function closeOverlay() {
+        overlayMode = 'closed';
+        if (calMonthPickerOverlay) calMonthPickerOverlay.classList.remove('active');
+        if (calMainBody)           calMainBody.classList.remove('dimmed');
+        renderMiniCalendar(currentCalDate);
+    }
+
+    if (calMonthYear && calMonthPickerOverlay) {
+        calMonthYear.addEventListener('click', e => {
+            e.stopPropagation();
+            if (overlayMode === 'closed') {
+                overlayMode = 'months';
+                overlayYear = currentCalDate.getFullYear();
+                renderOverlay();
+                calMonthPickerOverlay.classList.add('active');
+                if (calMainBody) calMainBody.classList.add('dimmed');
+            } else if (overlayMode === 'months') {
+                overlayMode = 'years';
+                renderOverlay();
+            }
+        });
+
+        document.addEventListener('click', e => {
+            if (overlayMode !== 'closed' && calMonthPickerOverlay && !calMonthPickerOverlay.contains(e.target) && e.target !== calMonthYear) {
+                closeOverlay();
+            }
+        });
+    }
+
+    if (calTodayBtn) {
+        calTodayBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            currentCalDate = new Date();
+            renderMiniCalendar(currentCalDate);
+            closeOverlay();
+        });
+    }
+
+    // ── HEADER EVENTS PANEL + TAB SWITCHING ───────────────────
+    function renderEventsPanel() {
+        const now           = new Date();
+        const startOfToday  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfToday    = new Date(startOfToday); endOfToday.setDate(endOfToday.getDate() + 1);
+        const endOfTomorrow = new Date(endOfToday);   endOfTomorrow.setDate(endOfTomorrow.getDate() + 1);
+        const endOfNext7    = new Date(endOfTomorrow); endOfNext7.setDate(endOfNext7.getDate() + 6);
+
+        const todayEvts   = events.filter(e => e.date >= startOfToday && e.date < endOfToday);
+        const tomorrowEvts= events.filter(e => e.date >= endOfToday   && e.date < endOfTomorrow);
+        const next7Evts   = events.filter(e => e.date >= endOfTomorrow && e.date < endOfNext7);
+
+        function fillList(listEl, evts) {
+            if (!listEl) return;
+            if (evts.length === 0) { listEl.innerHTML = '<div class="epic-event-empty">No events scheduled.</div>'; return; }
+            listEl.innerHTML = evts.slice(0, 4).map(e => {
+                const conf = CATEGORY_MAP[e.type] || CATEGORY_MAP['personal'];
+                return `<li class="event-type-${e.type}" style="padding:6px 0;display:flex;gap:8px;align-items:center;border-bottom:1px solid rgba(255,255,255,0.04);">
+                    <span style="color:${conf.color};font-size:0.8rem;">${conf.emoji}</span>
+                    <span style="font-size:0.82rem;color:#e3e3e3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.title}</span>
+                </li>`;
+            }).join('');
+        }
+
+        fillList(document.getElementById('eventsTodayList'),    todayEvts);
+        fillList(document.getElementById('eventsTomorrowList'), tomorrowEvts);
+        fillList(document.getElementById('eventsNext7DaysList'),next7Evts);
+
+        // Tab switching
+        document.querySelectorAll('.epic-event-tab').forEach(tab => {
+            tab.addEventListener('mouseenter', () => {
+                document.querySelectorAll('.epic-event-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.epic-events-tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                const target = document.getElementById('tab-' + tab.dataset.tab);
+                if (target) target.classList.add('active');
+            });
+        });
+    }
+
+    // Initial mini calendar + events render (called after loadAllEvents populates `events`)
+    const _origLoadAllEvents = loadAllEvents;
+    async function loadAllEventsAndSync() {
+        await _origLoadAllEvents();
+        renderMiniCalendar(currentCalDate);
+        renderEventsPanel();
+    }
+    // Override the init call at the bottom to use the synced version
+    loadAllEventsAndSync();
 });
+
