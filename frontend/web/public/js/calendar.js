@@ -176,13 +176,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const conf = CATEGORY_MAP[e.type] || CATEGORY_MAP['personal'];
                 pill.style.borderLeft = `3px solid ${conf.color}`;
                 
-                // Add title
+                // Add title + optional amount for ledger entries
                 let displayTitle = e.title;
                 if ((e.isCustom || e.isLedger) && conf.emoji) {
                     displayTitle = `${conf.emoji} ${e.title}`;
                 }
+                let displayAmount = '';
+                if (e.isLedger && e.amount != null && parseFloat(e.amount) > 0) {
+                    displayAmount = ` — $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                }
 
-                pill.innerHTML = `<span>${displayTitle}</span>`;
+                pill.innerHTML = `<span>${displayTitle}${displayAmount}</span>`;
 
 
                 eventsContainer.appendChild(pill);
@@ -844,6 +848,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const amtStr = e.amount != null
                 ? ` — $${parseFloat(e.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                 : (e.type === 'income' || e.type === 'expense') ? ' · <em style="opacity:.45;font-size:.8em">Reminder</em>' : '';
+            const canDelete = (e.isCustom || e.isLedger) && e.id;
+            const src      = e.isLedger ? 'ledger' : 'events';
             return `
                 <div class="day-event-item">
                     <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
@@ -851,6 +857,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="day-event-name">${conf.emoji} ${e.title}${amtStr}</div>
                         <div class="day-event-cat">${conf.label}</div>
                     </div>
+                    ${canDelete ? `<button class="day-event-del" data-id="${e.id}" data-src="${src}" title="Delete">🗑</button>` : ''}
                 </div>`;
         }).join('');
     }
@@ -865,6 +872,42 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (dayModalCloseBtn) dayModalCloseBtn.addEventListener('click', closeDayModal);
     if (dayModalOverlay)  dayModalOverlay.addEventListener('click', e => { if (e.target === dayModalOverlay) closeDayModal(); });
+
+    // ── Delete event (delegated) ─────────────────────────────────────
+    if (dayEventsList) {
+        dayEventsList.addEventListener('click', async ev => {
+            const btn = ev.target.closest('.day-event-del');
+            if (!btn) return;
+            if (!confirm('Delete this event?')) return;
+            const { id, src } = btn.dataset;
+            const origText = btn.textContent;
+            btn.textContent = '…';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`/api/auth/trading/${src}/${id}`, {
+                    method: 'DELETE', headers: API_HEADERS
+                });
+                if (res.ok) {
+                    await loadAllEventsAndSync();
+                    // Re-render the events list inside the open modal
+                    const updated = events.filter(e =>
+                        e.date.getDate()     === selectedModalDate.getDate()  &&
+                        e.date.getMonth()    === selectedModalDate.getMonth() &&
+                        e.date.getFullYear() === selectedModalDate.getFullYear()
+                    );
+                    renderDayEventsList(updated);
+                } else {
+                    alert('Failed to delete event.');
+                    btn.textContent = origText;
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                console.error('Delete error:', err);
+                btn.textContent = origText;
+                btn.disabled = false;
+            }
+        });
+    }
 
     // Helper: sync field visibility based on current type + recurring state
     function syncFormFields(typeChanged = false) {
