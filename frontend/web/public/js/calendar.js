@@ -1016,13 +1016,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
             banner.innerHTML = `
-                <div class="edit-mode-row">
-                    <button class="edit-mode-pill active" data-mode="edit">✏️ Editing</button>
-                    <button class="edit-mode-pill" data-mode="delete">🗑 Delete</button>
-                </div>
-                <div class="edit-entry-name">${data.title}</div>
+                <button class="edit-mode-pill active" data-mode="edit">✏️ Editing</button>
+                <button class="edit-mode-pill" data-mode="delete">🗑 Delete</button>
+                <span class="edit-entry-name">${data.title}</span>
                 ${scopePills}`;
-
             tabAdd.prepend(banner);
         }
     }
