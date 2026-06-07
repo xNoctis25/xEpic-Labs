@@ -6,8 +6,6 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'engine/**'
-      - '!engine/MoM/**'
       - '.github/workflows/nycommand.yml'
 
 jobs:
