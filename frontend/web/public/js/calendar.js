@@ -1026,9 +1026,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const fAcct = document.getElementById('fieldAccount');
         if (fAcct) fAcct.classList.toggle('hidden', !isMoney);
 
-        // Amount: income/expense AND NOT recurring (Option C — recurring = reminder only)
+        // Amount: income/expense always (recurring entries still have a fixed amount)
         const fAmt = document.getElementById('fieldAmount');
-        if (fAmt) fAmt.classList.toggle('hidden', !isMoney || isRecurOn);
+        if (fAmt) fAmt.classList.toggle('hidden', !isMoney);
 
         // Recurring row: hidden for birthday
         if (recurringRow) recurringRow.style.display = isBirthday ? 'none' : '';
