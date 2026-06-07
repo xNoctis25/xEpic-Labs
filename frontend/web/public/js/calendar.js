@@ -913,7 +913,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             _eCache[e.id] = e;
-            const hasGroup = !!e.groupId;
             return `
                 <div class="day-event-item day-event-clickable" data-eid="${e.id}">
                     <div class="day-event-dot" style="background:${conf.color}; box-shadow:0 0 6px ${conf.color}55;"></div>
@@ -922,23 +921,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         <div class="day-event-cat">${conf.label}</div>
                     </div>
                     <span class="dex-chevron">›</span>
-                </div>
-                <div class="day-event-expand" id="dex-${e.id}">
-                    <div class="dex-actions">
-                        <button class="dex-btn dex-edit-btn" data-eid="${e.id}">✏️ Edit</button>
-                        <button class="dex-btn dex-del-btn"  data-eid="${e.id}">🗑 Delete</button>
-                        <button class="dex-btn dex-cancel-btn" data-eid="${e.id}">Cancel</button>
-                    </div>
-                    <div class="dex-scope" style="display:none">
-                        <div class="dex-scope-label">Apply to:</div>
-                        <div class="dex-scope-opts">
-                            <button class="dex-scope-opt active" data-scope="this">Just this event</button>
-                            ${hasGroup ? `
-                            <button class="dex-scope-opt" data-scope="future">Future events only</button>
-                            <button class="dex-scope-opt" data-scope="all">All events (incl. past)</button>` : ''}
-                        </div>
-                        <button class="dex-scope-confirm">Continue →</button>
-                    </div>
                 </div>`;
         }).join('');
     }
@@ -1017,82 +999,59 @@ document.addEventListener('DOMContentLoaded', async () => {
             const banner = document.createElement('div');
             banner.id = 'editModeBanner';
             banner.className = 'edit-mode-banner';
-            // If part of a recurring group, show scope pills inside the banner
             const scopePills = data.groupId ? `
                 <div class="edit-scope-row">
-                    <button class="edit-scope-pill active" data-scope="this">This Event</button>
-                    <button class="edit-scope-pill" data-scope="future">Future Events</button>
-                    <button class="edit-scope-pill" data-scope="all">All Events</button>
+                    <button class="edit-scope-pill active" data-scope="this">📍 This Event</button>
+                    <button class="edit-scope-pill" data-scope="future">⏩ Future Events</button>
+                    <button class="edit-scope-pill" data-scope="all">♾️ All Events</button>
                 </div>` : '';
-            banner.innerHTML = `✏️ Editing: <strong>${data.title}</strong>${scopePills}`;
+            banner.innerHTML = `
+                <div class="edit-banner-header">
+                    <span>✏️ Editing: <strong>${data.title}</strong></span>
+                    <button class="edit-banner-del" title="Delete entry">🗑</button>
+                </div>${scopePills}`;
             tabAdd.prepend(banner);
         }
     }
 
-    // Delegate scope pill clicks inside the edit banner
+    // Delegate scope pill clicks + banner delete button inside the edit form
     const tabAddEl = document.getElementById('tabAdd');
     if (tabAddEl) {
-        tabAddEl.addEventListener('click', ev => {
+        tabAddEl.addEventListener('click', async ev => {
+            // Scope pill selection
             const pill = ev.target.closest('.edit-scope-pill');
-            if (!pill || !editingEntry) return;
-            tabAddEl.querySelectorAll('.edit-scope-pill').forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-            editingEntry.scope = pill.dataset.scope;
+            if (pill && editingEntry) {
+                tabAddEl.querySelectorAll('.edit-scope-pill').forEach(p => p.classList.remove('active'));
+                pill.classList.add('active');
+                editingEntry.scope = pill.dataset.scope;
+                return;
+            }
+            // Banner delete button
+            const delBtn = ev.target.closest('.edit-banner-del');
+            if (delBtn && editingEntry) {
+                const { id, src, groupId, scope, date } = editingEntry;
+                const scopeLabel = scope === 'all' ? 'ALL' : scope === 'future' ? 'future' : 'this';
+                if (!confirm(`Delete ${scopeLabel} event(s)?`)) return;
+                const dateStr = date ? new Date(date).toISOString().split('T')[0] : null;
+                let url;
+                if (scope === 'all' && groupId)               url = `/api/auth/trading/${src}/group/${groupId}`;
+                else if (scope === 'future' && groupId && dateStr) url = `/api/auth/trading/${src}/group/${groupId}/from/${dateStr}`;
+                else                                           url = `/api/auth/trading/${src}/${id}`;
+                try {
+                    const res = await fetch(url, { method: 'DELETE', headers: API_HEADERS });
+                    if (res.ok) { editingEntry = null; await loadAllEventsAndSync(); closeDayModal(); }
+                    else { alert('Delete failed.'); }
+                } catch (err) { console.error('Delete error:', err); }
+            }
         });
     }
 
     if (dayEventsList) {
         dayEventsList.addEventListener('click', async ev => {
-            // ─ Row click → toggle expand panel
             const row = ev.target.closest('.day-event-clickable');
-            if (row && !ev.target.closest('.day-event-expand')) {
-                const eid = row.dataset.eid;
-                if (_expandedId === eid) _collapseAll();
-                else _openExpand(eid);
-                return;
-            }
-            // ─ Edit button → always go straight to form (scope is inside the form banner)
-            const editBtn = ev.target.closest('.dex-edit-btn');
-            if (editBtn) {
-                const e = _eCache[editBtn.dataset.eid];
-                await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: e.groupId || null, scope: 'this', date: e.date.toISOString() });
-                return;
-            }
-            // ─ Delete button
-            const delBtn = ev.target.closest('.dex-del-btn');
-            if (delBtn) {
-                const e = _eCache[delBtn.dataset.eid];
-                _pendingOp = 'delete';
-                if (e.groupId) {
-                    // Show scope options in the expand panel for delete
-                    const scopeEl = document.querySelector(`#dex-${e.id} .dex-scope`);
-                    if (scopeEl) { scopeEl.style.display = ''; _expandedId = e.id; }
-                } else {
-                    if (!confirm(`Delete "${e.title}"?`)) return;
-                    await _performDelete(e, 'this');
-                }
-                return;
-            }
-            // ─ Scope option selection (delete panel)
-            const scopeOpt = ev.target.closest('.dex-scope-opt');
-            if (scopeOpt) {
-                const panel = scopeOpt.closest('.day-event-expand');
-                panel.querySelectorAll('.dex-scope-opt').forEach(b => b.classList.remove('active'));
-                scopeOpt.classList.add('active');
-                _selectedScope = scopeOpt.dataset.scope;
-                return;
-            }
-            // ─ Scope confirm (delete)
-            const confirmBtn = ev.target.closest('.dex-scope-confirm');
-            if (confirmBtn) {
-                const e = _eCache[_expandedId];
-                if (!e) return;
-                if (!confirm(`Delete ${_selectedScope === 'all' ? 'ALL' : _selectedScope === 'future' ? 'future' : 'this'} event(s)?`)) return;
-                await _performDelete(e, _selectedScope);
-                return;
-            }
-            // ─ Cancel
-            if (ev.target.closest('.dex-cancel-btn')) { _collapseAll(); }
+            if (!row) return;
+            const e = _eCache[row.dataset.eid];
+            if (e) await startEditEntry({ id: e.id, src: e.isLedger ? 'ledger' : 'events', type: e.type, title: e.title, amount: e.amount != null ? e.amount : '', acctId: e.accountId || '', groupId: e.groupId || null, scope: 'this', date: e.date.toISOString() });
         });
     }
 

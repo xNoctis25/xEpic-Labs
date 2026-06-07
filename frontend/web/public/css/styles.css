@@ -2898,19 +2898,28 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     color: rgb(78,205,196); cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
 .edit-mode-banner {
-    background: rgba(99, 179, 237, 0.1); border: 1px solid rgba(99, 179, 237, 0.22);
+    background: rgba(99, 179, 237, 0.08); border: 1px solid rgba(99, 179, 237, 0.2);
     border-radius: 12px; padding: 12px 16px; margin-bottom: 18px;
-    font-size: 0.87rem; color: rgba(99, 179, 237, 0.85);
+    font-size: 0.87rem; color: rgba(99, 179, 237, 0.8);
 }
 .edit-mode-banner strong { color: #fff; }
-.edit-scope-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(99,179,237,0.15); }
-.edit-scope-pill {
-    background: transparent; border: 1px solid rgba(99,179,237,0.2);
-    border-radius: 8px; padding: 5px 12px; font-size: 0.78rem; font-weight: 600;
-    color: rgba(99,179,237,0.5); cursor: pointer; font-family: inherit; transition: all 0.15s;
+.edit-banner-header { display: flex; align-items: center; justify-content: space-between; }
+.edit-banner-del {
+    background: transparent; border: 1px solid rgba(255,80,80,0.25);
+    border-radius: 8px; padding: 4px 10px; font-size: 1rem;
+    cursor: pointer; color: rgba(255,100,100,0.7); transition: all 0.15s;
+    line-height: 1; flex-shrink: 0;
 }
-.edit-scope-pill:hover { border-color: rgba(99,179,237,0.5); color: rgba(99,179,237,0.85); }
-.edit-scope-pill.active { background: rgba(99,179,237,0.18); border-color: rgba(99,179,237,0.5); color: rgb(99,179,237); }
+.edit-banner-del:hover { background: rgba(255,80,80,0.15); border-color: rgba(255,80,80,0.5); color: rgb(255,100,100); }
+.edit-scope-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(99,179,237,0.12); }
+.edit-scope-pill {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px; color: rgba(255,255,255,0.55); font-size: 0.8rem; font-weight: 600;
+    padding: 5px 14px; cursor: pointer; font-family: inherit;
+    transition: all 0.2s cubic-bezier(0.25,1,0.5,1); white-space: nowrap;
+}
+.edit-scope-pill:hover { background: rgba(255,255,255,0.08); color: #fff; border-color: rgba(255,255,255,0.18); }
+.edit-scope-pill.active { background: rgba(78,205,196,0.15); border-color: rgba(78,205,196,0.7); color: rgb(78,205,196); }
 
 
 
