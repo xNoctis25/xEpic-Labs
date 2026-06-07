@@ -79,10 +79,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const month = currentDate.getMonth();
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-        // Update unified picker trigger
+        // Trigger shows full name, grid items use short names
         const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         const trigger = document.getElementById('mainCalTrigger');
-        if (trigger) trigger.textContent = `${SHORT[month]} ${year}`;
+        if (trigger) trigger.textContent = `${months[month]} ${year}`;
 
         const firstDayIndex = new Date(year, month, 1).getDay();
         const lastDate = new Date(year, month + 1, 0).getDate();
