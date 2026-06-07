@@ -268,6 +268,64 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // ── LIVE MARKET SESSION STATUS ────────────────────────────
+    function updateMarketClock() {
+        const uiSessionLabel = document.getElementById('uiSessionLabel');
+        const uiSessionDot   = document.getElementById('uiSessionDot');
+        if (!uiSessionLabel || !uiSessionDot) return;
+
+        const nowStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+        const now    = new Date(nowStr);
+        const yyyy   = now.getFullYear();
+        const mm     = String(now.getMonth() + 1).padStart(2, '0');
+        const dd     = String(now.getDate()).padStart(2, '0');
+        const dateStr      = `${yyyy}-${mm}-${dd}`;
+        const day          = now.getDay();
+        const totalMinutes = now.getHours() * 60 + now.getMinutes();
+
+        // NYSE Holiday Calendar 2026-2027
+        const nyseHolidays = [
+            '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25',
+            '2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+            '2027-01-01','2027-01-18','2027-02-15','2027-03-26','2027-05-31',
+            '2027-06-18','2027-07-05','2027-09-06','2027-11-25','2027-12-24'
+        ];
+        if (nyseHolidays.includes(dateStr)) {
+            uiSessionLabel.textContent = 'Closed: Holiday';
+            uiSessionDot.className     = 'dot red';
+            return;
+        }
+
+        // Weekend gate
+        if (day === 0 || day === 6) {
+            uiSessionLabel.textContent = 'Closed: Weekend';
+            uiSessionDot.className     = 'dot red';
+            return;
+        }
+
+        // Outside equities hours (09:30 – 16:00 ET)
+        if (totalMinutes < 570 || totalMinutes >= 960) {
+            uiSessionLabel.textContent = 'Session: Closed';
+            uiSessionDot.className     = 'dot red';
+            return;
+        }
+
+        // ICT Session Phases
+        let sessionText = '';
+        let dotClass    = '';
+        if      (totalMinutes >= 570 && totalMinutes < 600) { sessionText = 'Session: Judas Swing';  dotClass = 'dot yellow'; }
+        else if (totalMinutes >= 600 && totalMinutes < 690) { sessionText = 'Session: AM Kill Zone'; dotClass = 'dot pulse-green'; }
+        else if (totalMinutes >= 690 && totalMinutes < 810) { sessionText = 'Session: Lunch Chop';   dotClass = 'dot yellow'; }
+        else if (totalMinutes >= 810 && totalMinutes < 930) { sessionText = 'Session: PM Kill Zone'; dotClass = 'dot pulse-green'; }
+        else if (totalMinutes >= 930 && totalMinutes < 960) { sessionText = 'Session: Power Hour';   dotClass = 'dot orange'; }
+
+        uiSessionLabel.textContent = sessionText;
+        uiSessionDot.className     = dotClass;
+    }
+
+    updateMarketClock();
+    setInterval(updateMarketClock, 10000);
+
     // ── LOGOUT & REAL-TIME CLOCK ──────────────────────────────
     const logoutBtn = document.getElementById('logoutBtn');
     if (logoutBtn) {
