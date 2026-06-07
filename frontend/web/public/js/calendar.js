@@ -1021,7 +1021,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <button class="edit-mode-pill" data-mode="delete">🗑 Delete</button>
                 </div>
                 <div class="edit-entry-name">${data.title}</div>
-                ${scopeRow}`;
+                ${scopePills}`;
+
             tabAdd.prepend(banner);
         }
     }
