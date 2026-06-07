@@ -85,7 +85,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const month = currentDate.getMonth();
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-        monthTrigger.textContent = months[month];
+        // Short names match the grid dropdown items
+        const shortMonthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        monthTrigger.textContent = shortMonthNames[month];
         yearTrigger.textContent = year;
 
         // Highlight selected items
@@ -406,8 +408,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     setInterval(updateRealtimeClock, 1000);
 
-    // Initialize Custom Dropdowns
-    const monthsList = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    // Initialize Custom Dropdowns — 3-column grid style
+    const monthsList = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     monthsList.forEach((m, i) => {
         const div = document.createElement('div');
         div.className = 'dropdown-item';
@@ -422,8 +424,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         monthMenu.appendChild(div);
     });
 
+    // Exactly 12 years → clean 4×3 grid (currYear-4 to currYear+7)
     const currYear = new Date().getFullYear();
-    for (let y = currYear - 5; y <= currYear + 5; y++) {
+    for (let y = currYear - 4; y <= currYear + 7; y++) {
         const div = document.createElement('div');
         div.className = 'dropdown-item';
         div.dataset.type = 'year';

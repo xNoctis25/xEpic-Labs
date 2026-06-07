@@ -677,9 +677,17 @@ form.nova-input-area:not(.hidden) {
 .custom-model-dropdown.disabled .dropdown-trigger:hover { background: transparent; color: #aaa; }
 .dropdown-menu { position: absolute; bottom: 100%; right: 0; margin-bottom: 8px; background: #2b2d31; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 6px; width: 220px; display: none; flex-direction: column; gap: 4px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100; }
 .custom-model-dropdown.open .dropdown-menu { display: flex; }
-/* Calendar month/year dropdowns — drop DOWN from trigger, not up */
-.custom-dropdown .dropdown-menu { bottom: auto; top: 100%; left: 50%; right: auto; transform: translateX(-50%); margin-top: 8px; margin-bottom: 0; min-width: 160px; width: auto; }
-.custom-dropdown.active .dropdown-menu { display: block; }
+
+/* ── Calendar page main dropdowns: 3-column grid matching the widget ── */
+.custom-dropdown { position: relative; }
+.custom-dropdown .dropdown-trigger { font-size: inherit; font-weight: inherit; color: var(--text-main); background: transparent; padding: 4px 14px; border-radius: 10px; cursor: pointer; transition: background 0.2s, color 0.2s; user-select: none; gap: 0; }
+.custom-dropdown .dropdown-trigger:hover { background: rgba(255,255,255,0.06); color: var(--primary); }
+.custom-dropdown .dropdown-menu { bottom: auto; top: 100%; left: 50%; right: auto; transform: translateX(-50%); margin-top: 10px; margin-bottom: 0; min-width: 230px; width: auto; padding: 10px; }
+.custom-dropdown.active .dropdown-menu { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.custom-dropdown .dropdown-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; text-align: center; padding: 10px 6px; color: rgba(255,255,255,0.65); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: background 0.18s, border-color 0.18s, color 0.18s; }
+.custom-dropdown .dropdown-item:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.15); color: #fff; }
+.custom-dropdown .dropdown-item.selected { background: rgba(102,252,241,0.1); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
 .dropdown-item { padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: background 0.2s; text-align: left; }
 .dropdown-item:hover { background: rgba(255,255,255,0.05); }
 .dropdown-item.active { background: rgba(102, 252, 241, 0.1); border: 1px solid rgba(102, 252, 241, 0.2); }
