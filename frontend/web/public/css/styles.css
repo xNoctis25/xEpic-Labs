@@ -2859,8 +2859,8 @@ body.dashboard-body .glass-panel.main-content { background: transparent !importa
     flex-shrink: 0; transition: opacity 0.18s, background 0.18s;
     line-height: 1;
 }
-.day-event-item:hover .day-event-del { opacity: 0.55; }
-.day-event-del:hover  { opacity: 1 !important; background: rgba(255, 60, 60, 0.18); }
+.day-event-item:hover .day-event-del { opacity: 0.75; filter: invert(27%) sepia(99%) saturate(3000%) hue-rotate(340deg) brightness(95%); }
+.day-event-del:hover  { opacity: 1 !important; background: rgba(255, 60, 60, 0.18); filter: invert(27%) sepia(99%) saturate(3000%) hue-rotate(340deg) brightness(95%); }
 .day-event-del:disabled { opacity: 0.25 !important; cursor: not-allowed; }
 .day-event-edit {
     background: transparent; border: none; cursor: pointer;
