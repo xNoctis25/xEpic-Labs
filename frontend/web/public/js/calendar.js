@@ -199,12 +199,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     let pickerMode = 'closed'; // 'closed' | 'months' | 'years'
 
     function renderPicker() {
-        // Show Today btn whenever viewing a month other than actual today
-        const realToday = new Date();
-        if (mainCalTodayBtn) {
-            const onToday = currentDate.getFullYear() === realToday.getFullYear() && currentDate.getMonth() === realToday.getMonth();
-            mainCalTodayBtn.classList.toggle('hidden', onToday);
-        }
+        // Always show Today button when overlay is open (mirrors widget renderOverlay behavior)
+        if (mainCalTodayBtn) mainCalTodayBtn.classList.remove('hidden');
 
         if (pickerMode === 'months') {
             mainCalYearGrid.classList.add('hidden');
