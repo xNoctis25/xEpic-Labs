@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const token = localStorage.getItem('jwt_token') || sessionStorage.getItem('jwt_token');
-    if (!token) {
+    if (!token || token === 'null' || token === 'undefined') {
         window.location.href = '/index.html';
         return;
     }
@@ -9,6 +9,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
     };
+
+    // ── Validate session is still alive before rendering ─────────
+    try {
+        const sessionCheck = await fetch('/api/auth/me', { headers: API_HEADERS });
+        if (sessionCheck.status === 401) {
+            localStorage.removeItem('jwt_token');
+            sessionStorage.removeItem('jwt_token');
+            window.location.href = '/index.html';
+            return;
+        }
+    } catch (_) { /* network issue — allow page to continue */ }
 
     let currentDate = new Date();
     let events = [];
@@ -34,6 +45,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             // Fetch Custom Events
             const customRes = await fetch('/api/auth/trading/custom-events', { headers: API_HEADERS });
+            if (customRes.status === 401) {
+                localStorage.removeItem('jwt_token');
+                sessionStorage.removeItem('jwt_token');
+                window.location.href = '/index.html';
+                return;
+            }
             const customData = customRes.ok ? await customRes.json() : [];
 
             const parsedCustom = customData.map(e => ({
@@ -707,6 +724,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         sel.innerHTML = '<option value="">— Loading… —</option>';
         try {
             const res = await fetch(`/api/auth/trading/financial-accounts?type=${type}`, { headers: API_HEADERS });
+            if (res.status === 401) {
+                localStorage.removeItem('jwt_token');
+                sessionStorage.removeItem('jwt_token');
+                window.location.href = '/index.html';
+                return;
+            }
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const accounts = await res.json();
             if (!Array.isArray(accounts)) throw new Error('Unexpected response');
@@ -723,7 +746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
             selectedAccountId = null;
         } catch (err) {
-            sel.innerHTML = '<option value="">— Failed to load —</option>';
+            sel.innerHTML = `<option value="">— Error: ${err.message} —</option>`;
             console.error('loadFinancialAccounts error:', err);
         }
     }
