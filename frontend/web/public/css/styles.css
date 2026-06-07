@@ -688,19 +688,35 @@ form.nova-input-area:not(.hidden) {
 .custom-dropdown .dropdown-item:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.15); color: #fff; }
 .custom-dropdown .dropdown-item.selected { background: rgba(102,252,241,0.1); border-color: var(--primary); color: var(--primary); font-weight: 600; }
 
-/* ── Calendar page: unified month/year picker (matches widget overlay) ── */
+/* ── Calendar page: unified month/year picker — 1:1 widget styles ── */
 .main-cal-picker { position: relative; display: inline-block; }
-.main-cal-trigger { font-size: inherit; font-weight: inherit; color: var(--text-main); cursor: pointer; padding: 4px 16px; border-radius: 10px; transition: background 0.2s, color 0.2s; user-select: none; display: inline-block; }
-.main-cal-trigger:hover { background: rgba(255,255,255,0.06); color: var(--primary); }
-.main-cal-overlay { position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%); background: #1e1f22; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 14px; min-width: 240px; z-index: 300; box-shadow: 0 20px 48px rgba(0,0,0,0.65); display: none; }
-.main-cal-overlay.active { display: block; }
-.main-cal-overlay-header { text-align: center; margin-bottom: 12px; font-size: 0.95rem; font-weight: 600; color: rgba(255,255,255,0.55); cursor: pointer; padding: 5px 8px; border-radius: 8px; transition: color 0.2s, background 0.2s; }
-.main-cal-overlay-header:hover { color: var(--primary); background: rgba(255,255,255,0.05); }
-.main-cal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
+/* Trigger text: mirrors .epic-cal-month-year.clickable */
+.main-cal-trigger { font-size: inherit; font-weight: inherit; color: #fff; cursor: pointer; padding: 4px 16px; border-radius: 8px; transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); user-select: none; display: inline-block; }
+.main-cal-trigger:hover { opacity: 0.7; transform: scale(0.98); }
+
+/* Overlay panel */
+.main-cal-overlay { position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%) translateY(10px); background: rgba(30, 31, 34, 0.98); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px 14px 10px; min-width: 248px; z-index: 300; box-shadow: 0 20px 48px rgba(0,0,0,0.65); display: flex; flex-direction: column; opacity: 0; pointer-events: none; transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1); }
+.main-cal-overlay.active { opacity: 1; pointer-events: auto; transform: translateX(-50%) translateY(0); }
+
+/* Overlay header (shows year in months mode, 'Year' label in years mode) */
+/* mirrors .epic-cal-month-year.clickable */
+.main-cal-overlay-header { text-align: center; margin-bottom: 12px; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.1px; color: #fff; cursor: pointer; padding: 4px 8px; border-radius: 8px; transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
+.main-cal-overlay-header:hover { opacity: 0.7; transform: scale(0.98); }
+
+/* Grid: mirrors .epic-cal-month-grid */
+.main-cal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .main-cal-grid.hidden { display: none; }
-.main-cal-btn { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; text-align: center; padding: 10px 6px; color: rgba(255,255,255,0.65); font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: background 0.18s, border-color 0.18s, color 0.18s; }
-.main-cal-btn:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.15); color: #fff; }
-.main-cal-btn.selected { background: rgba(102,252,241,0.1); border-color: var(--primary); color: var(--primary); font-weight: 600; box-shadow: 0 0 8px rgba(102,252,241,0.15); }
+
+/* Buttons: mirrors .epic-cal-month-btn */
+.main-cal-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; color: #e2e8f0; padding: 12px 0; text-align: center; font-weight: 500; font-size: 0.95rem; cursor: pointer; transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); }
+.main-cal-btn:hover { background: rgba(255,255,255,0.08); transform: scale(0.97); border-color: rgba(255,255,255,0.05); color: #e2e8f0; }
+.main-cal-btn.selected { background: rgba(52,211,153,0.1); border: 2px solid #34d399; color: #34d399; box-shadow: none; }
+
+/* Today button: mirrors .epic-cal-today-action */
+.main-cal-today-btn { margin-top: 10px; align-self: flex-end; padding: 4px 10px; font-size: 0.85rem; font-weight: 600; color: #34d399; background: transparent; border: none; cursor: pointer; transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1); opacity: 0.8; }
+.main-cal-today-btn:hover { opacity: 1; transform: translateY(-1px); text-shadow: 0 0 10px rgba(52,211,153,0.4); }
+.main-cal-today-btn.hidden { display: none; }
 
 .dropdown-item { padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: background 0.2s; text-align: left; }
 .dropdown-item:hover { background: rgba(255,255,255,0.05); }

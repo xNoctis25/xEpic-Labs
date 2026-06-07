@@ -192,16 +192,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     const mainCalOverlayHeader  = document.getElementById('mainCalOverlayHeader');
     const mainCalMonthGrid      = document.getElementById('mainCalMonthGrid');
     const mainCalYearGrid       = document.getElementById('mainCalYearGrid');
+    const mainCalTodayBtn       = document.getElementById('mainCalTodayBtn');
 
     const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     let pickerYear = currentDate.getFullYear();
     let pickerMode = 'closed'; // 'closed' | 'months' | 'years'
 
     function renderPicker() {
+        // Show Today btn whenever viewing a month other than actual today
+        const realToday = new Date();
+        if (mainCalTodayBtn) {
+            const onToday = currentDate.getFullYear() === realToday.getFullYear() && currentDate.getMonth() === realToday.getMonth();
+            mainCalTodayBtn.classList.toggle('hidden', onToday);
+        }
+
         if (pickerMode === 'months') {
             mainCalYearGrid.classList.add('hidden');
             mainCalMonthGrid.classList.remove('hidden');
-            mainCalOverlayHeader.textContent = pickerYear;
+            mainCalOverlayHeader.textContent = pickerYear;  // shows the year number
             mainCalMonthGrid.innerHTML = '';
             SHORT_MONTHS.forEach((m, i) => {
                 const btn = document.createElement('button');
@@ -219,7 +227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else if (pickerMode === 'years') {
             mainCalMonthGrid.classList.add('hidden');
             mainCalYearGrid.classList.remove('hidden');
-            mainCalOverlayHeader.textContent = '← Back';
+            mainCalOverlayHeader.textContent = 'Year';  // label only, not a back button
             const decadeStart = Math.floor(pickerYear / 10) * 10;
             mainCalYearGrid.innerHTML = '';
             for (let i = 0; i < 12; i++) {
@@ -259,18 +267,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (mainCalOverlayHeader) {
+        // Only months mode header is clickable (switches to year grid)
+        // In years mode the header is just the 'Year' label — no action
         mainCalOverlayHeader.addEventListener('click', e => {
             e.stopPropagation();
             if (pickerMode === 'months') {
                 pickerMode = 'years';
                 renderPicker();
-            } else if (pickerMode === 'years') {
-                pickerMode = 'months';
-                renderPicker();
             }
         });
     }
 
+    if (mainCalTodayBtn) {
+        mainCalTodayBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            currentDate = new Date();
+            renderCalendar();
+            closePicker();
+        });
+    }
     document.addEventListener('click', e => {
         if (pickerMode !== 'closed' && mainCalOverlay && !mainCalOverlay.contains(e.target) && e.target !== mainCalTrigger) {
             closePicker();
