@@ -171,9 +171,9 @@ router.get('/custom-events', authenticateJWT, async (req: any, res) => {
             [userId]
         );
         res.status(200).json(result.rows);
-    } catch (err) {
+    } catch (err: any) {
         console.error('[API ERROR] /custom-events GET:', err);
-        res.status(500).json({ error: 'Failed to fetch custom events' });
+        res.status(500).json({ error: 'Failed to fetch custom events', detail: err?.message });
     }
 });
 
@@ -252,9 +252,9 @@ router.get('/financial-accounts', authenticateJWT, async (req: any, res) => {
         const params = type ? [userId, type] : [userId];
         const result = await pool.query(query, params);
         res.status(200).json(result.rows);
-    } catch (err) {
+    } catch (err: any) {
         console.error('[API ERROR] /financial-accounts GET:', err);
-        res.status(500).json({ error: 'Failed to fetch accounts' });
+        res.status(500).json({ error: 'Failed to fetch accounts', detail: err?.message });
     }
 });
 
