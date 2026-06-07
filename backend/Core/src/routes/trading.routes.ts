@@ -148,14 +148,16 @@ router.patch('/risk', authenticateJWT, async (req, res) => {
     }
 });
 // ── CUSTOM USER EVENTS (CALENDAR) ─────────────────────────────────────────────
-// Ensure columns exist regardless of migration state
+// Ensure columns exist — silent, never throws
 async function ensureCustomEventsSchema() {
-    await pool.query(`
-        ALTER TABLE custom_events
-            ADD COLUMN IF NOT EXISTS user_id    INTEGER,
-            ADD COLUMN IF NOT EXISTS amount     NUMERIC(12,2),
-            ADD COLUMN IF NOT EXISTS account_id UUID;
-    `);
+    const cols = [
+        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS user_id    INTEGER`,
+        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS amount     NUMERIC(12,2)`,
+        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS account_id UUID`,
+    ];
+    for (const sql of cols) {
+        try { await pool.query(sql); } catch (_) {}
+    }
 }
 
 router.get('/custom-events', authenticateJWT, async (req: any, res) => {
@@ -215,22 +217,28 @@ router.delete('/custom-events/:id', authenticateJWT, async (req: any, res) => {
 });
 
 // ── FINANCIAL ACCOUNTS ─────────────────────────────────────────────────────────
-// Ensure the table exists regardless of migration state
+// Ensure the table + columns exist — silent, never throws
 async function ensureFinancialAccountsTable() {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS financial_accounts (
-            id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id      INTEGER NOT NULL,
-            account_name VARCHAR(255) NOT NULL,
-            account_type VARCHAR(50)  NOT NULL,
-            created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(user_id, account_name, account_type)
-        );
-        ALTER TABLE custom_events
-            ADD COLUMN IF NOT EXISTS user_id     INTEGER,
-            ADD COLUMN IF NOT EXISTS amount      NUMERIC(12,2),
-            ADD COLUMN IF NOT EXISTS account_id  UUID;
-    `);
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS financial_accounts (
+                id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id      INTEGER NOT NULL,
+                account_name VARCHAR(255) NOT NULL,
+                account_type VARCHAR(50)  NOT NULL,
+                created_at   TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, account_name, account_type)
+            )
+        `);
+    } catch (_) {}
+    const cols = [
+        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS user_id    INTEGER`,
+        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS amount     NUMERIC(12,2)`,
+        `ALTER TABLE custom_events ADD COLUMN IF NOT EXISTS account_id UUID`,
+    ];
+    for (const sql of cols) {
+        try { await pool.query(sql); } catch (_) {}
+    }
 }
 
 router.get('/financial-accounts', authenticateJWT, async (req: any, res) => {
