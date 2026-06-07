@@ -174,12 +174,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // ── FILTER BUTTONS ────────────────────────────────────────
+    // ── FILTER BUTTONS (toggle: click active = deselect = show all) ──────
     document.querySelectorAll('.cal-filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            activeFilter = btn.dataset.filter;
+            const isActive = btn.classList.contains('active');
             document.querySelectorAll('.cal-filter-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            if (!isActive) {
+                btn.classList.add('active');
+                activeFilter = btn.dataset.filter;
+            } else {
+                activeFilter = 'all'; // deselect → show everything
+            }
             renderCalendar();
         });
     });
