@@ -838,6 +838,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (submitBtn) submitBtn.textContent = 'Save Event';
         const editBanner = document.getElementById('editModeBanner');
         if (editBanner) editBanner.remove();
+        // Re-enable all type pills
+        document.querySelectorAll('.type-pill').forEach(p => {
+            p.disabled = false;
+            p.style.opacity = '';
+            p.style.pointerEvents = '';
+        });
+        // Restore recurring row
+        const recurringRow = document.querySelector('.recurring-toggle-row');
+        if (recurringRow) recurringRow.style.display = '';
         setTimeout(() => dayModalOverlay.classList.add('hidden'), 320);
     }
 
@@ -904,8 +913,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.querySelectorAll('.freq-pill[data-ends]').forEach(p => p.classList.toggle('active', p.dataset.ends === 'never'));
         selectedFrequency = 'monthly'; endsMode = 'never';
 
-        // Activate correct type pill
-        document.querySelectorAll('.type-pill').forEach(p => p.classList.toggle('active', p.dataset.type === data.type));
+        // Activate correct type pill; disable all others while editing
+        document.querySelectorAll('.type-pill').forEach(p => {
+            const isActive = p.dataset.type === data.type;
+            p.classList.toggle('active', isActive);
+            p.disabled = !isActive;
+            p.style.opacity = isActive ? '' : '0.3';
+            p.style.pointerEvents = isActive ? '' : 'none';
+        });
         selectedEventType = data.type;
 
         const isBirthday = data.type === 'birthday';
