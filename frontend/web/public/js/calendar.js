@@ -707,14 +707,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         sel.innerHTML = '<option value="">— Loading… —</option>';
         try {
             const res = await fetch(`/api/auth/trading/financial-accounts?type=${type}`, { headers: API_HEADERS });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const accounts = await res.json();
-            sel.innerHTML = '<option value="">— Select account —</option>';
-            accounts.forEach(a => {
-                const opt = document.createElement('option');
-                opt.value = a.id;
-                opt.textContent = a.account_name;
-                sel.appendChild(opt);
-            });
+            if (!Array.isArray(accounts)) throw new Error('Unexpected response');
+            if (accounts.length === 0) {
+                sel.innerHTML = '<option value="">— No accounts yet —</option>';
+            } else {
+                sel.innerHTML = '<option value="">— Select account —</option>';
+                accounts.forEach(a => {
+                    const opt = document.createElement('option');
+                    opt.value = a.id;
+                    opt.textContent = a.account_name;
+                    sel.appendChild(opt);
+                });
+            }
             selectedAccountId = null;
         } catch (err) {
             sel.innerHTML = '<option value="">— Failed to load —</option>';
